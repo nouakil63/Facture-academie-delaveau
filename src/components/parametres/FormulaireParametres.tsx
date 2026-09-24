@@ -3,7 +3,8 @@
 import Image from "next/image";
 import { startTransition, useActionState, useEffect, useRef, useState } from "react";
 import { enregistrerParametres } from "@/app/(app)/parametres/actions";
-import { formatDate, formatDateLongue, formatPeriode, nomCourtAcademie, premierDuMois } from "@/lib/format";
+import { appeler } from "@/lib/appeler";
+import { datesGeneration, formatDate, formatDateLongue, formatPeriode, nomCourtAcademie, premierDuMois } from "@/lib/format";
 import type { Academie, MoisFacture, Parametres, ResultatAction } from "@/lib/types";
 import { IconeAlerte, IconeCadenas, IconeCoche, IconeInfo } from "@/components/Icones";
 import { ChampCouleur, Champ, ChampControle, contrasteAvecBlanc, Obligatoire, Section, ZoneTexte } from "./Champs";
@@ -58,7 +59,7 @@ export function FormulaireParametres(props: Omit<Contexte, "onModifie">) {
   const { parametres } = props;
   const [modifie, setModifie] = useState(false);
   const [etat, envoyer, enCours] = useActionState<ResultatAction | null, FormData>(async (precedent, donnees) => {
-    const resultat = await enregistrerParametres(precedent, donnees);
+    const resultat = await appeler(enregistrerParametres(precedent, donnees));
     if (resultat.ok) setModifie(false);
     return resultat;
   }, null);
@@ -69,12 +70,30 @@ export function FormulaireParametres(props: Omit<Contexte, "onModifie">) {
     if (etat && !etat.ok) refErreur.current?.scrollIntoView({ behavior: "smooth", block: "center" });
   }, [etat]);
 
-  // Quitter la page avec des modifications non enregistrées : confirmation du navigateur.
+  // Quitter la page avec des modifications non enregistrées : confirmation. `beforeunload` couvre
+  // le rechargement et la fermeture de l'onglet ; les liens internes (barre latérale, menu mobile)
+  // naviguent sans décharger la page : leurs clics sont interceptés avant ceux de Next (capture).
   useEffect(() => {
     if (!modifie) return;
     const avertir = (e: BeforeUnloadEvent) => e.preventDefault();
+    const garder = (e: MouseEvent) => {
+      if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+      const lien = e.target instanceof Element ? e.target.closest("a[href]") : null;
+      if (!(lien instanceof HTMLAnchorElement) || lien.target === "_blank" || lien.hasAttribute("download")) return;
+      const url = new URL(lien.href, window.location.href);
+      // Ancres de la page (navigation des sections) : on reste sur le formulaire.
+      if (url.origin === window.location.origin && url.pathname === window.location.pathname) return;
+      if (!window.confirm("Des modifications ne sont pas enregistrées. Quitter la page ?")) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    };
     window.addEventListener("beforeunload", avertir);
-    return () => window.removeEventListener("beforeunload", avertir);
+    document.addEventListener("click", garder, true);
+    return () => {
+      window.removeEventListener("beforeunload", avertir);
+      document.removeEventListener("click", garder, true);
+    };
   }, [modifie]);
 
   function soumettre(e: React.FormEvent<HTMLFormElement>) {
@@ -278,7 +297,7 @@ function SectionCharte({ parametres, prefixeVerrouille, dernierNumero, prochainN
             <img src={logoUrl} alt="Aperçu du logo" className="max-h-full max-w-full object-contain" />
           ) : (
             <Image
-              src="/brand/logo-delaveau.png"
+              src="/brand/logo-delaveau-fond-clair.png"
               alt="Logo intégré de l'Académie Delaveau"
               width={140}
               height={58}
@@ -534,7 +553,7 @@ function SectionPaiement({ parametres }: Contexte) {
           maxLength={500}
           rows={2}
           classeConteneur="sm:col-span-4"
-          aide="Ex. « Paiement par virement bancaire à réception de la facture. »"
+          aide="Ex. « Paiement par virement bancaire au plus tard à la date d'échéance. »"
         />
         <Champ
           nom="delai_paiement_jours"
@@ -673,14 +692,6 @@ function SectionTva({ parametres, onModifie }: Contexte) {
 // Facturation mensuelle
 // -----------------------------------------------------------------------------
 
-/** Prochaine date de génération ("AAAA-MM-JJ") au jour `jour` du mois. */
-function prochaineGeneration(aujourdhui: string, jour: number): string {
-  const [a, m, j] = aujourdhui.split("-").map(Number);
-  const d = new Date(Date.UTC(a, m - 1 + (j < jour ? 0 : 1), jour));
-  return d.toISOString().slice(0, 10);
-}
-
-/** « 1 octobre 2026 » → « 1er octobre 2026 ». */
 function SectionMensuelle({ parametres, aujourdhui, smtpConfigure, nbClientsSansEmail }: Contexte) {
   const [objet, setObjet] = useState(parametres.objet_facture_mensuelle);
   const [jour, setJour] = useState(String(parametres.jour_generation));
@@ -690,7 +701,7 @@ function SectionMensuelle({ parametres, aujourdhui, smtpConfigure, nbClientsSans
 
   const jourNombre = Number(jour);
   const jourValide = Number.isInteger(jourNombre) && jourNombre >= 1 && jourNombre <= 28;
-  const dateGeneration = jourValide ? prochaineGeneration(aujourdhui, jourNombre) : null;
+  const dateGeneration = jourValide ? datesGeneration(jourNombre, aujourdhui).prochaine : null;
   const periode = dateGeneration ? premierDuMois(dateGeneration, mois === "precedent" ? -1 : 0) : null;
   const objetExemple = `${objet.trim() || "…"} – ${periode ? formatPeriode(periode) : "octobre 2026"}`;
 

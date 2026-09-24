@@ -166,6 +166,12 @@ const schemaClient = z
     // Vérifiée même si d'autres champs sont en erreur : toutes les erreurs s'affichent d'un coup.
     when: (payload) => !payload.issues.some((i) => i.path?.[0] === "type" || i.path?.[0] === "raison_sociale"),
   })
+  .refine((c) => c.type !== "professionnel" || Boolean(c.adresse_ligne1 && c.code_postal && c.ville), {
+    path: ["adresse_ligne1"],
+    error: "L'adresse (rue, code postal et ville) est obligatoire pour un client professionnel : elle figure sur ses factures.",
+    when: (payload) =>
+      !payload.issues.some((i) => ["type", "adresse_ligne1", "code_postal", "ville"].includes(String(i.path?.[0]))),
+  })
   .transform((c) =>
     // Un particulier n'a ni raison sociale, ni SIRET, ni numéro de TVA.
     c.type === "particulier" ? { ...c, raison_sociale: null, siret: null, numero_tva: null } : c,
@@ -216,27 +222,24 @@ export async function modifierClient(_precedent: ResultatAction | null, formData
 
   let nbBrouillons = 0;
   try {
+    const avant = await supabase.from("clients").select("academie_id").eq("id", id.data).maybeSingle();
+    if (avant.error) return { ok: false, erreur: traduireErreur(avant.error) };
+    if (!avant.data) return { ok: false, erreur: "Client introuvable : il a peut-être été supprimé." };
+
     const { data, error } = await supabase.from("clients").update(lecture.data).eq("id", id.data).select("id");
     if (error) return { ok: false, erreur: traduireErreur(error, ACADEMIE_INTROUVABLE) };
     if (!data || data.length === 0) return { ok: false, erreur: "Client introuvable : il a peut-être été supprimé." };
 
-    // Le trigger de la base ne recopie l'académie du client dans un brouillon que lorsque
-    // ce brouillon est modifié : on met donc à jour ceux qui sont encore sur l'ancienne académie.
-    const brouillons = await supabase
-      .from("factures")
-      .update({ academie_id: academieId })
-      .eq("client_id", id.data)
-      .eq("statut", "brouillon")
-      .neq("academie_id", academieId)
-      .select("id");
-    if (brouillons.error) {
-      revaliderClients();
-      return {
-        ok: false,
-        erreur: `Fiche client enregistrée, mais ses brouillons n'ont pas pu être rattachés à la nouvelle académie : ${traduireErreur(brouillons.error)}`,
-      };
+    // Changement d'académie : la base rattache aussitôt les brouillons du client à la
+    // nouvelle académie (trigger clients_academie_brouillons) ; on les compte pour le message.
+    if (avant.data.academie_id !== academieId) {
+      const brouillons = await supabase
+        .from("factures")
+        .select("id", { count: "exact", head: true })
+        .eq("client_id", id.data)
+        .eq("statut", "brouillon");
+      nbBrouillons = brouillons.count ?? 0;
     }
-    nbBrouillons = brouillons.data?.length ?? 0;
   } catch {
     return ERREUR_RESEAU;
   }

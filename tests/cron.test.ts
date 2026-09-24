@@ -14,7 +14,8 @@ vi.mock("@/lib/facturation/service", async (importOriginal) => ({
   genererBrouillonsMensuels,
 }));
 
-const envoyerFactures = vi.fn<(s: unknown, ids: string[]) => Promise<{ id: string; ok: boolean; erreur?: string }[]>>();
+const envoyerFactures =
+  vi.fn<(s: unknown, ids: string[], o?: { exigerBrouillon?: boolean }) => Promise<{ id: string; ok: boolean; erreur?: string }[]>>();
 vi.mock("@/lib/facturation/envoi", () => ({ envoyerFactures }));
 
 /** Clients (id → académie) lus pour la répartition par académie. */
@@ -140,7 +141,7 @@ describe("GET /api/cron/facturation-mensuelle", () => {
 
     const corps = await (await appel("?date=2026-10-05")).json();
     expect(genererBrouillonsMensuels).toHaveBeenCalledWith(admin, "2026-10-01", { apercu: false });
-    expect(envoyerFactures).toHaveBeenCalledWith(admin, ["f1", "f2"]);
+    expect(envoyerFactures).toHaveBeenCalledWith(admin, ["f1", "f2"], { exigerBrouillon: true });
     expect(corps).toMatchObject({
       ok: true,
       brouillons_crees: 2,

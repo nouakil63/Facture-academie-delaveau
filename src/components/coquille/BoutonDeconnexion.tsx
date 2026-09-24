@@ -2,11 +2,12 @@
 
 import { useActionState } from "react";
 import { seDeconnecter } from "@/app/(app)/actions-session";
+import { appeler } from "@/lib/appeler";
 import type { ResultatAction } from "@/lib/types";
 import { IconeDeconnexion } from "@/components/Icones";
 
 export function BoutonDeconnexion() {
-  const [etat, deconnecter, enCours] = useActionState<ResultatAction | null>(seDeconnecter, null);
+  const [etat, deconnecter, enCours] = useActionState<ResultatAction | null>(() => appeler(seDeconnecter()), null);
 
   return (
     <form action={deconnecter}>

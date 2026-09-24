@@ -1,6 +1,6 @@
 import Image from "next/image";
 
-/** Proportions du fichier /brand/logo-delaveau.png (1895 × 783). */
+/** Proportions du fichier /brand/logo-delaveau-fond-clair.png (1895 × 783, version fond clair du logo). */
 const RATIO = 783 / 1895;
 
 /**
@@ -10,7 +10,7 @@ const RATIO = 783 / 1895;
 export function Logo({ largeur = 150, className = "", prioritaire = false }: { largeur?: number; className?: string; prioritaire?: boolean }) {
   return (
     <Image
-      src="/brand/logo-delaveau.png"
+      src="/brand/logo-delaveau-fond-clair.png"
       alt="Académie Delaveau"
       width={largeur}
       height={Math.round(largeur * RATIO)}

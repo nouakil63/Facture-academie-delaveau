@@ -171,7 +171,7 @@ describe("configuration et envoi SMTP", () => {
       pieceJointe: { nom: "Facture-AD-2026-0001.pdf", contenu: Buffer.from("%PDF") },
     });
 
-    expect(resultat).toEqual({ messageId: "<abc@exemple.fr>" });
+    expect(resultat).toEqual({ messageId: "<abc@exemple.fr>", refusees: [] });
     expect(createTransport).toHaveBeenCalledWith(
       expect.objectContaining({
         host: "smtp.exemple.fr",
@@ -202,6 +202,22 @@ describe("configuration et envoi SMTP", () => {
       from: "Académie Delaveau <contact@exemple.fr>",
       replyTo: "secretariat@exemple.fr",
     });
+  });
+
+  it("signale les destinataires refusés, et échoue si seule la copie cachée est acceptée", async () => {
+    sendMail.mockResolvedValue({
+      messageId: "<x>",
+      accepted: ["marie@exemple.fr"],
+      rejected: [{ address: "Papa@Exemple.fr" }],
+    });
+    expect(await envoyerEmail({ a: ["marie@exemple.fr", "papa@exemple.fr"], objet: "o", texte: "t" })).toEqual({
+      messageId: "<x>",
+      refusees: ["papa@exemple.fr"],
+    });
+
+    sendMail.mockResolvedValue({ messageId: "<y>", accepted: ["archives@exemple.fr"], rejected: ["marie@exemple.fr"] });
+    const envoi = envoyerEmail({ a: ["marie@exemple.fr"], cci: ["archives@exemple.fr"], objet: "o", texte: "t" });
+    await expect(envoi).rejects.toMatchObject({ code: "EENVELOPE", message: expect.stringContaining("marie@exemple.fr") });
   });
 
   it("refuse un envoi non configuré ou sans destinataire", async () => {

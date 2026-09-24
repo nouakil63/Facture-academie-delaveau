@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Logo } from "@/components/coquille/Logo";
 
-/** Page 404 : URL inconnue, ou notFound() appelé par une page (facture, client… introuvable). */
+/** Page 404 hors coquille (secours) : les pages de l'application ont leur propre 404, src/app/(app)/not-found.tsx. */
 export default function PageIntrouvable() {
   return (
     <main className="flex min-h-screen items-center justify-center bg-page px-4 py-12">

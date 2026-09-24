@@ -66,7 +66,7 @@ export function ResultatsEnvoi({
                 r.ok ? "text-emerald-700" : r.ignoree ? "text-muted" : "text-red-700"
               }`}
             >
-              {r.ok ? "Envoyée" : r.erreur}
+              {r.ok ? (r.erreur ? `Envoyée · ${r.erreur}` : "Envoyée") : r.erreur}
             </span>
           </li>
         ))}

@@ -3,7 +3,7 @@ import Link from "next/link";
 /**
  * 404 affichée dans la coquille (la barre latérale reste disponible) quand une page de
  * l'application appelle notFound() : facture, client ou prestation introuvable, identifiant
- * invalide… Les URL totalement inconnues sont traitées par src/app/not-found.tsx.
+ * invalide, ou URL inconnue (route attrape-tout src/app/(app)/[...inconnu]).
  */
 export default function IntrouvableApplication() {
   return (

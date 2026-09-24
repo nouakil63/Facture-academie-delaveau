@@ -23,9 +23,3 @@ export function supabaseCleePublique(): string {
 export function supabaseCleeSecrete(): string {
   return requis("SUPABASE_SECRET_KEY", process.env.SUPABASE_SECRET_KEY ?? process.env.SUPABASE_SERVICE_ROLE_KEY);
 }
-
-/** URL publique de l'application (liens dans les e-mails, redirections). */
-export function urlApplication(): string {
-  const url = process.env.APP_URL ?? (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000");
-  return url.replace(/\/$/, "");
-}

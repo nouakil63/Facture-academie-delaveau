@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { startTransition, useActionState, useState } from "react";
 import { enregistrerTarif } from "@/app/(app)/clients/actions";
+import { useSignalerEnCours } from "@/components/Modale";
+import { appeler } from "@/lib/appeler";
 import { centimesVersSaisie, formatEuros, parseEurosEnCentimes } from "@/lib/format";
 import {
   parseQuantite,
@@ -25,6 +27,7 @@ export function FormulaireTarif({
   prestations,
   onTermine,
   onAnnuler,
+  onEnCours,
 }: {
   clientId: string;
   /** null → nouvelle ligne. */
@@ -33,12 +36,15 @@ export function FormulaireTarif({
   prestations: PrestationDuTarif[];
   onTermine: (message?: string) => void;
   onAnnuler: () => void;
+  /** Enregistrement en cours (la modale parente se verrouille). */
+  onEnCours?: (enCours: boolean) => void;
 }) {
   const [etat, envoyer, enCours] = useActionState<ResultatAction | null, FormData>(async (precedent, donnees) => {
-    const resultat = await enregistrerTarif(precedent, donnees);
+    const resultat = await appeler(enregistrerTarif(precedent, donnees));
     if (resultat.ok) onTermine(resultat.message);
     return resultat;
   }, null);
+  useSignalerEnCours(enCours, onEnCours);
 
   const [mode, setMode] = useState<Mode>(tarif && !tarif.prestation_id ? "libre" : prestations.length ? "catalogue" : "libre");
   const [prestationId, setPrestationId] = useState(tarif?.prestation_id ?? "");

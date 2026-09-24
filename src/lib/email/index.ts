@@ -122,11 +122,21 @@ function nettoyerAdresses(adresses: readonly (string | null | undefined)[]): str
   return resultat;
 }
 
+/** Adresse d'un élément de `info.rejected` de nodemailer (chaîne ou { address }). */
+function adresseRefusee(r: unknown): string {
+  if (typeof r === "string") return r;
+  if (r && typeof r === "object" && "address" in r) return String(r.address);
+  return String(r);
+}
+
 /**
  * Envoie un e-mail. Lève une Error si l'envoi n'est pas configuré, s'il n'y a aucun
- * destinataire ou si le serveur SMTP refuse le message (voir messageErreurEmail).
+ * destinataire ou si le serveur SMTP refuse le message (voir messageErreurEmail),
+ * y compris quand TOUS les destinataires principaux (`a`) sont refusés : la copie cachée
+ * d'archivage acceptée seule ne vaut pas envoi.
+ * `refusees` : destinataires principaux refusés par le serveur alors que d'autres ont été acceptés.
  */
-export async function envoyerEmail(msg: MessageEmail): Promise<{ messageId: string }> {
+export async function envoyerEmail(msg: MessageEmail): Promise<{ messageId: string; refusees: string[] }> {
   const config = lireConfig();
   if (!config) {
     throw new Error(
@@ -160,7 +170,14 @@ export async function envoyerEmail(msg: MessageEmail): Promise<{ messageId: stri
   if (Array.isArray(info.accepted) && info.accepted.length === 0) {
     throw new Error("Le serveur d'envoi a refusé tous les destinataires.");
   }
-  return { messageId: String(info.messageId ?? "") };
+  // nodemailer ne lève EENVELOPE que si tous les destinataires sont refusés : les refus
+  // partiels ne figurent que dans info.rejected.
+  const rejetes = new Set((Array.isArray(info.rejected) ? info.rejected : []).map((r) => adresseRefusee(r).toLowerCase()));
+  const refusees = a.filter((x) => rejetes.has(x.toLowerCase()));
+  if (refusees.length === a.length) {
+    throw Object.assign(new Error(`Adresse(s) refusée(s) : ${refusees.join(", ")}`), { code: "EENVELOPE" });
+  }
+  return { messageId: String(info.messageId ?? ""), refusees };
 }
 
 /** Traduit une erreur d'envoi (nodemailer / SMTP) en message clair pour l'utilisateur. */
@@ -171,8 +188,9 @@ export function messageErreurEmail(erreur: unknown): string {
   switch (code) {
     case "EAUTH":
     case "ENOAUTH":
-      return "Le serveur d'envoi a refusé l'identification : vérifiez SMTP_USER et SMTP_PASSWORD (mot de passe d'application pour Gmail).";
+      return "Identifiants refusés par le serveur SMTP : SMTP_USER doit être l'adresse complète de la boîte (ex. contact@academiedelaveau.com) et SMTP_PASSWORD le mot de passe de cette boîte (voir Paramètres → Envoi des e-mails).";
     case "ECONNECTION":
+    case "ECONNREFUSED":
     case "ETIMEDOUT":
     case "ESOCKET":
     case "EDNS":
@@ -180,7 +198,7 @@ export function messageErreurEmail(erreur: unknown): string {
     case "ETLS":
       return "Connexion sécurisée impossible avec le serveur d'envoi : vérifiez SMTP_PORT et SMTP_SECURE (465 → true, 587 → false).";
     case "EENVELOPE":
-      return `Adresse refusée par le serveur d'envoi : vérifiez les adresses e-mail du client. (${brut})`;
+      return `Adresse refusée par le serveur d'envoi : vérifiez l'adresse du destinataire (fiche client) et l'expéditeur (EMAIL_FROM). (${brut})`;
     case "EMESSAGE":
       return `Le serveur d'envoi a refusé le message. (${brut})`;
     default:

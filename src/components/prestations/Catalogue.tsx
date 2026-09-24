@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { changerArchivagePrestation, supprimerPrestation } from "@/app/(app)/prestations/actions";
-import { formatEuros } from "@/lib/format";
+import { formatEuros, pluriel } from "@/lib/format";
 import type { Prestation, ResultatAction } from "@/lib/types";
 import { FormulairePrestation } from "./FormulairePrestation";
 import {
@@ -15,7 +15,8 @@ import {
   IconeRestaurer,
 } from "@/components/Icones";
 import { Modale } from "@/components/Modale";
-import { pluriel, suffixeUnite } from "./unites";
+import { appeler } from "@/lib/appeler";
+import { suffixeUnite } from "./unites";
 
 /** Prestation et son utilisation dans les tarifs clients. */
 export type PrestationCatalogue = Prestation & {
@@ -47,6 +48,7 @@ export function Catalogue({
   nbArchiveesMasquees: number;
 }) {
   const [edition, setEdition] = useState<Edition>(null);
+  const [enregistrement, setEnregistrement] = useState(false);
   const [aSupprimer, setASupprimer] = useState<PrestationCatalogue | null>(null);
   const [message, setMessage] = useState<Message>(null);
   const [archivageEnCours, demarrerArchivage] = useTransition();
@@ -59,7 +61,7 @@ export function Catalogue({
   function archiver(p: PrestationCatalogue, archiverOuNon: boolean) {
     setMessage(null);
     demarrerArchivage(async () => {
-      const r = await changerArchivagePrestation(p.id, archiverOuNon);
+      const r = await appeler(changerArchivagePrestation(p.id, archiverOuNon));
       setMessage(r.ok ? { ok: true, texte: r.message ?? "Prestation mise à jour." } : { ok: false, texte: r.erreur });
     });
   }
@@ -101,12 +103,14 @@ export function Catalogue({
         titre={prestationEditee ? "Modifier la prestation" : "Nouvelle prestation"}
         sousTitre={prestationEditee ? prestationEditee.libelle : "Ajout au catalogue commun aux académies"}
         largeur="max-w-xl"
+        verrouillee={enregistrement}
       >
         {edition !== null && (
           <FormulairePrestation
             key={prestationEditee?.id ?? "nouvelle"}
             prestation={prestationEditee ?? undefined}
             nbClientsPrixCatalogue={prestationEditee ? prestationEditee.nbClients - prestationEditee.nbPrixPersonnalises : 0}
+            onEnCours={setEnregistrement}
             onAnnuler={() => setEdition(null)}
             onSucces={(texte) => {
               setEdition(null);
@@ -374,7 +378,7 @@ function ConfirmationSuppression({
   function executer(action: () => Promise<ResultatAction>, messageParDefaut: string) {
     setErreur(null);
     demarrer(async () => {
-      const r = await action();
+      const r = await appeler(action());
       if (!r.ok) {
         setErreur(r.erreur);
         return;

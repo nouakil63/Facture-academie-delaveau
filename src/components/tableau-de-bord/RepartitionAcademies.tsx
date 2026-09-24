@@ -1,7 +1,6 @@
-import { formatEuros } from "@/lib/format";
+import { formatEuros, pluriel } from "@/lib/format";
 import { BoutonFiltrerAcademie } from "./BoutonFiltrerAcademie";
 import type { DonneesTableauDeBord } from "./donnees";
-import { pluriel } from "./outils";
 
 function Mesure({ libelle, valeur, detail, alerte = false }: { libelle: string; valeur: string; detail?: string; alerte?: boolean }) {
   return (

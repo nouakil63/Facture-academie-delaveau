@@ -149,6 +149,16 @@ describe("PDF de facture", () => {
     expect(pdf.subarray(0, 5).toString()).toBe("%PDF-");
   });
 
+  it("rend une facture d'un client professionnel avec SIREN seul et mentions professionnelles vidées", async () => {
+    const donnees = donneesExemple(
+      parametresExemple({ siret: null, mentions_professionnels: null, taux_tva: 20, mention_tva: null }),
+      { statut: "emise", client: { type: "professionnel", raison_sociale: "Haras du Cotentin SARL" } },
+    );
+    const pdf = await genererPdfFacture(donnees);
+    expect(nombrePages(pdf)).toBe(1);
+    ecrireApercu("apercu-professionnel-siren.pdf", pdf);
+  });
+
   it("rend une facture sans académie (nom vide) ni coordonnées bancaires", async () => {
     const donnees = donneesExemple(parametresExemple(), { academie: { nom: "" } });
     const pdf = await genererPdfFacture(donnees);

@@ -1,5 +1,6 @@
 "use client";
 
+import { unstable_rethrow } from "next/navigation";
 import { useId, useOptimistic, useTransition } from "react";
 import { choisirAcademie } from "@/app/actions-academie";
 import { nomCourtAcademie } from "@/lib/format";
@@ -36,6 +37,7 @@ export function SelecteurAcademie({
       try {
         await choisirAcademie(id);
       } catch (e) {
+        unstable_rethrow(e);
         // L'affichage optimiste revient seul à la valeur réelle à la fin de la transition.
         console.error("Changement d'académie impossible :", e);
       }

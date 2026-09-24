@@ -1,15 +1,17 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { envoyerSelection } from "@/app/(app)/factures/actions";
 import { AcademieBadge } from "@/components/AcademieBadge";
 import { ModaleConfirmation } from "@/components/Modale";
 import { StatutBadge } from "@/components/StatutBadge";
-import { formatDate, formatEuros, formatPeriode } from "@/lib/format";
+import { destinatairesFacture, formatDate, formatEuros, formatPeriode, pluriel } from "@/lib/format";
 import type { FactureVue } from "@/lib/types";
 import { IconeAlerte, IconeEnvoi } from "@/components/Icones";
-import { libelleNumero, nomClientFacture, pluriel, type ResultatEnvoiFacture } from "./outils";
+import { envoyerParLots } from "./lots";
+import { libelleNumero, nomClientFacture, type ResultatEnvoiFacture } from "./outils";
 import { ResultatsEnvoi } from "./ResultatsEnvoi";
 
 export type FactureListe = Pick<
@@ -30,6 +32,7 @@ export type FactureListe = Pick<
   | "client_prenom"
   | "client_raison_sociale"
   | "client_email"
+  | "client_emails_cc"
   | "client_cavaliers"
   | "academie_id"
   | "academie_nom"
@@ -53,8 +56,10 @@ export function ListeFactures({
   /** false si l'envoi d'e-mails (SMTP) n'est pas configuré. */
   envoiPossible: boolean;
 }) {
+  const router = useRouter();
   const [selection, setSelection] = useState<Set<string>>(new Set());
   const [confirmation, setConfirmation] = useState(false);
+  const [progression, setProgression] = useState<{ traitees: number; total: number } | null>(null);
   const [compteRendu, setCompteRendu] = useState<{ resultats: ResultatEnvoiFacture[]; synthese?: string } | null>(null);
 
   const selectionnables = useMemo(() => factures.filter((f) => f.statut !== "annulee"), [factures]);
@@ -82,11 +87,37 @@ export function ListeFactures({
 
   // Détail de la sélection pour la confirmation.
   const brouillons = choisies.filter((f) => f.statut === "brouillon");
-  const brouillonsSansEmail = brouillons.filter((f) => !f.client_email);
+  const brouillonsSansEmail = brouillons.filter(
+    (f) => destinatairesFacture({ email: f.client_email, emails_cc: f.client_emails_cc }).length === 0,
+  );
   const aRenvoyer = choisies.filter((f) => f.statut === "emise" || f.statut === "envoyee");
   const payees = choisies.filter((f) => f.statut === "payee");
   const totalSelection = choisies.reduce((s, f) => s + f.total_ttc_centimes, 0);
   const tropNombreuses = choisies.length > MAX_LOT;
+
+  /**
+   * Envoi par petits lots (une Server Action par lot). Chaque facture part avec le statut vu à la
+   * confirmation : si une tentative précédente l'a déjà envoyée, le serveur l'ignore. Les factures
+   * traitées quittent la sélection au fur et à mesure ; en cas d'interruption, la liste est rechargée.
+   */
+  async function envoyerSelectionParLots() {
+    const aEnvoyer = choisies.map((f) => ({ id: f.id, statut: f.statut }));
+    setProgression({ traitees: 0, total: aEnvoyer.length });
+    try {
+      const resultat = await envoyerParLots(aEnvoyer, envoyerSelection, (lot, traitees) => {
+        setProgression({ traitees, total: aEnvoyer.length });
+        setSelection((avant) => {
+          const apres = new Set(avant);
+          for (const f of lot) apres.delete(f.id);
+          return apres;
+        });
+      });
+      if (!resultat.ok) router.refresh();
+      return resultat;
+    } finally {
+      setProgression(null);
+    }
+  }
 
   return (
     <div className="space-y-4">
@@ -130,7 +161,7 @@ export function ListeFactures({
       {choisies.length > 0 && !envoiPossible && (
         <p className="avertissement">
           L&apos;envoi d&apos;e-mails n&apos;est pas configuré (serveur SMTP) : l&apos;envoi groupé est indisponible.{" "}
-          <Link href="/parametres" className="font-medium underline">
+          <Link href="/parametres#envoi-emails" className="font-medium underline">
             Paramètres
           </Link>
         </p>
@@ -307,9 +338,11 @@ export function ListeFactures({
         onFermer={() => setConfirmation(false)}
         titre={`Émettre et envoyer ${pluriel(choisies.length, "facture")}`}
         libelleConfirmer={`Émettre et envoyer (${choisies.length})`}
-        libelleEnCours="Envoi en cours…"
+        libelleEnCours={
+          progression ? `Envoi en cours… ${progression.traitees} / ${progression.total}` : "Envoi en cours…"
+        }
         desactiver={choisies.length === 0 || tropNombreuses}
-        onConfirmer={() => envoyerSelection(choisies.map((f) => f.id))}
+        onConfirmer={envoyerSelectionParLots}
         onSucces={(r) => {
           setCompteRendu({ resultats: r.donnees ?? [], synthese: r.message });
           setSelection(new Set());

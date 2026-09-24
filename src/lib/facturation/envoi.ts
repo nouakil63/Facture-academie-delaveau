@@ -20,9 +20,34 @@ import type { FactureComplete, Parametres } from "@/lib/types";
  * Le PDF imprime l'émetteur figé à l'émission (FactureComplete.emetteur) ; l'e-mail, lui,
  * utilise les paramètres actuels : modèles d'objet et de corps, copie cachée d'archivage,
  * couleurs et coordonnées du pied (un duplicata part avec les réglages du jour).
+ * Les destinataires sont ceux de la fiche client actuelle (les adresses e-mail ne sont pas
+ * imprimées sur la facture, donc pas figées) : une adresse corrigée sert dès le prochain envoi.
  */
 
-export type ResultatEnvoi = { ok: true; destinataires: string[] } | { ok: false; erreur: string };
+export type ResultatEnvoi =
+  | {
+      ok: true;
+      /** Adresses qui ont reçu l'e-mail. */
+      destinataires: string[];
+      /** Adresses en copie refusées par le serveur d'envoi (l'adresse principale, elle, a été acceptée). */
+      refusees: string[];
+    }
+  | {
+      ok: false;
+      erreur: string;
+      /** true : rien n'a été tenté (ex. facture déjà émise par un autre envoi, avec `exigerBrouillon`). */
+      ignoree?: true;
+    };
+
+export interface OptionsEnvoi {
+  /**
+   * Envoi de brouillons (facturation mensuelle, cron) : une facture qui n'est plus un brouillon
+   * au moment de l'envoi (émise ou envoyée entre-temps par un autre lot) est ignorée, sans e-mail.
+   */
+  exigerBrouillon?: boolean;
+}
+
+const DEJA_EMISE = "Ignorée : déjà émise entre-temps. Si elle est restée « Émise », envoyez-la depuis sa fiche.";
 
 function messageDe(e: unknown): string {
   if (e instanceof Error) return e.message;
@@ -72,7 +97,11 @@ async function journaliser(
  * - brouillon : vérifie destinataires et configuration SMTP AVANT d'émettre (numéro définitif), puis envoie ;
  * - émise : passe à « envoyée » ; déjà envoyée ou payée (duplicata) : seule la date d'envoi change.
  */
-export async function envoyerFacture(supabase: SupabaseClient, factureId: string): Promise<ResultatEnvoi> {
+export async function envoyerFacture(
+  supabase: SupabaseClient,
+  factureId: string,
+  options: OptionsEnvoi = {},
+): Promise<ResultatEnvoi> {
   let donnees: FactureComplete | null;
   try {
     donnees = await chargerFactureComplete(supabase, factureId);
@@ -85,6 +114,9 @@ export async function envoyerFacture(supabase: SupabaseClient, factureId: string
   if (statutInitial === "annulee") {
     const numero = donnees.facture.numero ? ` ${donnees.facture.numero}` : "";
     return { ok: false, erreur: `La facture${numero} est annulée : elle ne peut pas être envoyée.` };
+  }
+  if (options.exigerBrouillon && statutInitial !== "brouillon") {
+    return { ok: false, erreur: DEJA_EMISE, ignoree: true };
   }
 
   // Contrôles préalables : on n'attribue jamais de numéro à un brouillon qui ne pourrait pas partir.
@@ -120,13 +152,17 @@ export async function envoyerFacture(supabase: SupabaseClient, factureId: string
       await emettreFacture(supabase, factureId);
       donnees = await chargerFactureComplete(supabase, factureId);
     } catch (e) {
+      // Émise au même instant par un autre envoi (verrou de emettre_facture) : rien n'est envoyé ici.
+      if (options.exigerBrouillon && /est déjà émise/.test(messageDe(e))) {
+        return { ok: false, erreur: DEJA_EMISE, ignoree: true };
+      }
       return { ok: false, erreur: `Émission de la facture impossible : ${messageDe(e)}` };
     }
     if (!donnees) return { ok: false, erreur: "Facture introuvable après son émission." };
   }
 
   const { facture, academie } = donnees;
-  // Facture émise : coordonnées figées à l'émission (les mêmes que celles imprimées sur le PDF).
+  // Adresses de la fiche client actuelle (chargerFactureComplete ne fige pas les e-mails).
   const destinataires = destinatairesFacture(donnees.client);
   if (destinataires.length === 0) {
     return { ok: false, erreur: `Aucune adresse e-mail pour ${nomClient(donnees.client)}.` };
@@ -154,8 +190,9 @@ export async function envoyerFacture(supabase: SupabaseClient, factureId: string
   }
 
   let messageId: string;
+  let refusees: string[];
   try {
-    ({ messageId } = await envoyerEmail({
+    ({ messageId, refusees } = await envoyerEmail({
       a: destinataires,
       objet,
       texte,
@@ -184,35 +221,80 @@ export async function envoyerFacture(supabase: SupabaseClient, factureId: string
     return { ok: false, erreur };
   }
 
+  // Refus partiel (le serveur a accepté au moins un destinataire) : l'envoi n'est réussi que si
+  // l'adresse principale (payeur) a été acceptée.
+  const cles = new Set(refusees.map((r) => r.toLowerCase()));
+  const acceptees = destinataires.filter((d) => !cles.has(d.toLowerCase()));
+  const principaleAcceptee = !cles.has(destinataires[0].toLowerCase());
   await journaliser(supabase, {
     facture_id: facture.id,
     destinataires,
     objet,
-    succes: true,
-    erreur: null,
+    succes: principaleAcceptee,
+    erreur: refusees.length > 0 ? `Adresse(s) refusée(s) par le serveur d'envoi : ${refusees.join(", ")}` : null,
     message_id: messageId || null,
   });
+  if (!principaleAcceptee) {
+    return {
+      ok: false,
+      erreur: `Adresse principale refusée par le serveur d'envoi (${destinataires[0]}) : la facture n'a été reçue qu'en copie (${acceptees.join(", ")}). Corrigez l'adresse sur la fiche client puis renvoyez la facture.`,
+    };
+  }
 
   // L'e-mail est parti : un échec de mise à jour du statut est journalisé mais pas signalé comme un échec d'envoi.
+  // Chaque mise à jour est conditionnée au statut attendu : un paiement ou une annulation enregistrés
+  // pendant l'envoi ne sont jamais écrasés.
   const maintenant = new Date().toISOString();
-  const miseAJour =
-    facture.statut === "emise" ? { statut: "envoyee" as const, envoyee_le: maintenant } : { envoyee_le: maintenant };
-  const { error } = await supabase.from("factures").update(miseAJour).eq("id", facture.id);
-  if (error) console.error(`Facture ${facture.numero} envoyée mais statut non mis à jour :`, error.message);
+  let dejaMisAJour = false;
+  if (facture.statut === "emise") {
+    const r = await supabase
+      .from("factures")
+      .update({ statut: "envoyee", envoyee_le: maintenant })
+      .eq("id", facture.id)
+      .eq("statut", "emise")
+      .select("id");
+    if (r.error) console.error(`Facture ${facture.numero} envoyée mais statut non mis à jour :`, r.error.message);
+    dejaMisAJour = !r.error && (r.data?.length ?? 0) > 0;
+  }
+  if (!dejaMisAJour) {
+    const { error } = await supabase
+      .from("factures")
+      .update({ envoyee_le: maintenant })
+      .eq("id", facture.id)
+      .in("statut", ["envoyee", "payee"]);
+    if (error) console.error(`Facture ${facture.numero} envoyée mais date d'envoi non mise à jour :`, error.message);
+  }
 
-  return { ok: true, destinataires };
+  return { ok: true, destinataires: acceptees, refusees };
+}
+
+export interface ResultatEnvoiLot {
+  id: string;
+  ok: boolean;
+  erreur?: string;
+  /** true : facture ignorée sans tentative d'envoi (voir OptionsEnvoi.exigerBrouillon). */
+  ignoree?: boolean;
 }
 
 /** Envoie plusieurs factures l'une après l'autre ; une erreur n'interrompt pas les suivantes. */
 export async function envoyerFactures(
   supabase: SupabaseClient,
   ids: string[],
-): Promise<{ id: string; ok: boolean; erreur?: string }[]> {
-  const resultats: { id: string; ok: boolean; erreur?: string }[] = [];
+  options: OptionsEnvoi = {},
+): Promise<ResultatEnvoiLot[]> {
+  const resultats: ResultatEnvoiLot[] = [];
   for (const id of ids) {
     try {
-      const r = await envoyerFacture(supabase, id);
-      resultats.push(r.ok ? { id, ok: true } : { id, ok: false, erreur: r.erreur });
+      const r = await envoyerFacture(supabase, id, options);
+      resultats.push(
+        r.ok
+          ? {
+              id,
+              ok: true,
+              ...(r.refusees.length > 0 ? { erreur: `Adresse(s) refusée(s) : ${r.refusees.join(", ")}` } : {}),
+            }
+          : { id, ok: false, erreur: r.erreur, ...(r.ignoree ? { ignoree: true } : {}) },
+      );
     } catch (e) {
       console.error(`Envoi de la facture ${id} interrompu :`, e);
       resultats.push({ id, ok: false, erreur: messageDe(e) });

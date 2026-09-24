@@ -1,14 +1,16 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useId, useTransition } from "react";
+import { useId, useState, useTransition } from "react";
 import { nomCourtAcademie } from "@/lib/format";
-import { ACADEMIE_TOUTES } from "./outils";
+import { ACADEMIE_TOUTES, MOTIF_MOIS, moisVoisin } from "./outils";
 
 /**
  * Choix de l'académie (Toutes / Delaveau / Espoir) et du mois de la facturation
  * mensuelle, portés par l'URL (`?academie=…&mois=AAAA-MM`). Ce choix est propre à la
  * page : il ne modifie pas le filtre d'académie de la barre latérale.
+ * La saisie du mois est locale (navigateurs sans sélecteur de mois : champ texte « AAAA-MM ») :
+ * l'URL ne change qu'une fois le mois complet. Le parent remonte le composant (key) à chaque mois.
  */
 export function SelecteurMensuel({
   academies,
@@ -25,6 +27,7 @@ export function SelecteurMensuel({
   const router = useRouter();
   const id = useId();
   const [chargement, demarrer] = useTransition();
+  const [saisie, setSaisie] = useState(mois);
 
   function aller(academie: string | null, nouveauMois: string) {
     const p = new URLSearchParams({ academie: academie ?? ACADEMIE_TOUTES });
@@ -76,16 +79,39 @@ export function SelecteurMensuel({
         <label htmlFor={`${id}-mois`} className="label">
           Mois facturé
         </label>
-        <input
-          id={`${id}-mois`}
-          type="month"
-          className="champ sm:w-48"
-          value={mois}
-          required
-          onChange={(e) => {
-            if (e.target.value) aller(academieId, e.target.value);
-          }}
-        />
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            className="btn-secondaire btn-petit"
+            onClick={() => aller(academieId, moisVoisin(mois, -1))}
+            aria-label="Mois précédent"
+            title="Mois précédent"
+          >
+            ‹
+          </button>
+          <input
+            id={`${id}-mois`}
+            type="month"
+            className="champ sm:w-40"
+            value={saisie}
+            required
+            placeholder="AAAA-MM"
+            pattern="\d{4}-(0[1-9]|1[0-2])"
+            onChange={(e) => {
+              setSaisie(e.target.value);
+              if (MOTIF_MOIS.test(e.target.value)) aller(academieId, e.target.value);
+            }}
+          />
+          <button
+            type="button"
+            className="btn-secondaire btn-petit"
+            onClick={() => aller(academieId, moisVoisin(mois, 1))}
+            aria-label="Mois suivant"
+            title="Mois suivant"
+          >
+            ›
+          </button>
+        </div>
       </div>
       {mois !== moisParDefaut && (
         <button type="button" className="btn-lien sm:mb-2" onClick={() => aller(academieId, moisParDefaut)}>

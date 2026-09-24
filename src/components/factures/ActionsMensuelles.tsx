@@ -1,11 +1,14 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { envoyerBrouillonsMensuels, genererBrouillons } from "@/app/(app)/facturation-mensuelle/actions";
 import { ModaleConfirmation } from "@/components/Modale";
-import { formatEuros } from "@/lib/format";
+import { appeler } from "@/lib/appeler";
+import { formatEuros, pluriel } from "@/lib/format";
 import { IconeAlerte, IconeEnvoi, IconePlus, IconeValide } from "@/components/Icones";
-import { pluriel, type ResultatEnvoiFacture } from "./outils";
+import { envoyerParLots } from "./lots";
+import { type ResultatEnvoiFacture } from "./outils";
 import { ResultatsEnvoi } from "./ResultatsEnvoi";
 
 /** Étape 1 : création des brouillons du mois (une académie, ou toutes si `academieId` est null). */
@@ -26,12 +29,8 @@ export function BoutonGenerer({
   function generer() {
     setRetour(null);
     demarrer(async () => {
-      try {
-        const r = await genererBrouillons(academieId, mois);
-        setRetour(r.ok ? { ok: true, texte: r.message ?? "Brouillons créés." } : { ok: false, texte: r.erreur });
-      } catch {
-        setRetour({ ok: false, texte: "La requête n'a pas abouti. Vérifiez la connexion puis réessayez." });
-      }
+      const r = await appeler(genererBrouillons(academieId, mois));
+      setRetour(r.ok ? { ok: true, texte: r.message ?? "Brouillons créés." } : { ok: false, texte: r.erreur });
     });
   }
 
@@ -77,10 +76,29 @@ export function EnvoiBrouillons({
   brouillons: { id: string; client: string; academie: string | null; totalTtc: number }[];
   nbSansEmail: number;
 }) {
+  const router = useRouter();
   const [confirmation, setConfirmation] = useState(false);
+  const [progression, setProgression] = useState<{ traitees: number; total: number } | null>(null);
   const [compteRendu, setCompteRendu] = useState<{ resultats: ResultatEnvoiFacture[]; synthese?: string } | null>(null);
   const total = brouillons.reduce((s, b) => s + b.totalTtc, 0);
   const n = brouillons.length;
+
+  /** Envoi par petits lots ; le serveur ignore les brouillons déjà émis (relance sans doublon). */
+  async function envoyerParPetitsLots() {
+    const ids = brouillons.map((b) => b.id);
+    setProgression({ traitees: 0, total: ids.length });
+    try {
+      const resultat = await envoyerParLots(
+        ids,
+        (lot) => envoyerBrouillonsMensuels(academieId, mois, lot),
+        (_lot, traitees) => setProgression({ traitees, total: ids.length }),
+      );
+      if (!resultat.ok) router.refresh();
+      return resultat;
+    } finally {
+      setProgression(null);
+    }
+  }
 
   return (
     <div className="space-y-4">
@@ -125,15 +143,11 @@ export function EnvoiBrouillons({
         onFermer={() => setConfirmation(false)}
         titre={`Émettre et envoyer les factures de ${libelleMois}`}
         libelleConfirmer={`Émettre et envoyer (${n})`}
-        libelleEnCours="Envoi en cours…"
-        desactiver={n === 0}
-        onConfirmer={() =>
-          envoyerBrouillonsMensuels(
-            academieId,
-            mois,
-            brouillons.map((b) => b.id),
-          )
+        libelleEnCours={
+          progression ? `Envoi en cours… ${progression.traitees} / ${progression.total}` : "Envoi en cours…"
         }
+        desactiver={n === 0}
+        onConfirmer={envoyerParPetitsLots}
         onSucces={(r) => setCompteRendu({ resultats: r.donnees ?? [], synthese: r.message })}
       >
         <p>

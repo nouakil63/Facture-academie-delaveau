@@ -16,6 +16,7 @@ import {
 import { FormulaireTarif } from "./FormulaireTarif";
 import { IconeCorbeille, IconeCrayon, IconeFlecheBas, IconeFlecheHaut, IconePlus } from "@/components/Icones";
 import { Modale, ModaleConfirmation } from "@/components/Modale";
+import { appeler } from "@/lib/appeler";
 
 /** Section « Tarifs appliqués » de la fiche client. */
 export function TarifsClient({
@@ -35,6 +36,7 @@ export function TarifsClient({
   periode: string;
 }) {
   const [edition, setEdition] = useState<TarifAvecPrestation | "nouveau" | null>(null);
+  const [enregistrement, setEnregistrement] = useState(false);
   const [aSupprimer, setASupprimer] = useState<TarifAvecPrestation | null>(null);
   const [message, setMessage] = useState<{ ok: boolean; texte: string } | null>(null);
   const [deplacement, demarrerDeplacement] = useTransition();
@@ -51,7 +53,7 @@ export function TarifsClient({
   function deplacer(t: TarifAvecPrestation, sens: "haut" | "bas") {
     setMessage(null);
     demarrerDeplacement(async () => {
-      const r = await deplacerTarif(t.id, sens);
+      const r = await appeler(deplacerTarif(t.id, sens));
       if (!r.ok) setMessage({ ok: false, texte: r.erreur });
     });
   }
@@ -244,6 +246,7 @@ export function TarifsClient({
         onFermer={() => setEdition(null)}
         titre={edition === "nouveau" ? "Nouvelle ligne de tarif" : "Modifier la ligne de tarif"}
         largeur="max-w-2xl"
+        verrouillee={enregistrement}
       >
         {edition !== null && (
           <FormulaireTarif
@@ -251,6 +254,7 @@ export function TarifsClient({
             clientId={clientId}
             tarif={tarifEdite}
             prestations={optionsPrestations}
+            onEnCours={setEnregistrement}
             onAnnuler={() => setEdition(null)}
             onTermine={(texte) => {
               setEdition(null);

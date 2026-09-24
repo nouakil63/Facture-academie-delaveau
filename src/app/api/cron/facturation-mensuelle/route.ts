@@ -189,7 +189,8 @@ export async function GET(request: NextRequest) {
   let envoyees = 0;
   let echecsEnvoi: EchecEnvoi[] = [];
   if (parametres.envoi_auto && !apercu && idsAEnvoyer.length > 0) {
-    const envois = await envoyerFactures(admin, idsAEnvoyer);
+    // exigerBrouillon : un brouillon émis entre-temps (envoi manuel lancé en même temps) n'est pas renvoyé.
+    const envois = await envoyerFactures(admin, idsAEnvoyer, { exigerBrouillon: true });
     envoyees = envois.filter((r) => r.ok).length;
     echecsEnvoi = envois
       .filter((r) => !r.ok)

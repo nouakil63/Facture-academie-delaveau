@@ -2,11 +2,15 @@
 
 import { useActionState, useState } from "react";
 import { IconeOeil, IconeOeilBarre } from "@/components/Icones";
+import { appeler } from "@/lib/appeler";
 import type { ResultatAction } from "@/lib/types";
 import { seConnecter } from "./actions";
 
 export function FormulaireConnexion({ suite }: { suite: string }) {
-  const [etat, connecter, enCours] = useActionState<ResultatAction | null, FormData>(seConnecter, null);
+  const [etat, connecter, enCours] = useActionState<ResultatAction | null, FormData>(
+    (precedent, donnees) => appeler(seConnecter(precedent, donnees)),
+    null,
+  );
   // Après l'envoi, React réinitialise le formulaire à ses valeurs par défaut :
   // l'e-mail saisi devient la valeur par défaut pour ne pas avoir à le retaper.
   const [email, setEmail] = useState("");

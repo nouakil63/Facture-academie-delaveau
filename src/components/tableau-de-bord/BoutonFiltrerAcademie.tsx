@@ -1,5 +1,6 @@
 "use client";
 
+import { unstable_rethrow } from "next/navigation";
 import { useTransition } from "react";
 import { choisirAcademie } from "@/app/actions-academie";
 
@@ -18,6 +19,7 @@ export function BoutonFiltrerAcademie({ academieId, nom }: { academieId: string;
           try {
             await choisirAcademie(academieId);
           } catch (e) {
+            unstable_rethrow(e);
             console.error("Changement d'académie impossible :", e);
           }
         })

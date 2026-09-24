@@ -1,9 +1,8 @@
 import Link from "next/link";
 import { IconeCalendrier, IconeFleche, IconeParametres } from "@/components/Icones";
-import { formatPeriode } from "@/lib/format";
+import { formatPeriode, pluriel } from "@/lib/format";
 import type { EtatFacturationMensuelle } from "./donnees";
 import { formatDateLongue, jourDuMois } from "@/lib/format";
-import { pluriel } from "./outils";
 
 /** Mois au format du paramètre ?mois= de la page Facturation mensuelle : "2026-10-01" → "2026-10". */
 function paramMois(periode: string): string {
@@ -55,7 +54,7 @@ export function ProchaineFacturation({
                   Date indicative : aucun brouillon ne sera créé tout seul. Lancez la facturation vous-même, ou
                   activez l&apos;automatisation.
                 </p>
-                <Link href="/parametres" className="btn-lien text-xs">
+                <Link href="/parametres#mensuelle" className="btn-lien text-xs">
                   <IconeParametres className="h-3.5 w-3.5" />
                   Régler l&apos;automatisation
                 </Link>

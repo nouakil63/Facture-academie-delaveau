@@ -49,8 +49,11 @@ beforeEach(async () => {
 
 describe("données initiales", () => {
   test("paramètres de l'association et deux académies", async () => {
-    const p = await un<{ raison_sociale: string; siret: string; rna: string }>(`select * from parametres`);
+    const p = await un<{ raison_sociale: string; siret: string; rna: string; conditions_paiement: string }>(
+      `select * from parametres`);
     expect(p.raison_sociale).toBe("Académie Delaveau");
+    // Conditions cohérentes avec l'échéance à 30 jours imprimée juste au-dessus.
+    expect(p.conditions_paiement).toBe("Paiement par virement bancaire au plus tard à la date d'échéance.");
     expect(p.siret).toBe("853 472 298 00019");
     expect(p.rna).toBe("W143007272");
     const rows = (await db.query<{ nom: string }>(`select nom from academies order by ordre`)).rows;
@@ -73,6 +76,20 @@ describe("totaux", () => {
     await db.query(`delete from lignes_facture where facture_id = $1 and libelle = 'Cours'`, [f]);
     row = await un(`select * from factures where id = $1`, [f]);
     expect(row.total_ht_centimes).toBe(45000);
+  });
+
+  test("un nouveau taux de TVA s'applique aux brouillons, pas aux factures émises", async () => {
+    const c = await client(ad);
+    const emise = await brouillon(c, [["A", 1, 10000]]);
+    await db.query(`select emettre_facture($1)`, [emise]);
+    const f = await brouillon(c, [["B", 1, 45000]]);
+    await db.query(`update parametres set taux_tva = 20`);
+    const b = await un<{ taux_tva: string; total_ttc_centimes: number }>(`select * from factures where id = $1`, [f]);
+    expect(Number(b.taux_tva)).toBe(20);
+    expect(b.total_ttc_centimes).toBe(54000);
+    const e = await un<{ taux_tva: string; total_ttc_centimes: number }>(`select * from factures where id = $1`, [emise]);
+    expect(Number(e.taux_tva)).toBe(0);
+    expect(e.total_ttc_centimes).toBe(10000);
   });
 
   test("la TVA est calculée si un taux est défini", async () => {
@@ -120,6 +137,29 @@ describe("émission et numérotation", () => {
     await db.query(`update clients set academie_id = $1 where id = $2`, [ad, c]);
     await db.query(`update factures set notes_internes = 'x' where id = $1`, [f]);
     expect((await un<{ academie_id: string }>(`select academie_id from factures where id = $1`, [f])).academie_id).toBe(ae);
+  });
+
+  test("les brouillons suivent immédiatement un changement d'académie du client", async () => {
+    const c = await client(ad);
+    const brouillonAvant = await brouillon(c, [["A", 1, 100]]);
+    const emise = await brouillon(c, [["B", 1, 100]]);
+    await db.query(`select emettre_facture($1)`, [emise]);
+    await db.query(`update clients set academie_id = $1 where id = $2`, [ae, c]);
+    const academie = async (id: string) =>
+      (await un<{ academie_id: string }>(`select academie_id from factures where id = $1`, [id])).academie_id;
+    expect(await academie(brouillonAvant)).toBe(ae);
+    expect(await academie(emise)).toBe(ad);
+    // Une autre modification du client ne touche pas aux factures.
+    await db.query(`update clients set telephone = '0600000000' where id = $1`, [c]);
+    expect(await academie(emise)).toBe(ad);
+  });
+
+  test("au-delà de 9999 factures dans l'année, le numéro s'allonge sans être tronqué", async () => {
+    const annee = (await un<{ a: number }>(`select extract(year from aujourdhui_paris())::int as a`)).a;
+    await db.query(`insert into compteurs_factures (annee, dernier_numero) values ($1, 9999)`, [annee]);
+    const c = await client(ad);
+    const f = await un<{ numero: string }>(`select * from emettre_facture($1)`, [await brouillon(c, [["A", 1, 100]])]);
+    expect(f.numero).toBe(`AD-${annee}-10000`);
   });
 
   test("l'émission fige les coordonnées et fixe l'échéance", async () => {
@@ -319,9 +359,14 @@ describe("vue factures_vue", () => {
     const f = await brouillon(c, [["A", 1, 100]]);
     await db.query(`update parametres set delai_paiement_jours = 0`);
     await db.query(`select emettre_facture($1)`, [f]);
-    let row = await un<{ en_retard: boolean; client_nom: string; academie_nom: string }>(`select * from factures_vue where id = $1`, [f]);
+    await db.query(`update clients set emails_cc = '{copie@example.com}' where id = $1`, [c]);
+    let row = await un<{ en_retard: boolean; client_nom: string; academie_nom: string; client_emails_cc: string[] }>(
+      `select * from factures_vue where id = $1`,
+      [f],
+    );
     expect(row.en_retard).toBe(false);
     expect(row.academie_nom).toBe("Académie Delaveau");
+    expect(row.client_emails_cc).toEqual(["copie@example.com"]);
     // échéance dépassée : on simule en contournant le trigger (test uniquement)
     await db.exec(`alter table factures disable trigger b_factures_proteger`);
     await db.query(`update factures set date_echeance = date_emission - 1 where id = $1`, [f]);
@@ -357,6 +402,30 @@ describe("sécurité (RLS)", () => {
       expect((await db.query(`select * from factures_vue`)).rows).toHaveLength(0);
       await expect(db.query(`insert into clients (academie_id, nom) values ($1, 'X')`, [ad])).rejects.toThrow();
       await expect(db.query(`select emettre_facture($1)`, [f])).rejects.toThrow(/Accès refusé/);
+    });
+  });
+
+  test("un membre ne peut créer qu'un brouillon sans numéro (la numérotation reste intacte)", async () => {
+    const c = await client(ad);
+    const legitime = await brouillon(c, [["A", 1, 100]]);
+    await commeUtilisateur(db, MEMBRE, async () => {
+      await expect(db.query(
+        `insert into factures (client_id, statut, numero, annee, sequence, date_emission, total_ht_centimes, emetteur_snapshot)
+         values ($1, 'emise', 'AD-2026-0001', 2026, 1, current_date, 123456, '{"iban":"FR76 AUTRE"}')`, [c],
+      )).rejects.toThrow(/créée en brouillon/);
+      await expect(db.query(`insert into factures (client_id, annee, sequence) values ($1, 2026, 7)`, [c]))
+        .rejects.toThrow(/créée en brouillon/);
+      await expect(db.query(`insert into factures (client_id, statut, payee_le) values ($1, 'payee', current_date)`, [c]))
+        .rejects.toThrow(/créée en brouillon/);
+      // Champs sans objet pour un brouillon : ignorés.
+      const f = await un<{ payee_le: Date | null; date_echeance: Date | null; created_by: string }>(
+        `insert into factures (client_id, payee_le, date_echeance, created_by)
+         values ($1, current_date, current_date, '00000000-0000-0000-0000-00000000dead') returning *`, [c]);
+      expect(f.payee_le).toBeNull();
+      expect(f.date_echeance).toBeNull();
+      expect(f.created_by).toBe("00000000-0000-0000-0000-000000000001");
+      const emise = await un<{ numero: string; sequence: number }>(`select * from emettre_facture($1)`, [legitime]);
+      expect(emise.sequence).toBe(1);
     });
   });
 

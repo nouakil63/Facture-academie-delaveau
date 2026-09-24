@@ -9,7 +9,7 @@ import {
   type PrestationFormulaire,
 } from "@/components/factures/FormulaireNouvelleFacture";
 import { IconePlus, IconeRetour } from "@/components/Icones";
-import { academieSelectionnee } from "@/lib/academie-selectionnee";
+import { academieSelectionnee, resoudreAcademie } from "@/lib/academie-selectionnee";
 import { exigerUtilisateur } from "@/lib/auth";
 import { chargerAcademies, chargerParametres, destinatairesFacture } from "@/lib/facturation/service";
 import { aujourdhuiParis, avecArticle, nomClient } from "@/lib/format";
@@ -49,7 +49,7 @@ export default async function PageNouvelleFacture(props: PageProps<"/factures/no
     return <ErreurChargement message={e instanceof Error ? e.message : String(e)} />;
   }
   // Filtre de la barre latérale (cookie) : ignoré s'il désigne une académie inconnue ou désactivée.
-  const academieFiltree = idCookie ? academies.find((a) => a.id === idCookie && a.actif) : undefined;
+  const academieFiltree = resoudreAcademie(idCookie, academies);
 
   // Clients actifs de l'académie sélectionnée (ou de toutes), + le client demandé dans l'URL
   // (il peut appartenir à l'autre académie, ou être archivé : le formulaire le signale).

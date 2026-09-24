@@ -69,6 +69,12 @@ describe("cheminDeRetour — redirections ouvertes refusées", () => {
     "/\u0000/pirate.example",
     "/\u001f/pirate.example",
     "/\u007f/pirate.example",
+    // Segments « . » / « .. » (même encodés) : la forme normalisée commence par « // ».
+    "/.//pirate.example",
+    "/%2e//pirate.example",
+    "/%2e%2e//pirate.example",
+    "/x/..//pirate.example",
+    "/a/%2E%2E/%2e//pirate.example/factures",
   ];
 
   it.each(malveillants)("renvoie « / » pour %j", (suite) => {
@@ -89,6 +95,9 @@ describe("cheminDeRetour — redirections ouvertes refusées", () => {
     for (const suite of essais) {
       const url = destination(cheminDeRetour(suite));
       expect(url.origin, `suite = ${JSON.stringify(suite)}`).toBe(ORIGINE);
+      // Next resérialise l'URL (chemin + recherche + ancre) puis la résout de nouveau.
+      const reserialisee = destination(url.pathname + url.search + url.hash);
+      expect(reserialisee.origin, `suite resérialisée = ${JSON.stringify(suite)}`).toBe(ORIGINE);
     }
   });
 });
@@ -101,6 +110,8 @@ describe("cheminDeRetour — pas de boucle vers la page de connexion", () => {
     "/connexion?suite=%2Fconnexion",
     "/connexion#formulaire",
     "/connexion/autre",
+    "/./connexion",
+    "/x/../connexion?suite=/factures",
   ])("renvoie « / » pour %s", (suite) => {
     expect(cheminDeRetour(suite)).toBe("/");
   });

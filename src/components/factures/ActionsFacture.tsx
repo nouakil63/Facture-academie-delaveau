@@ -12,7 +12,8 @@ import {
   marquerPayee,
   supprimerBrouillon,
 } from "@/app/(app)/factures/[id]/actions";
-import { Modale, ModaleConfirmation } from "@/components/Modale";
+import { Modale, ModaleConfirmation, useSignalerEnCours } from "@/components/Modale";
+import { appeler } from "@/lib/appeler";
 import { formatDate, formatEuros, LIBELLES_STATUT, MODES_PAIEMENT } from "@/lib/format";
 import type { ResultatAction, StatutFacture } from "@/lib/types";
 import {
@@ -54,6 +55,7 @@ export function ActionsFacture({
   emailConfigure,
   envoyeeLe,
   aujourdhui,
+  generationAuto,
   nomClient,
   clientId,
   prefixe,
@@ -67,6 +69,8 @@ export function ActionsFacture({
   emailConfigure: boolean;
   envoyeeLe: string | null;
   aujourdhui: string;
+  /** Brouillon préparé par la facturation mensuelle. */
+  generationAuto: boolean;
   nomClient: string;
   clientId: string;
   prefixe: string;
@@ -74,6 +78,7 @@ export function ActionsFacture({
   const router = useRouter();
   const [modale, setModale] = useState<ModaleOuverte>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [enregistrement, setEnregistrement] = useState(false);
 
   const fermer = () => setModale(null);
   const reussite = (r: { message?: string }) => setMessage(r.message ?? "C'est fait.");
@@ -92,7 +97,7 @@ export function ActionsFacture({
   const raisonEnvoi = !emailConfigure ? (
     <>
       L&apos;envoi d&apos;e-mails n&apos;est pas configuré (serveur SMTP).{" "}
-      <Link href="/parametres" className="font-medium underline">
+      <Link href="/parametres#envoi-emails" className="font-medium underline">
         Paramètres
       </Link>
     </>
@@ -266,6 +271,12 @@ export function ActionsFacture({
           Le brouillon de <strong>{nomClient}</strong> ({montant}) et ses {nbLignes} ligne{nbLignes > 1 ? "s" : ""} seront
           supprimés. Cette action est irréversible.
         </p>
+        {generationAuto && (
+          <p className="avertissement">
+            Ce brouillon mensuel sera recréé à la prochaine génération du mois tant que le client a un tarif récurrent
+            actif. Pour ne pas le facturer ce mois-ci, mettez une date de fin au tarif ou archivez le client.
+          </p>
+        )}
       </ModaleConfirmation>
 
       {/* Envoyer / renvoyer */}
@@ -283,18 +294,19 @@ export function ActionsFacture({
         <p>
           La facture <strong>{libelle}</strong> ({montant} TTC) sera envoyée par e-mail avec le PDF en pièce jointe.
           {statut === "payee" && " Son statut « Payée » ne change pas."}
-          {statut === "envoyee" && envoyeeLe && ` Premier envoi le ${formatDate(envoyeeLe)}.`}
+          {statut === "envoyee" && envoyeeLe && ` Dernier envoi le ${formatDate(envoyeeLe)}.`}
         </p>
         {listeDestinataires}
       </ModaleConfirmation>
 
       {/* Paiement */}
-      <Modale ouverte={modale === "payer"} onFermer={fermer} titre="Enregistrer le paiement">
+      <Modale ouverte={modale === "payer"} onFermer={fermer} titre="Enregistrer le paiement" verrouillee={enregistrement}>
         <FormulairePaiement
           factureId={factureId}
           montant={montant}
           libelle={libelle}
           aujourdhui={aujourdhui}
+          onEnCours={setEnregistrement}
           onAnnuler={fermer}
           onTermine={(m) => {
             fermer();
@@ -321,11 +333,12 @@ export function ActionsFacture({
       </ModaleConfirmation>
 
       {/* Annuler la facture */}
-      <Modale ouverte={modale === "annuler"} onFermer={fermer} titre="Annuler la facture">
+      <Modale ouverte={modale === "annuler"} onFermer={fermer} titre="Annuler la facture" verrouillee={enregistrement}>
         <FormulaireAnnulation
           factureId={factureId}
           libelle={libelle}
           montant={montant}
+          onEnCours={setEnregistrement}
           onAnnuler={fermer}
           onTermine={(m) => {
             fermer();
@@ -364,6 +377,7 @@ function FormulairePaiement({
   aujourdhui,
   onAnnuler,
   onTermine,
+  onEnCours,
 }: {
   factureId: string;
   montant: string;
@@ -371,13 +385,15 @@ function FormulairePaiement({
   aujourdhui: string;
   onAnnuler: () => void;
   onTermine: (message?: string) => void;
+  onEnCours?: (enCours: boolean) => void;
 }) {
   const id = useId();
   const [etat, envoyer, enCours] = useActionState<ResultatAction | null, FormData>(async (precedent, donnees) => {
-    const resultat = await marquerPayee(precedent, donnees);
+    const resultat = await appeler(marquerPayee(precedent, donnees));
     if (resultat.ok) onTermine(resultat.message);
     return resultat;
   }, null);
+  useSignalerEnCours(enCours, onEnCours);
 
   function soumettre(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -454,19 +470,22 @@ function FormulaireAnnulation({
   montant,
   onAnnuler,
   onTermine,
+  onEnCours,
 }: {
   factureId: string;
   libelle: string;
   montant: string;
   onAnnuler: () => void;
   onTermine: (message?: string) => void;
+  onEnCours?: (enCours: boolean) => void;
 }) {
   const id = useId();
   const [etat, envoyer, enCours] = useActionState<ResultatAction | null, FormData>(async (precedent, donnees) => {
-    const resultat = await annulerFacture(precedent, donnees);
+    const resultat = await appeler(annulerFacture(precedent, donnees));
     if (resultat.ok) onTermine(resultat.message);
     return resultat;
   }, null);
+  useSignalerEnCours(enCours, onEnCours);
 
   function soumettre(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();

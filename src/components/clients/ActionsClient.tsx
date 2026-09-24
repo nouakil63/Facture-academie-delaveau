@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { changerArchivageClient, supprimerClient } from "@/app/(app)/clients/actions";
 import { IconeArchive, IconeCorbeille } from "@/components/Icones";
 import { ModaleConfirmation } from "@/components/Modale";
+import { appeler } from "@/lib/appeler";
 
 /** Boutons « Archiver / Réactiver » et « Supprimer » de la fiche client. */
 export function ActionsClient({
@@ -25,7 +26,7 @@ export function ActionsClient({
   function reactiver() {
     setMessage(null);
     demarrerReactivation(async () => {
-      const r = await changerArchivageClient(clientId, false);
+      const r = await appeler(changerArchivageClient(clientId, false));
       setMessage(r.ok ? { ok: true, texte: r.message ?? "Client réactivé." } : { ok: false, texte: r.erreur });
     });
   }

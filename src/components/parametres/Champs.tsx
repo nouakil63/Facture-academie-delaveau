@@ -21,7 +21,7 @@ export function Section({
   children: React.ReactNode;
 }) {
   return (
-    <section id={id} aria-labelledby={`${id}-titre`} className="carte scroll-mt-6">
+    <section id={id} aria-labelledby={`${id}-titre`} className="carte">
       <div className="border-b border-line px-5 py-4">
         <h2 id={`${id}-titre`} className="titre-section">
           {titre}

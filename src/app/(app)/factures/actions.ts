@@ -11,12 +11,11 @@ import {
   schemaId,
   schemaLigne,
   schemaPeriode,
-  syntheseEnvoi,
   texteFacultatif,
 } from "@/components/factures/serveur";
-import type { ResultatEnvoiFacture } from "@/components/factures/outils";
+import { LOT_ENVOI_MAX, syntheseEnvoi, type ResultatEnvoiFacture } from "@/components/factures/outils";
 import { exigerUtilisateur } from "@/lib/auth";
-import type { Client, ResultatAction } from "@/lib/types";
+import type { ResultatAction, StatutFacture } from "@/lib/types";
 
 /*
  * Server Actions de la liste des factures et de la création d'une facture.
@@ -62,16 +61,9 @@ export async function creerFacture(_precedent: ResultatAction | null, formData: 
 
   let factureId: string;
   try {
-    const resClient = await supabase.from("clients").select("id, actif").eq("id", saisie.data.client_id).maybeSingle();
-    if (resClient.error) return { ok: false, erreur: "Impossible de vérifier le client. Réessayez." };
-    const client = resClient.data as Pick<Client, "id" | "actif"> | null;
-    if (!client) return { ok: false, erreur: "Client introuvable : il a peut-être été supprimé." };
-    if (!client.actif) {
-      return { ok: false, erreur: "Ce client est archivé : réactivez sa fiche avant de lui créer une facture." };
-    }
-
+    // Client introuvable ou archivé : refusé par creerBrouillon.
     const resultat = await creerBrouillon(supabase, {
-      clientId: client.id,
+      clientId: saisie.data.client_id,
       objet: saisie.data.objet,
       periode: saisie.data.periode,
       notes: saisie.data.notes,
@@ -89,25 +81,46 @@ export async function creerFacture(_precedent: ResultatAction | null, formData: 
   redirect(`/factures/${factureId}`);
 }
 
+const STATUTS = ["brouillon", "emise", "envoyee", "payee", "annulee"] as const satisfies readonly StatutFacture[];
+
 const schemaSelection = z
-  .array(schemaId, { error: "Sélection invalide." })
+  .array(z.object({ id: schemaId, statut: z.enum(STATUTS, { error: "Sélection invalide." }) }), {
+    error: "Sélection invalide.",
+  })
   .min(1, { error: "Sélectionnez au moins une facture." })
-  .max(100, { error: "100 factures au maximum par envoi groupé : procédez en plusieurs fois." })
-  .transform((ids) => [...new Set(ids)]);
+  .max(LOT_ENVOI_MAX, { error: `${LOT_ENVOI_MAX} factures au maximum par appel : procédez en plusieurs fois.` })
+  .transform((factures) => new Map(factures.map((f) => [f.id, f.statut])));
+
+/** Un renvoi groupé récent (même facture) est ignoré : protège contre une relance après une coupure. */
+const DELAI_RENVOI_MS = 15 * 60 * 1000;
 
 /**
  * Action groupée « Émettre et envoyer » : émet les brouillons sélectionnés puis envoie
  * chaque facture par e-mail (les factures déjà émises sont renvoyées, les payées partent
  * en duplicata, les annulées sont ignorées). Renvoie un résultat par facture.
+ * Chaque facture est accompagnée du statut vu par l'utilisateur à la confirmation : si elle a
+ * changé depuis (envoyée par une tentative précédente, payée…), elle est ignorée, de même
+ * qu'une facture envoyée il y a moins de 15 minutes. Le navigateur appelle cette action par
+ * petits lots (LOT_ENVOI) pour rester loin de la durée maximale d'une requête.
  */
-export async function envoyerSelection(ids: string[]): Promise<ResultatAction<ResultatEnvoiFacture[]>> {
+export async function envoyerSelection(
+  factures: { id: string; statut: StatutFacture }[],
+): Promise<ResultatAction<ResultatEnvoiFacture[]>> {
   const { supabase } = await exigerUtilisateur();
 
-  const selection = schemaSelection.safeParse(ids);
+  const selection = schemaSelection.safeParse(factures);
   if (!selection.success) return { ok: false, erreur: messagesValidation(selection.error) };
+  const statutsVus = selection.data;
 
   try {
-    const resultat = await envoyerLot(supabase, selection.data);
+    const maintenant = Date.now();
+    const resultat = await envoyerLot(supabase, [...statutsVus.keys()], (f) =>
+      statutsVus.get(f.id) !== f.statut
+        ? "Ignorée : statut modifié entre-temps (déjà envoyée ?). Rechargez la page avant de relancer."
+        : f.envoyee_le && maintenant - Date.parse(f.envoyee_le) < DELAI_RENVOI_MS
+          ? "Ignorée : déjà envoyée il y a moins de 15 minutes."
+          : null,
+    );
     revaliderFactures();
     if (!resultat.ok) return resultat;
     return { ok: true, message: syntheseEnvoi(resultat.donnees ?? []), donnees: resultat.donnees };

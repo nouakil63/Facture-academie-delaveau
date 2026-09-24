@@ -160,6 +160,7 @@ export interface FactureVue extends Facture {
   client_prenom: string | null;
   client_raison_sociale: string | null;
   client_email: string | null;
+  client_emails_cc: string[];
   client_cavaliers: string | null;
   academie_nom: string;
   academie_couleur: string;
@@ -203,7 +204,10 @@ export interface ResultatGeneration {
 export interface FactureComplete {
   facture: Facture;
   lignes: LigneFacture[];
-  /** Coordonnées à imprimer : l'instantané figé si la facture est émise, sinon la fiche actuelle. */
+  /**
+   * Coordonnées à imprimer : l'instantané figé si la facture est émise, sinon la fiche actuelle.
+   * `email` et `emails_cc` (destinataires, non imprimés) viennent toujours de la fiche actuelle.
+   */
   client: Client;
   /** Émetteur (paramètres) : instantané figé si émise, sinon paramètres actuels. */
   emetteur: Parametres;

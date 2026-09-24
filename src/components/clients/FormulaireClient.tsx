@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { startTransition, useActionState, useState } from "react";
 import { creerClient, modifierClient } from "@/app/(app)/clients/actions";
+import { appeler } from "@/lib/appeler";
 import type { Academie, Client, ResultatAction, TypeClient } from "@/lib/types";
 
 const CIVILITES = ["Mme", "M.", "M. et Mme"];
@@ -28,7 +29,7 @@ export function FormulaireClient({
 }) {
   const creation = !client;
   const [etat, envoyer, enCours] = useActionState<ResultatAction | null, FormData>(
-    creation ? creerClient : modifierClient,
+    (precedent, donnees) => appeler((creation ? creerClient : modifierClient)(precedent, donnees)),
     null,
   );
   const [type, setType] = useState<TypeClient>(client?.type ?? "particulier");
@@ -246,11 +247,12 @@ export function FormulaireClient({
           <div className="grid gap-4 sm:grid-cols-6">
             <div className="sm:col-span-6">
               <label htmlFor="adresse_ligne1" className="label">
-                Adresse
+                Adresse {professionnel && <Obligatoire />}
               </label>
               <input
                 id="adresse_ligne1"
                 name="adresse_ligne1"
+                required={professionnel}
                 maxLength={200}
                 defaultValue={client?.adresse_ligne1 ?? ""}
                 className="champ"
@@ -270,11 +272,12 @@ export function FormulaireClient({
             </div>
             <div className="sm:col-span-2">
               <label htmlFor="code_postal" className="label">
-                Code postal
+                Code postal {professionnel && <Obligatoire />}
               </label>
               <input
                 id="code_postal"
                 name="code_postal"
+                required={professionnel}
                 maxLength={12}
                 defaultValue={client?.code_postal ?? ""}
                 className="champ"
@@ -282,9 +285,16 @@ export function FormulaireClient({
             </div>
             <div className="sm:col-span-2">
               <label htmlFor="ville" className="label">
-                Ville
+                Ville {professionnel && <Obligatoire />}
               </label>
-              <input id="ville" name="ville" maxLength={120} defaultValue={client?.ville ?? ""} className="champ" />
+              <input
+                id="ville"
+                name="ville"
+                required={professionnel}
+                maxLength={120}
+                defaultValue={client?.ville ?? ""}
+                className="champ"
+              />
             </div>
             <div className="sm:col-span-2">
               <label htmlFor="pays" className="label">

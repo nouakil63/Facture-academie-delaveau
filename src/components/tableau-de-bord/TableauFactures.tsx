@@ -1,9 +1,9 @@
 import Link from "next/link";
 import { AcademieBadge } from "@/components/AcademieBadge";
 import { StatutBadge } from "@/components/StatutBadge";
-import { formatDate, formatEuros, nomClient } from "@/lib/format";
+import { formatDate, formatEuros, nomClient, pluriel } from "@/lib/format";
 import type { FactureResumee } from "./donnees";
-import { joursEntre, pluriel } from "./outils";
+import { joursEntre } from "./outils";
 
 function client(f: FactureResumee): string {
   return nomClient({ type: f.client_type, nom: f.client_nom, prenom: f.client_prenom, raison_sociale: f.client_raison_sociale });

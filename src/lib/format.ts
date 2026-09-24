@@ -108,6 +108,11 @@ export function premierDuMois(dateIso: string = aujourdhuiParis(), decalage = 0)
   return d.toISOString().slice(0, 10);
 }
 
+/** « 0 facture », « 1 facture », « 3 factures » (usage français : singulier jusqu'à 1). */
+export function pluriel(nombre: number, singulier: string, formePluriel = `${singulier}s`): string {
+  return `${nombre} ${Math.abs(nombre) < 2 ? singulier : formePluriel}`;
+}
+
 /** « Académie Delaveau » → « Delaveau » (pastilles, sélecteurs, colonnes étroites). */
 export function nomCourtAcademie(nom: string): string {
   return nom.replace(/^Académie\s+/i, "");
@@ -121,10 +126,28 @@ export function avecArticle(nom: string): string {
   return /^[aeiouyhàâäéèêëîïôöùûüœ]/i.test(nom) ? `l'${nom}` : `«\u00a0${nom}\u00a0»`;
 }
 
+/**
+ * Dates de la génération mensuelle (le `jour` de chaque mois, 1 à 28) autour de `aujourdhui`
+ * ("AAAA-MM-JJ") : la dernière, aujourd'hui compris (la tâche planifiée passe tôt le matin),
+ * et la prochaine, strictement après aujourd'hui.
+ */
+export function datesGeneration(jour: number, aujourdhui: string): { derniere: string; prochaine: string } {
+  const [a, m, j] = aujourdhui.slice(0, 10).split("-").map(Number);
+  const le = (decalageMois: number) => new Date(Date.UTC(a, m - 1 + decalageMois, jour)).toISOString().slice(0, 10);
+  return j >= jour ? { derniere: le(0), prochaine: le(1) } : { derniere: le(-1), prochaine: le(0) };
+}
+
 /** Nom affiché d'un client : raison sociale pour un professionnel, « Prénom Nom » sinon. */
 export function nomClient(c: Pick<Client, "type" | "nom" | "prenom" | "raison_sociale">): string {
   if (c.type === "professionnel" && c.raison_sociale) return c.raison_sociale;
   return [c.prenom, c.nom].filter(Boolean).join(" ");
+}
+
+/** Destinataires d'une facture : e-mail principal + copies (sans doublon ni vide). */
+export function destinatairesFacture(client: Pick<Client, "email" | "emails_cc">): string[] {
+  return [client.email, ...(client.emails_cc ?? [])]
+    .map((e) => (e ?? "").trim())
+    .filter((e, i, tous) => e !== "" && tous.indexOf(e) === i);
 }
 
 export const LIBELLES_STATUT: Record<StatutFacture, string> = {

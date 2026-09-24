@@ -36,12 +36,3 @@ export async function verifierAcces(supabase: ClientSupabase): Promise<EtatAcces
   }
   return data && data.length > 0 ? "autorise" : "non_membre";
 }
-
-/**
- * Académie réellement filtrée : l'identifiant mémorisé dans le cookie s'il correspond
- * à une académie active, sinon null (« Toutes »). Un cookie périmé (académie
- * supprimée ou désactivée) retombe donc sur « Toutes ».
- */
-export function academieFiltree(idCookie: string | null, academies: Pick<AcademieMenu, "id">[]): string | null {
-  return idCookie && academies.some((a) => a.id === idCookie) ? idCookie : null;
-}

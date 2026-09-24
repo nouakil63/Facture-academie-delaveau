@@ -10,10 +10,9 @@ import {
   moisVersPeriode,
   nomClientFacture,
   periodeVersMois,
-  pluriel,
 } from "@/components/factures/outils";
 import { SelecteurMensuel } from "@/components/factures/SelecteurMensuel";
-import { academieSelectionnee } from "@/lib/academie-selectionnee";
+import { academieSelectionnee, resoudreAcademie } from "@/lib/academie-selectionnee";
 import { exigerUtilisateur } from "@/lib/auth";
 import { emailConfigure } from "@/lib/email";
 import {
@@ -23,7 +22,16 @@ import {
   genererBrouillonsMensuels,
   periodeAFacturer,
 } from "@/lib/facturation/service";
-import { avecArticle, formatEuros, formatPeriode, nomClient, nomCourtAcademie, LIBELLES_STATUT } from "@/lib/format";
+import {
+  avecArticle,
+  formatEuros,
+  formatPeriode,
+  jourDuMois,
+  nomClient,
+  nomCourtAcademie,
+  pluriel,
+  LIBELLES_STATUT,
+} from "@/lib/format";
 import type { Academie, Client, FactureVue, Parametres, ResultatGeneration, StatutFacture } from "@/lib/types";
 
 export const metadata: Metadata = { title: "Facturation mensuelle" };
@@ -49,6 +57,7 @@ type FactureMensuelle = Pick<
   | "client_prenom"
   | "client_raison_sociale"
   | "client_email"
+  | "client_emails_cc"
   | "academie_id"
   | "academie_nom"
   | "academie_couleur"
@@ -80,7 +89,7 @@ export default async function PageFacturationMensuelle(props: PageProps<"/factur
   const actives = academies.filter((a) => a.actif);
   const idAcademie =
     academieDemandee === ACADEMIE_TOUTES ? null : academieDemandee !== "" ? academieDemandee : idCookie;
-  const academie = actives.find((a) => a.id === idAcademie) ?? null;
+  const academie = resoudreAcademie(idAcademie, academies);
   const academieId = academie?.id ?? null;
   // Toutes les académies (même désactivées) pour les pastilles des clients.
   const academiesParId = new Map(academies.map((a) => [a.id, a]));
@@ -100,7 +109,7 @@ export default async function PageFacturationMensuelle(props: PageProps<"/factur
   let requeteFactures = supabase
     .from("factures_vue")
     .select(
-      "id, numero, statut, total_ht_centimes, total_ttc_centimes, en_retard, client_id, client_type, client_nom, client_prenom, client_raison_sociale, client_email, academie_id, academie_nom, academie_couleur",
+      "id, numero, statut, total_ht_centimes, total_ttc_centimes, en_retard, client_id, client_type, client_nom, client_prenom, client_raison_sociale, client_email, client_emails_cc, academie_id, academie_nom, academie_couleur",
     )
     .eq("periode", periode)
     .eq("generation_auto", true);
@@ -164,7 +173,7 @@ export default async function PageFacturationMensuelle(props: PageProps<"/factur
   );
   const aDesDestinataires = (f: FactureMensuelle) => {
     const c = clients.get(f.client_id);
-    return c ? destinatairesFacture(c).length > 0 : Boolean(f.client_email);
+    return destinatairesFacture(c ?? { email: f.client_email, emails_cc: f.client_emails_cc }).length > 0;
   };
   const brouillons = factures.filter((f) => f.statut === "brouillon");
   const brouillonsEnvoyables = brouillons.filter(aDesDestinataires);
@@ -192,6 +201,7 @@ export default async function PageFacturationMensuelle(props: PageProps<"/factur
       {/* Choix de l'académie et du mois */}
       <section className="carte carte-corps space-y-4" aria-label="Académie et mois">
         <SelecteurMensuel
+          key={mois}
           academies={actives.map((a) => ({ id: a.id, nom: a.nom, couleur: a.couleur }))}
           academieId={academieId}
           mois={mois}
@@ -205,7 +215,7 @@ export default async function PageFacturationMensuelle(props: PageProps<"/factur
               {parametres.generation_auto ? (
                 <>
                   brouillons générés automatiquement le{" "}
-                  <strong className="text-ink">{parametres.jour_generation}</strong> de chaque mois (factures{" "}
+                  <strong className="text-ink">{jourDuMois(parametres.jour_generation)}</strong> de chaque mois (factures{" "}
                   {moisFacture})
                   {parametres.envoi_auto ? (
                     <>
@@ -424,7 +434,14 @@ export default async function PageFacturationMensuelle(props: PageProps<"/factur
 
         {apercu.ok && lignesApercu.length > 0 && (
           <div className="border-t border-line bg-page/40 px-5 py-4">
-            <BoutonGenerer academieId={academieId} mois={mois} nombre={aGenerer.length} libelleMois={libelleCible} />
+            {/* key : le compte rendu de la génération ne survit pas à un changement d'académie ou de mois. */}
+            <BoutonGenerer
+              key={`${academieId ?? ACADEMIE_TOUTES}-${mois}`}
+              academieId={academieId}
+              mois={mois}
+              nombre={aGenerer.length}
+              libelleMois={libelleCible}
+            />
           </div>
         )}
       </section>
@@ -544,6 +561,7 @@ export default async function PageFacturationMensuelle(props: PageProps<"/factur
           <div className="border-t border-line bg-page/40 px-5 py-4">
             {smtpOk ? (
               <EnvoiBrouillons
+                key={`${academieId ?? ACADEMIE_TOUTES}-${mois}`}
                 academieId={academieId}
                 mois={mois}
                 libelleMois={libelleCible}

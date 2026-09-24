@@ -1,7 +1,7 @@
 "use server";
 
 import { z } from "zod";
-import type { ResultatEnvoiFacture } from "@/components/factures/outils";
+import { LOT_ENVOI_MAX, syntheseEnvoi, type ResultatEnvoiFacture } from "@/components/factures/outils";
 import {
   envoyerLot,
   messageException,
@@ -9,7 +9,6 @@ import {
   revaliderFactures,
   schemaId,
   schemaMoisObligatoire,
-  syntheseEnvoi,
   traduireErreur,
 } from "@/components/factures/serveur";
 import { exigerUtilisateur } from "@/lib/auth";
@@ -67,14 +66,16 @@ const schemaEnvoi = schemaCible.extend({
   ids: z
     .array(schemaId, { error: "Sélection invalide." })
     .min(1, { error: "Aucun brouillon à envoyer." })
-    .max(300, { error: "300 factures au maximum par envoi." })
+    .max(LOT_ENVOI_MAX, { error: `${LOT_ENVOI_MAX} factures au maximum par appel : procédez en plusieurs fois.` })
     .transform((ids) => [...new Set(ids)]),
 });
 
 /**
  * Émet et envoie les brouillons mensuels confirmés par l'utilisateur. Seuls les brouillons
  * générés automatiquement pour ce mois (et cette académie si elle est précisée) sont
- * traités : les autres sont ignorés.
+ * traités : les autres sont ignorés, de même qu'un brouillon émis entre-temps par un autre
+ * envoi (autre onglet, autre utilisatrice, tâche planifiée) : jamais d'e-mail en double.
+ * Le navigateur appelle cette action par petits lots (LOT_ENVOI).
  */
 export async function envoyerBrouillonsMensuels(
   academieId: string | null,
@@ -98,12 +99,16 @@ export async function envoyerBrouillonsMensuels(
     if (resValides.error) return { ok: false, erreur: traduireErreur(resValides.error) };
     const valides = new Set((resValides.data as { id: string }[]).map((f) => f.id));
 
-    const resultat = await envoyerLot(supabase, demandes, (f) =>
-      !valides.has(f.id)
-        ? "Ignorée : n'appartient pas à la facturation de ce mois."
-        : f.statut !== "brouillon"
-          ? "Ignorée : déjà émise entre-temps."
-          : null,
+    const resultat = await envoyerLot(
+      supabase,
+      demandes,
+      (f) =>
+        !valides.has(f.id)
+          ? "Ignorée : n'appartient pas à la facturation de ce mois."
+          : f.statut !== "brouillon"
+            ? "Ignorée : déjà émise entre-temps. Si elle est restée « Émise », envoyez-la depuis sa fiche."
+            : null,
+      { exigerBrouillon: true },
     );
     revaliderFactures();
     if (!resultat.ok) return resultat;

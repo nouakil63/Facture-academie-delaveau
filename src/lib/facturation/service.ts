@@ -43,11 +43,16 @@ export async function chargerFactureComplete(supabase: SupabaseClient, factureId
   if (academie.error) throw new Error(academie.error.message);
 
   // Une facture émise s'imprime avec les informations figées au moment de l'émission.
+  // Exception : les adresses e-mail (non imprimées) restent celles de la fiche client, pour
+  // qu'une adresse ajoutée ou corrigée après l'émission serve aux envois suivants.
   const emise = facture.statut !== "brouillon";
   return {
     facture,
     lignes: (lignes.data as LigneFacture[]).map((l) => ({ ...l, quantite: Number(l.quantite) })),
-    client: emise && facture.client_snapshot ? { ...client.data, ...facture.client_snapshot } : client.data,
+    client:
+      emise && facture.client_snapshot
+        ? { ...client.data, ...facture.client_snapshot, email: client.data.email, emails_cc: client.data.emails_cc }
+        : client.data,
     emetteur: emise && facture.emetteur_snapshot ? { ...parametres, ...facture.emetteur_snapshot } : parametres,
     academie: emise && facture.academie_snapshot ? { ...academie.data, ...facture.academie_snapshot } : academie.data,
   };
@@ -85,9 +90,5 @@ export function periodeAFacturer(parametres: Pick<Parametres, "mois_facture">, d
   return premierDuMois(date, parametres.mois_facture === "precedent" ? -1 : 0);
 }
 
-/** Destinataires d'une facture : e-mail principal + copies. */
-export function destinatairesFacture(client: Pick<Client, "email" | "emails_cc">): string[] {
-  return [client.email, ...(client.emails_cc ?? [])]
-    .map((e) => (e ?? "").trim())
-    .filter((e, i, tous) => e !== "" && tous.indexOf(e) === i);
-}
+/** Destinataires d'une facture : e-mail principal + copies (fonction pure, dans @/lib/format). */
+export { destinatairesFacture } from "@/lib/format";

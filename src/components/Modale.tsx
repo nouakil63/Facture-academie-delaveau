@@ -1,6 +1,8 @@
 "use client";
 
+import { unstable_rethrow } from "next/navigation";
 import { useEffect, useId, useRef, useState, useTransition } from "react";
+import { MESSAGE_REQUETE_INTERROMPUE } from "@/lib/appeler";
 import type { ResultatAction } from "@/lib/types";
 import { IconeFermer } from "@/components/Icones";
 
@@ -10,6 +12,8 @@ import { IconeFermer } from "@/components/Icones";
  *
  * - `Modale` : fenêtre générique (formulaire, détail…). Le contenu n'est monté que
  *   lorsqu'elle est ouverte : un formulaire repart de zéro à chaque ouverture.
+ *   `verrouillee` (enregistrement en cours) : Échap, clic sur le fond et bouton X sont
+ *   sans effet, pour ne perdre ni le résultat ni l'erreur, ni soumettre deux fois.
  * - `ModaleConfirmation` : confirmation d'une action (souvent destructive) qui appelle
  *   une Server Action ; en cas d'échec, l'erreur s'affiche dans la modale, qui reste ouverte.
  */
@@ -20,6 +24,7 @@ export function Modale({
   sousTitre,
   children,
   largeur = "max-w-lg",
+  verrouillee = false,
 }: {
   ouverte: boolean;
   onFermer: () => void;
@@ -28,6 +33,8 @@ export function Modale({
   children: React.ReactNode;
   /** Classe Tailwind de largeur maximale (ex. « max-w-2xl »). */
   largeur?: string;
+  /** true pendant un enregistrement : la fenêtre ne peut pas être fermée. */
+  verrouillee?: boolean;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const idTitre = useId();
@@ -48,15 +55,18 @@ export function Modale({
       onCancel={(e) => {
         // Échap : le parent décide (il peut refuser pendant un traitement).
         e.preventDefault();
-        onFermer();
+        if (!verrouillee) onFermer();
       }}
-      onClose={() => {
-        // Fermeture imposée par le navigateur : on resynchronise l'état du parent.
-        if (ouverte) onFermer();
+      onClose={(e) => {
+        // Fermeture imposée par le navigateur : on resynchronise l'état du parent
+        // (ou, pendant un enregistrement, on rouvre la fenêtre).
+        if (!ouverte) return;
+        if (verrouillee) e.currentTarget.showModal();
+        else onFermer();
       }}
       onClick={(e) => {
         // Clic sur le fond (en dehors du panneau) : fermeture.
-        if (e.target === e.currentTarget) onFermer();
+        if (e.target === e.currentTarget && !verrouillee) onFermer();
       }}
       className={`m-auto w-[calc(100%-2rem)] ${largeur} max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-xl border border-line bg-surface p-0 text-ink shadow-xl backdrop:bg-ink/40`}
     >
@@ -72,7 +82,8 @@ export function Modale({
             <button
               type="button"
               onClick={onFermer}
-              className="-m-1 shrink-0 rounded-md p-1 text-muted hover:bg-page hover:text-ink focus-visible:outline-2 focus-visible:outline-brand"
+              disabled={verrouillee}
+              className="-m-1 shrink-0 rounded-md p-1 text-muted hover:bg-page hover:text-ink focus-visible:outline-2 focus-visible:outline-brand disabled:opacity-40"
               aria-label="Fermer"
             >
               <IconeFermer className="size-5" />
@@ -83,6 +94,17 @@ export function Modale({
       )}
     </dialog>
   );
+}
+
+/**
+ * Pour un formulaire affiché dans une `Modale` : signale au parent qu'un enregistrement est
+ * en cours (le parent passe alors `verrouillee` à la modale). Remis à false au démontage.
+ */
+export function useSignalerEnCours(enCours: boolean, onEnCours?: (enCours: boolean) => void) {
+  useEffect(() => {
+    onEnCours?.(enCours);
+    return () => onEnCours?.(false);
+  }, [enCours, onEnCours]);
 }
 
 /** Résultat réussi transmis à `onSucces` (un `onConfirmer` qui ne renvoie rien vaut succès). */
@@ -138,8 +160,10 @@ export function ModaleConfirmation<T = undefined>({
       let resultat: ResultatAction<T> | void;
       try {
         resultat = await onConfirmer();
-      } catch {
-        setErreur("La requête n'a pas abouti. Vérifiez la connexion puis réessayez.");
+      } catch (e) {
+        // redirect() d'une Server Action (ou session expirée) : Next doit l'exécuter.
+        unstable_rethrow(e);
+        setErreur(MESSAGE_REQUETE_INTERROMPUE);
         return;
       }
       if (resultat && !resultat.ok) {
@@ -152,7 +176,14 @@ export function ModaleConfirmation<T = undefined>({
   }
 
   return (
-    <Modale ouverte={ouverte} onFermer={fermer} titre={titre} sousTitre={sousTitre} largeur={largeur}>
+    <Modale
+      ouverte={ouverte}
+      onFermer={fermer}
+      titre={titre}
+      sousTitre={sousTitre}
+      largeur={largeur}
+      verrouillee={enCours}
+    >
       <div className="space-y-3 text-sm text-ink">{children}</div>
       {erreur && (
         <p role="alert" className="erreur mt-4 whitespace-pre-line">

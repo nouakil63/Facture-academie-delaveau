@@ -3,10 +3,10 @@ import Link from "next/link";
 import { AcademieBadge } from "@/components/AcademieBadge";
 import { IconeAlerte, IconePlus, IconeUtilisateurs } from "@/components/Icones";
 import { RechercheClients } from "@/components/clients/RechercheClients";
-import { academieSelectionnee } from "@/lib/academie-selectionnee";
+import { academieSelectionnee, resoudreAcademie } from "@/lib/academie-selectionnee";
 import { exigerUtilisateur } from "@/lib/auth";
 import { chargerAcademies } from "@/lib/facturation/service";
-import { avecArticle, formatEuros, formatPeriode, nomClient, premierDuMois } from "@/lib/format";
+import { avecArticle, destinatairesFacture, formatEuros, formatPeriode, nomClient, premierDuMois } from "@/lib/format";
 import { CHAMPS_TARIF_POUR_CALCUL, mensuelEstime, type TarifPourCalcul } from "@/lib/tarifs";
 import type { Academie, Client } from "@/lib/types";
 
@@ -41,7 +41,7 @@ export default async function PageClients(props: PageProps<"/clients">) {
     return <ErreurChargement message={e instanceof Error ? e.message : String(e)} />;
   }
   // Filtre de la coquille (cookie) : ignoré s'il désigne une académie inconnue ou désactivée.
-  const academieFiltree = academies.find((a) => a.id === selection && a.actif);
+  const academieFiltree = resoudreAcademie(selection, academies);
   const academiesParId = new Map(academies.map((a) => [a.id, a]));
 
   let requete = supabase.from("clients").select(`*, tarifs:tarifs_clients(${CHAMPS_TARIF_POUR_CALCUL})`);
@@ -53,12 +53,17 @@ export default async function PageClients(props: PageProps<"/clients">) {
   if (resClients.error) return <ErreurChargement message={resClients.error.message} />;
 
   const clients = (resClients.data as ClientListe[])
-    .map((c) => ({ ...c, nomAffiche: nomClient(c), mensuel: c.actif ? mensuelEstime(c.tarifs ?? [], periode) : null }))
+    .map((c) => ({
+      ...c,
+      nomAffiche: nomClient(c),
+      destinataires: destinatairesFacture(c),
+      mensuel: c.actif ? mensuelEstime(c.tarifs ?? [], periode) : null,
+    }))
     .sort((a, b) => a.nomAffiche.localeCompare(b.nomAffiche, "fr", { sensitivity: "base" }));
 
   const totalMensuel = clients.reduce((s, c) => s + (c.mensuel ?? 0), 0);
   const nbActifs = clients.filter((c) => c.actif).length;
-  const nbSansEmail = clients.filter((c) => c.actif && !c.email).length;
+  const nbSansEmail = clients.filter((c) => c.actif && c.destinataires.length === 0).length;
   const nbArchives = clients.length - nbActifs;
   const mois = formatPeriode(periode);
   const pluriel = (n: number) => (n > 1 ? "s" : "");
@@ -167,9 +172,12 @@ export default async function PageClients(props: PageProps<"/clients">) {
                       </td>
                       <td>{academie && <AcademieBadge nom={academie.nom} couleur={academie.couleur} />}</td>
                       <td className="max-w-64">
-                        {c.email ? (
-                          <span className="block truncate" title={c.email}>
-                            {c.email}
+                        {c.destinataires.length > 0 ? (
+                          <span className="block truncate" title={c.destinataires.join(", ")}>
+                            {c.destinataires[0]}
+                            {c.destinataires.length > 1 && (
+                              <span className="text-muted"> +{c.destinataires.length - 1}</span>
+                            )}
                           </span>
                         ) : (
                           <SansEmail />
@@ -233,7 +241,7 @@ export default async function PageClients(props: PageProps<"/clients">) {
                     <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
                       {academie && <AcademieBadge nom={academie.nom} couleur={academie.couleur} />}
                       {!c.actif && <span className="badge bg-zinc-200 text-zinc-600">Archivé</span>}
-                      {c.email ? <span className="truncate text-muted">{c.email}</span> : <SansEmail />}
+                      {c.destinataires.length > 0 ? <span className="truncate text-muted">{c.destinataires[0]}</span> : <SansEmail />}
                     </div>
                   </Link>
                 </li>

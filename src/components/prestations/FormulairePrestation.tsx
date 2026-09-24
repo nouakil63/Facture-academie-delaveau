@@ -2,9 +2,11 @@
 
 import { startTransition, useActionState, useState } from "react";
 import { enregistrerPrestation } from "@/app/(app)/prestations/actions";
-import { centimesVersSaisie, formatEuros, parseEurosEnCentimes } from "@/lib/format";
+import { useSignalerEnCours } from "@/components/Modale";
+import { appeler } from "@/lib/appeler";
+import { centimesVersSaisie, formatEuros, parseEurosEnCentimes, pluriel } from "@/lib/format";
 import type { Prestation, ResultatAction } from "@/lib/types";
-import { estUnitePredefinie, LONGUEUR_MAX_UNITE, pluriel, suffixeUnite, UNITE_AUTRE, UNITES } from "./unites";
+import { estUnitePredefinie, LONGUEUR_MAX_UNITE, suffixeUnite, UNITE_AUTRE, UNITES } from "./unites";
 
 /**
  * Formulaire de création / modification d'une prestation du catalogue commun
@@ -17,6 +19,7 @@ export function FormulairePrestation({
   nbClientsPrixCatalogue = 0,
   onSucces,
   onAnnuler,
+  onEnCours,
 }: {
   /** Absente → création. */
   prestation?: Prestation;
@@ -24,12 +27,15 @@ export function FormulairePrestation({
   nbClientsPrixCatalogue?: number;
   onSucces: (message?: string) => void;
   onAnnuler: () => void;
+  /** Enregistrement en cours (la modale parente se verrouille). */
+  onEnCours?: (enCours: boolean) => void;
 }) {
   const [etat, envoyer, enCours] = useActionState<ResultatAction | null, FormData>(async (precedent, donnees) => {
-    const resultat = await enregistrerPrestation(precedent, donnees);
+    const resultat = await appeler(enregistrerPrestation(precedent, donnees));
     if (resultat.ok) onSucces(resultat.message);
     return resultat;
   }, null);
+  useSignalerEnCours(enCours, onEnCours);
 
   const uniteInitiale = prestation?.unite ?? "mois";
   const [unite, setUnite] = useState(estUnitePredefinie(uniteInitiale) ? uniteInitiale : UNITE_AUTRE);

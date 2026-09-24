@@ -1,18 +1,18 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { academieFiltree, chargerAcademiesActives, verifierAcces } from "@/components/coquille/donnees";
+import { chargerAcademiesActives, verifierAcces } from "@/components/coquille/donnees";
 import { IconeAlerte, IconeBillet, IconeCrayon, IconeFleche, IconeHorloge, IconeValide } from "@/components/Icones";
 import { chargerTableauDeBord } from "@/components/tableau-de-bord/donnees";
 import { Indicateur } from "@/components/tableau-de-bord/Indicateur";
-import { pluriel } from "@/components/tableau-de-bord/outils";
+
 import { PremiersPas } from "@/components/tableau-de-bord/PremiersPas";
 import { ProchaineFacturation } from "@/components/tableau-de-bord/ProchaineFacturation";
 import { Raccourcis } from "@/components/tableau-de-bord/Raccourcis";
 import { RepartitionAcademies } from "@/components/tableau-de-bord/RepartitionAcademies";
 import { TableauFactures } from "@/components/tableau-de-bord/TableauFactures";
-import { academieSelectionnee } from "@/lib/academie-selectionnee";
+import { academieSelectionnee, resoudreAcademie } from "@/lib/academie-selectionnee";
 import { exigerUtilisateur } from "@/lib/auth";
-import { aujourdhuiParis, formatDateLongue, formatEuros, formatPeriode } from "@/lib/format";
+import { aujourdhuiParis, formatDateLongue, formatEuros, formatPeriode, pluriel } from "@/lib/format";
 
 export const metadata: Metadata = { title: "Tableau de bord" };
 
@@ -41,7 +41,7 @@ function RappelIban() {
         <strong className="font-semibold">IBAN non renseigné.</strong> Les factures n&apos;indiquent aucune coordonnée
         bancaire pour le règlement par virement.
       </p>
-      <Link href="/parametres" className="btn-secondaire btn-petit shrink-0">
+      <Link href="/parametres#paiement" className="btn-secondaire btn-petit shrink-0">
         Compléter l&apos;IBAN
         <IconeFleche className="h-3.5 w-3.5" />
       </Link>
@@ -58,7 +58,7 @@ export default async function PageTableauDeBord() {
     academieSelectionnee(),
   ]);
   // Cookie d'une académie inexistante ou désactivée → « Toutes ».
-  const academieId = academieFiltree(idCookie, academies);
+  const academieId = resoudreAcademie(idCookie, academies)?.id ?? null;
   const academie = academies.find((a) => a.id === academieId) ?? null;
   const perimetre = academie ? academie.nom : "Toutes les académies";
 

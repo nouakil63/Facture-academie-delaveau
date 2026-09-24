@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { startTransition, useActionState, useId, useState, useTransition } from "react";
 import { deplacerLigne, enregistrerLigne, supprimerLigne } from "@/app/(app)/factures/[id]/actions";
-import { Modale, ModaleConfirmation } from "@/components/Modale";
+import { Modale, ModaleConfirmation, useSignalerEnCours } from "@/components/Modale";
+import { appeler } from "@/lib/appeler";
 import { centimesVersSaisie, formatEuros, formatQuantite, parseEurosEnCentimes } from "@/lib/format";
 import { parseQuantite, quantiteVersSaisie, totalLigneCentimes } from "@/lib/tarifs";
 import type { LigneFacture, ResultatAction } from "@/lib/types";
@@ -26,6 +27,7 @@ export function EditeurLignes({
   totaux: Totaux;
 }) {
   const [edition, setEdition] = useState<Edition>(null);
+  const [enregistrement, setEnregistrement] = useState(false);
   const [aSupprimer, setASupprimer] = useState<LigneFacture | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [erreur, setErreur] = useState<string | null>(null);
@@ -34,12 +36,8 @@ export function EditeurLignes({
   function deplacer(ligne: LigneFacture, sens: "haut" | "bas") {
     setErreur(null);
     demarrerDeplacement(async () => {
-      try {
-        const r = await deplacerLigne(factureId, ligne.id, sens);
-        if (!r.ok) setErreur(r.erreur);
-      } catch {
-        setErreur("La requête n'a pas abouti. Vérifiez la connexion puis réessayez.");
-      }
+      const r = await appeler(deplacerLigne(factureId, ligne.id, sens));
+      if (!r.ok) setErreur(r.erreur);
     });
   }
 
@@ -150,12 +148,14 @@ export function EditeurLignes({
         ouverte={edition !== null}
         onFermer={() => setEdition(null)}
         titre={edition?.ligne ? "Modifier la ligne" : "Ajouter une ligne"}
+        verrouillee={enregistrement}
       >
         {edition && (
           <FormulaireLigne
             factureId={factureId}
             ligne={edition.ligne}
             catalogue={catalogue}
+            onEnCours={setEnregistrement}
             onAnnuler={() => setEdition(null)}
             onTermine={(m) => {
               setEdition(null);
@@ -199,19 +199,22 @@ function FormulaireLigne({
   catalogue,
   onAnnuler,
   onTermine,
+  onEnCours,
 }: {
   factureId: string;
   ligne: LigneFacture | null;
   catalogue: PrestationFormulaire[];
   onAnnuler: () => void;
   onTermine: (message?: string) => void;
+  onEnCours?: (enCours: boolean) => void;
 }) {
   const id = useId();
   const [etat, envoyer, enCours] = useActionState<ResultatAction | null, FormData>(async (precedent, donnees) => {
-    const resultat = await enregistrerLigne(precedent, donnees);
+    const resultat = await appeler(enregistrerLigne(precedent, donnees));
     if (resultat.ok) onTermine(resultat.message);
     return resultat;
   }, null);
+  useSignalerEnCours(enCours, onEnCours);
 
   // Une ligne rattachée à une prestation retirée du catalogue reste proposée.
   const options =

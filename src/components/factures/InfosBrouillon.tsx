@@ -2,6 +2,7 @@
 
 import { startTransition, useActionState, useId, useState } from "react";
 import { enregistrerInfosBrouillon, enregistrerNotesInternes } from "@/app/(app)/factures/[id]/actions";
+import { appeler } from "@/lib/appeler";
 import type { ResultatAction } from "@/lib/types";
 import { periodeVersMois } from "./outils";
 
@@ -18,7 +19,10 @@ export function InfosBrouillon({
   notes: string | null;
 }) {
   const id = useId();
-  const [etat, envoyer, enCours] = useActionState<ResultatAction | null, FormData>(enregistrerInfosBrouillon, null);
+  const [etat, envoyer, enCours] = useActionState<ResultatAction | null, FormData>(
+    (precedent, donnees) => appeler(enregistrerInfosBrouillon(precedent, donnees)),
+    null,
+  );
   const [modifie, setModifie] = useState(false);
 
   function soumettre(e: React.FormEvent<HTMLFormElement>) {
@@ -49,7 +53,15 @@ export function InfosBrouillon({
           <label htmlFor={`${id}-periode`} className="label">
             Mois facturé
           </label>
-          <input id={`${id}-periode`} name="periode" type="month" defaultValue={periodeVersMois(periode)} className="champ" />
+          <input
+            id={`${id}-periode`}
+            name="periode"
+            type="month"
+            placeholder="AAAA-MM"
+            pattern="\d{4}-(0[1-9]|1[0-2])"
+            defaultValue={periodeVersMois(periode)}
+            className="champ"
+          />
         </div>
       </div>
       <div>
@@ -83,7 +95,10 @@ export function InfosBrouillon({
 /** Notes internes (jamais imprimées), modifiables à tout statut. */
 export function NotesInternes({ factureId, notes }: { factureId: string; notes: string | null }) {
   const id = useId();
-  const [etat, envoyer, enCours] = useActionState<ResultatAction | null, FormData>(enregistrerNotesInternes, null);
+  const [etat, envoyer, enCours] = useActionState<ResultatAction | null, FormData>(
+    (precedent, donnees) => appeler(enregistrerNotesInternes(precedent, donnees)),
+    null,
+  );
   const [modifie, setModifie] = useState(false);
 
   function soumettre(e: React.FormEvent<HTMLFormElement>) {

@@ -30,11 +30,14 @@ export type FactureDuClient = Pick<
 export function FacturesClient({
   clientId,
   academieId,
+  clientActif,
   factures,
 }: {
   clientId: string;
   /** Académie actuelle du client. */
   academieId: string;
+  /** Client archivé (false) : pas de nouvelle facture tant qu'il n'est pas réactivé. */
+  clientActif: boolean;
   factures: FactureDuClient[];
 }) {
   const lienNouvelle = `/factures/nouvelle?client=${clientId}`;
@@ -52,10 +55,17 @@ export function FacturesClient({
               : `${factures.length} facture${factures.length > 1 ? "s" : ""}, de la plus récente à la plus ancienne.`}
           </p>
         </div>
-        <Link href={lienNouvelle} className="btn-secondaire">
-          <IconePlus />
-          Nouvelle facture
-        </Link>
+        {clientActif ? (
+          <Link href={lienNouvelle} className="btn-secondaire">
+            <IconePlus />
+            Nouvelle facture
+          </Link>
+        ) : (
+          <button type="button" className="btn-secondaire" disabled title="Réactivez le client pour le facturer">
+            <IconePlus />
+            Nouvelle facture
+          </button>
+        )}
       </div>
 
       {factures.length === 0 ? (

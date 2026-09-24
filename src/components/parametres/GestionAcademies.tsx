@@ -4,12 +4,14 @@ import { startTransition, useActionState, useState, useTransition } from "react"
 import { changerActivationAcademie, enregistrerAcademie, supprimerAcademie } from "@/app/(app)/parametres/actions";
 import { AcademieBadge } from "@/components/AcademieBadge";
 import { IconeCorbeille, IconeCrayon, IconeInfo, IconePlus } from "@/components/Icones";
-import { Modale } from "@/components/Modale";
-import { pluriel } from "@/components/prestations/unites";
+import { Modale, useSignalerEnCours } from "@/components/Modale";
+import { appeler } from "@/lib/appeler";
+
 import type { Academie, ResultatAction } from "@/lib/types";
 import { ChampCouleur } from "./Champs";
 import { normaliserCouleur } from "./controles";
 import { titreSection } from "./sections";
+import { pluriel } from "@/lib/format";
 
 /** Académie et ce qui y est rattaché (calculé côté serveur). */
 export type AcademieGestion = Academie & {
@@ -32,6 +34,7 @@ const COULEURS_SUGGEREES = ["#0050A0", "#2E7D8C", "#7A4B9C", "#B5582A", "#3F7D3A
  */
 export function GestionAcademies({ academies }: { academies: AcademieGestion[] }) {
   const [edition, setEdition] = useState<Edition>(null);
+  const [enregistrement, setEnregistrement] = useState(false);
   const [aSupprimer, setASupprimer] = useState<AcademieGestion | null>(null);
   const [aDesactiver, setADesactiver] = useState<AcademieGestion | null>(null);
   const [message, setMessage] = useState<Message>(null);
@@ -48,7 +51,7 @@ export function GestionAcademies({ academies }: { academies: AcademieGestion[] }
   function reactiver(a: AcademieGestion) {
     setMessage(null);
     demarrer(async () => {
-      const r = await changerActivationAcademie(a.id, true);
+      const r = await appeler(changerActivationAcademie(a.id, true));
       setMessage(r.ok ? { ok: true, texte: r.message ?? "Académie réactivée." } : { ok: false, texte: r.erreur });
     });
   }
@@ -58,7 +61,7 @@ export function GestionAcademies({ academies }: { academies: AcademieGestion[] }
   const couleurNouvelle = COULEURS_SUGGEREES.find((c) => !couleursPrises.has(c)) ?? COULEURS_SUGGEREES[0];
 
   return (
-    <section id="academies" aria-labelledby="academies-titre" className="carte scroll-mt-6">
+    <section id="academies" aria-labelledby="academies-titre" className="carte">
       <div className="flex flex-wrap items-start justify-between gap-3 border-b border-line px-5 py-4">
         <div className="min-w-0">
           <h2 id="academies-titre" className="titre-section">
@@ -185,6 +188,7 @@ export function GestionAcademies({ academies }: { academies: AcademieGestion[] }
         onFermer={() => setEdition(null)}
         titre={academieEditee ? "Modifier l'académie" : "Nouvelle académie"}
         sousTitre={academieEditee ? academieEditee.nom : "Groupe auquel rattacher des clients"}
+        verrouillee={enregistrement}
       >
         {edition !== null && (
           <FormulaireAcademie
@@ -192,6 +196,7 @@ export function GestionAcademies({ academies }: { academies: AcademieGestion[] }
             academie={academieEditee}
             couleurParDefaut={couleurNouvelle}
             derniereActive={academieEditee ? academieEditee.actif && nbActives <= 1 : false}
+            onEnCours={setEnregistrement}
             onAnnuler={() => setEdition(null)}
             onSucces={(texte) => {
               setEdition(null);
@@ -246,6 +251,7 @@ function FormulaireAcademie({
   derniereActive,
   onAnnuler,
   onSucces,
+  onEnCours,
 }: {
   /** null → création. */
   academie: AcademieGestion | null;
@@ -254,12 +260,15 @@ function FormulaireAcademie({
   derniereActive: boolean;
   onAnnuler: () => void;
   onSucces: (message?: string) => void;
+  /** Enregistrement en cours (la modale parente se verrouille). */
+  onEnCours?: (enCours: boolean) => void;
 }) {
   const [etat, envoyer, enCours] = useActionState<ResultatAction | null, FormData>(async (precedent, donnees) => {
-    const resultat = await enregistrerAcademie(precedent, donnees);
+    const resultat = await appeler(enregistrerAcademie(precedent, donnees));
     if (resultat.ok) onSucces(resultat.message);
     return resultat;
   }, null);
+  useSignalerEnCours(enCours, onEnCours);
   const [nom, setNom] = useState(academie?.nom ?? "");
   const [couleur, setCouleur] = useState((academie?.couleur ?? couleurParDefaut).toUpperCase());
   const couleurApercu = normaliserCouleur(couleur) ?? academie?.couleur ?? couleurParDefaut;
@@ -369,7 +378,7 @@ function useActionConfirmee(onTermine: (message: string) => void) {
   function executer(action: () => Promise<ResultatAction>, messageParDefaut: string) {
     setErreur(null);
     demarrer(async () => {
-      const r = await action();
+      const r = await appeler(action());
       if (!r.ok) {
         setErreur(r.erreur);
         return;

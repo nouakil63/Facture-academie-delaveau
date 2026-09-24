@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { startTransition, useActionState, useId, useState } from "react";
 import { creerFacture } from "@/app/(app)/factures/actions";
+import { appeler } from "@/lib/appeler";
 import { AcademieBadge } from "@/components/AcademieBadge";
 import { centimesVersSaisie, formatEuros, parseEurosEnCentimes } from "@/lib/format";
 import { parseQuantite, quantiteVersSaisie, totalLigneCentimes } from "@/lib/tarifs";
@@ -93,7 +94,10 @@ export function FormulaireNouvelleFacture({
   mentionTva: string | null;
   clientInitial: string | null;
 }) {
-  const [etat, envoyer, enCours] = useActionState<ResultatAction | null, FormData>(creerFacture, null);
+  const [etat, envoyer, enCours] = useActionState<ResultatAction | null, FormData>(
+    (precedent, donnees) => appeler(creerFacture(precedent, donnees)),
+    null,
+  );
   const id = useId();
 
   const [clientId, setClientId] = useState(clientInitial ?? "");
@@ -275,6 +279,8 @@ export function FormulaireNouvelleFacture({
               id={`${id}-periode`}
               type="month"
               className="champ"
+              placeholder="AAAA-MM"
+              pattern="\d{4}-(0[1-9]|1[0-2])"
               value={mois}
               onChange={(e) => setMois(e.target.value)}
             />

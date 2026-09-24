@@ -19,8 +19,3 @@ export function estUnitePredefinie(unite: string): boolean {
 export function suffixeUnite(unite: string): string {
   return unite === "forfait" ? "(forfait)" : `/ ${unite}`;
 }
-
-/** Nombre accordé : « 1 client », « 3 clients ». */
-export function pluriel(n: number, singulier: string, plurielForme = `${singulier}s`): string {
-  return `${n} ${n > 1 ? plurielForme : singulier}`;
-}

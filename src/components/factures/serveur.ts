@@ -2,7 +2,7 @@ import "server-only";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { emailConfigure } from "@/lib/email";
-import { envoyerFactures } from "@/lib/facturation/envoi";
+import { envoyerFactures, type OptionsEnvoi, type ResultatEnvoiLot } from "@/lib/facturation/envoi";
 import { chargerParametres, destinatairesFacture } from "@/lib/facturation/service";
 import { parseEurosEnCentimes } from "@/lib/format";
 import type { ClientSupabase } from "@/lib/supabase/server";
@@ -182,10 +182,12 @@ export type LigneValidee = z.output<typeof schemaLigne>;
 
 /**
  * Crée un brouillon et ses lignes pour un client.
+ * - client archivé : refusé (nouvelle facture comme duplication) : il faut d'abord le réactiver ;
  * - l'académie N'EST PAS envoyée : la base la reprend du client (trigger) ;
  * - taux de TVA = celui des paramètres (structure émettrice unique) ;
  * - catalogue commun : une prestation qui n'existe plus est détachée
  *   (la ligne garde son libellé et son prix) ;
+ * - `generationAuto` : le brouillon remplace une facture mensuelle (annulée) du même mois ;
  * - si l'insertion des lignes échoue, le brouillon créé est supprimé.
  */
 export async function creerBrouillon(
@@ -196,12 +198,16 @@ export async function creerBrouillon(
     periode: string | null;
     notes: string | null;
     lignes: LigneValidee[];
+    generationAuto?: boolean;
   },
 ): Promise<ResultatAction<{ id: string }>> {
-  const resClient = await supabase.from("clients").select("id").eq("id", saisie.clientId).maybeSingle();
+  const resClient = await supabase.from("clients").select("id, actif").eq("id", saisie.clientId).maybeSingle();
   if (resClient.error) return { ok: false, erreur: traduireErreur(resClient.error) };
   if (!resClient.data) return { ok: false, erreur: "Client introuvable : il a peut-être été supprimé." };
-  const client = resClient.data as Pick<Client, "id">;
+  const client = resClient.data as Pick<Client, "id" | "actif">;
+  if (!client.actif) {
+    return { ok: false, erreur: "Ce client est archivé : réactivez sa fiche avant de lui créer une facture." };
+  }
 
   let tauxTva: number;
   try {
@@ -229,7 +235,7 @@ export async function creerBrouillon(
       periode: saisie.periode,
       notes: saisie.notes,
       taux_tva: tauxTva,
-      generation_auto: false,
+      generation_auto: saisie.generationAuto ?? false,
     })
     .select("id")
     .single();
@@ -265,9 +271,17 @@ export async function creerBrouillon(
 // Envoi d'un lot de factures (liste, facturation mensuelle)
 // -----------------------------------------------------------------------------
 
-type FactureLot = Pick<
+export type FactureLot = Pick<
   FactureVue,
-  "id" | "statut" | "numero" | "client_id" | "client_type" | "client_nom" | "client_prenom" | "client_raison_sociale"
+  | "id"
+  | "statut"
+  | "numero"
+  | "envoyee_le"
+  | "client_id"
+  | "client_type"
+  | "client_nom"
+  | "client_prenom"
+  | "client_raison_sociale"
 >;
 
 /**
@@ -275,25 +289,28 @@ type FactureLot = Pick<
  * - factures annulées : ignorées ;
  * - brouillons sans aucune adresse e-mail sur la fiche client : ignorés (ils ne sont PAS émis,
  *   pour ne pas attribuer de numéro à une facture qui ne pourrait pas partir) ;
- * - `filtre` permet de restreindre le lot (ex. brouillons mensuels d'un mois, d'une académie).
+ * - `filtre` permet de restreindre le lot (ex. brouillons mensuels d'un mois, d'une académie) ;
+ * - `options.exigerBrouillon` : une facture émise entre-temps par un autre envoi est ignorée.
  * Renvoie un résultat par facture demandée, avec le numéro final.
  */
 export async function envoyerLot(
   supabase: ClientSupabase,
   ids: string[],
   filtre?: (f: FactureLot) => string | null,
+  options: OptionsEnvoi = {},
 ): Promise<ResultatAction<ResultatEnvoiFacture[]>> {
   if (!emailConfigure()) {
     return { ok: false, erreur: "L'envoi d'e-mails n'est pas configuré (serveur SMTP) : voir les Paramètres." };
   }
   const resFactures = await supabase
     .from("factures_vue")
-    .select("id, statut, numero, client_id, client_type, client_nom, client_prenom, client_raison_sociale")
+    .select("id, statut, numero, envoyee_le, client_id, client_type, client_nom, client_prenom, client_raison_sociale")
     .in("id", ids);
   if (resFactures.error) return { ok: false, erreur: traduireErreur(resFactures.error) };
   const factures = new Map((resFactures.data as FactureLot[]).map((f) => [f.id, f]));
 
-  // Destinataires des brouillons : la fiche client actuelle (les factures émises utilisent leur copie figée).
+  // Brouillons sans destinataire (fiche client actuelle) : ni émis ni envoyés. Une facture déjà émise
+  // sans adresse est tentée et remonte en échec (« Aucune adresse e-mail… »).
   const idsClientsBrouillons = [
     ...new Set([...factures.values()].filter((f) => f.statut === "brouillon").map((f) => f.client_id)),
   ];
@@ -329,9 +346,9 @@ export async function envoyerLot(
   }
 
   if (aEnvoyer.length > 0) {
-    let envois: { id: string; ok: boolean; erreur?: string }[];
+    let envois: ResultatEnvoiLot[];
     try {
-      envois = await envoyerFactures(supabase, aEnvoyer);
+      envois = await envoyerFactures(supabase, aEnvoyer, options);
     } catch (e) {
       console.error("Envoi groupé interrompu :", e);
       return { ok: false, erreur: messageException(e, "Envoi groupé interrompu") };
@@ -352,21 +369,11 @@ export async function envoyerLot(
         numero: numeros.get(id) ?? f.numero,
         client: nomClientFacture(f),
         ok: r?.ok ?? false,
-        erreur: r ? (r.ok ? undefined : (r.erreur ?? "Échec de l'envoi.")) : "Aucun résultat d'envoi.",
+        ...(r?.ignoree ? { ignoree: true } : {}),
+        erreur: r ? (r.ok ? r.erreur : (r.erreur ?? "Échec de l'envoi.")) : "Aucun résultat d'envoi.",
       });
     }
   }
 
   return { ok: true, donnees: ids.map((id) => resultats.get(id)!) };
-}
-
-/** Phrase de synthèse d'un lot envoyé. */
-export function syntheseEnvoi(resultats: ResultatEnvoiFacture[]): string {
-  const envoyees = resultats.filter((r) => r.ok).length;
-  const echecs = resultats.filter((r) => !r.ok && !r.ignoree).length;
-  const ignorees = resultats.filter((r) => r.ignoree).length;
-  const morceaux = [`${envoyees} facture${envoyees > 1 ? "s" : ""} envoyée${envoyees > 1 ? "s" : ""}`];
-  if (echecs > 0) morceaux.push(`${echecs} en échec`);
-  if (ignorees > 0) morceaux.push(`${ignorees} ignorée${ignorees > 1 ? "s" : ""}`);
-  return `${morceaux.join(", ")}.`;
 }

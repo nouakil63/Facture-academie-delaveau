@@ -373,13 +373,17 @@ export async function envoyerParEmail(factureId: string): Promise<ResultatAction
   }
 
   const destinataires = resultat.destinataires.join(", ");
+  const refus =
+    resultat.refusees.length > 0
+      ? `\nAdresse(s) en copie refusée(s) par le serveur d'envoi : ${resultat.refusees.join(", ")}. Vérifiez la fiche client.`
+      : "";
   if (avant?.statut === "brouillon") {
-    return { ok: true, message: `Facture ${numero ?? ""} émise et envoyée à ${destinataires}.` };
+    return { ok: true, message: `Facture ${numero ?? ""} émise et envoyée à ${destinataires}.${refus}` };
   }
   if (avant?.statut === "payee") {
-    return { ok: true, message: `Duplicata de la facture ${numero ?? ""} envoyé à ${destinataires}.` };
+    return { ok: true, message: `Duplicata de la facture ${numero ?? ""} envoyé à ${destinataires}.${refus}` };
   }
-  return { ok: true, message: `Facture ${numero ?? ""} envoyée à ${destinataires}.` };
+  return { ok: true, message: `Facture ${numero ?? ""} envoyée à ${destinataires}.${refus}` };
 }
 
 // -----------------------------------------------------------------------------
@@ -508,16 +512,25 @@ export async function annulerFacture(_precedent: ResultatAction | null, formData
   return { ok: true, message: "Facture annulée." };
 }
 
-/** Crée un nouveau brouillon avec le même client et les mêmes lignes. */
+/**
+ * Crée un nouveau brouillon avec le même client et les mêmes lignes.
+ * Une facture mensuelle annulée est remplacée par un brouillon mensuel (même client, même mois) :
+ * la facturation mensuelle le compte comme déjà généré et ne recrée pas la facture du mois.
+ */
 export async function dupliquerFacture(factureId: string): Promise<ResultatAction<{ redirection: string }>> {
   const { supabase } = await exigerUtilisateur();
   const id = schemaId.safeParse(factureId);
   if (!id.success) return { ok: false, erreur: messagesValidation(id.error) };
 
   let nouvelId: string;
+  let message = "Brouillon créé à partir de cette facture.";
   try {
     const [resFacture, resLignes] = await Promise.all([
-      supabase.from("factures").select("id, client_id, objet, periode, notes").eq("id", id.data).maybeSingle(),
+      supabase
+        .from("factures")
+        .select("id, client_id, objet, periode, notes, generation_auto, statut")
+        .eq("id", id.data)
+        .maybeSingle(),
       supabase
         .from("lignes_facture")
         .select("libelle, description, quantite, prix_unitaire_centimes, prestation_id")
@@ -528,13 +541,16 @@ export async function dupliquerFacture(factureId: string): Promise<ResultatActio
     if (resFacture.error) return { ok: false, erreur: traduireErreur(resFacture.error) };
     if (resLignes.error) return { ok: false, erreur: traduireErreur(resLignes.error) };
     if (!resFacture.data) return { ok: false, erreur: "Facture introuvable : elle a peut-être été supprimée." };
-    const source = resFacture.data as Pick<Facture, "id" | "client_id" | "objet" | "periode" | "notes">;
+    const source = resFacture.data as Pick<
+      Facture,
+      "id" | "client_id" | "objet" | "periode" | "notes" | "generation_auto" | "statut"
+    >;
     const lignes = resLignes.data as Pick<
       LigneFacture,
       "libelle" | "description" | "quantite" | "prix_unitaire_centimes" | "prestation_id"
     >[];
 
-    const resultat = await creerBrouillon(supabase, {
+    const saisie = {
       clientId: source.client_id,
       objet: source.objet,
       periode: source.periode,
@@ -546,7 +562,19 @@ export async function dupliquerFacture(factureId: string): Promise<ResultatActio
         quantite: Number(l.quantite),
         prix: l.prix_unitaire_centimes,
       })),
-    });
+    };
+    const remplacementMensuel = source.generation_auto && source.statut === "annulee" && source.periode !== null;
+    let resultat = await creerBrouillon(supabase, { ...saisie, generationAuto: remplacementMensuel });
+    if (remplacementMensuel) {
+      if (resultat.ok) {
+        message = "Brouillon créé : il remplace cette facture dans la facturation mensuelle du mois.";
+      } else if (resultat.erreur.includes("facture mensuelle existe déjà")) {
+        // Une facture mensuelle active existe déjà pour ce mois : simple copie.
+        resultat = await creerBrouillon(supabase, saisie);
+        message =
+          "Brouillon créé à partir de cette facture. Une autre facture mensuelle existe déjà pour ce client et ce mois : vérifiez qu'il ne fait pas double emploi.";
+      }
+    }
     if (!resultat.ok) return resultat;
     nouvelId = resultat.donnees!.id;
   } catch (e) {
@@ -554,11 +582,7 @@ export async function dupliquerFacture(factureId: string): Promise<ResultatActio
     return ERREUR_INATTENDUE;
   }
   revaliderFactures();
-  return {
-    ok: true,
-    message: "Brouillon créé à partir de cette facture.",
-    donnees: { redirection: `/factures/${nouvelId}` },
-  };
+  return { ok: true, message, donnees: { redirection: `/factures/${nouvelId}` } };
 }
 
 // -----------------------------------------------------------------------------

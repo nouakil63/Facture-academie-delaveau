@@ -9,7 +9,7 @@ import { IconeAlerte, IconeRetour } from "@/components/Icones";
 import { TarifsClient } from "@/components/clients/TarifsClient";
 import { exigerUtilisateur } from "@/lib/auth";
 import { chargerAcademies } from "@/lib/facturation/service";
-import { formatEuros, formatPeriode, nomClient, premierDuMois } from "@/lib/format";
+import { destinatairesFacture, formatEuros, formatPeriode, nomClient, premierDuMois } from "@/lib/format";
 import { mensuelEstime, type PrestationDuTarif, type TarifAvecPrestation } from "@/lib/tarifs";
 import type { Academie, Client } from "@/lib/types";
 
@@ -102,9 +102,15 @@ export default async function PageClient(props: PageProps<"/clients/[id]">) {
           </p>
         </div>
         <div className="flex flex-col gap-2 sm:flex-row sm:items-start">
-          <Link href={`/factures/nouvelle?client=${client.id}`} className="btn-primaire">
-            Nouvelle facture
-          </Link>
+          {client.actif ? (
+            <Link href={`/factures/nouvelle?client=${client.id}`} className="btn-primaire">
+              Nouvelle facture
+            </Link>
+          ) : (
+            <button type="button" className="btn-primaire" disabled title="Réactivez le client pour le facturer">
+              Nouvelle facture
+            </button>
+          )}
           <ActionsClient clientId={client.id} nom={nom} actif={client.actif} nbFactures={factures.length} />
         </div>
       </div>
@@ -115,7 +121,7 @@ export default async function PageClient(props: PageProps<"/clients/[id]">) {
           de nouveau.
         </p>
       )}
-      {!client.email && (
+      {destinatairesFacture(client).length === 0 && (
         <p className="avertissement flex items-center gap-2">
           <IconeAlerte className="size-4 text-amber-600" />
           Aucune adresse e-mail : les factures de ce client ne pourront pas lui être envoyées par e-mail.{" "}
@@ -149,7 +155,12 @@ export default async function PageClient(props: PageProps<"/clients/[id]">) {
         periode={periode}
       />
 
-      <FacturesClient clientId={client.id} academieId={client.academie_id} factures={factures} />
+      <FacturesClient
+        clientId={client.id}
+        academieId={client.academie_id}
+        clientActif={client.actif}
+        factures={factures}
+      />
 
       <section className="carte" aria-labelledby="titre-fiche" id="fiche">
         <div className="border-b border-line px-5 py-4">

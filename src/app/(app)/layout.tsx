@@ -1,11 +1,11 @@
 import Link from "next/link";
 import { AcademieBadge } from "@/components/AcademieBadge";
 import { BandeauAcces } from "@/components/coquille/BandeauAcces";
-import { academieFiltree, chargerAcademiesActives, verifierAcces } from "@/components/coquille/donnees";
+import { chargerAcademiesActives, verifierAcces } from "@/components/coquille/donnees";
 import { Logo } from "@/components/coquille/Logo";
 import { MenuMobile } from "@/components/coquille/MenuMobile";
 import { PanneauNavigation } from "@/components/coquille/PanneauNavigation";
-import { academieSelectionnee } from "@/lib/academie-selectionnee";
+import { academieSelectionnee, resoudreAcademie } from "@/lib/academie-selectionnee";
 import { exigerUtilisateur } from "@/lib/auth";
 
 /** Coquille de l'application : barre latérale, filtre d'académie, compte connecté. */
@@ -18,7 +18,7 @@ export default async function LayoutApplication({ children }: LayoutProps<"/">) 
     academieSelectionnee(),
   ]);
   // Cookie d'une académie inexistante ou désactivée → « Toutes ».
-  const academieCourante = academieFiltree(idCookie, academies);
+  const academieCourante = resoudreAcademie(idCookie, academies)?.id ?? null;
   const academie = academies.find((a) => a.id === academieCourante);
   const email = utilisateur.email ?? "";
 

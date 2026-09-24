@@ -30,6 +30,7 @@ export type EmetteurPdf = Pick<
   | "code_postal"
   | "ville"
   | "pays"
+  | "siren"
   | "siret"
   | "rna"
   | "numero_tva"
@@ -60,6 +61,13 @@ export interface ProprietesFacturePdf {
   /** Proportions connues du logo (largeur / hauteur) ; absent → logo ajusté dans un cadre. */
   logoRatio?: number;
 }
+
+/**
+ * Mentions obligatoires entre professionnels (pénalités de retard, indemnité de 40 €), imprimées
+ * pour un client professionnel si le champ des paramètres a été vidé (même texte que le défaut SQL).
+ */
+export const MENTION_B2B_DEFAUT =
+  "En cas de retard de paiement : pénalités au taux de trois fois le taux d'intérêt légal et indemnité forfaitaire pour frais de recouvrement de 40 € (art. L441-10 et D441-5 du Code de commerce). Pas d'escompte pour paiement anticipé.";
 
 // Pas de césure automatique : react-pdf applique des règles anglaises (« vétéri-naire »).
 Font.registerHyphenationCallback((mot) => [mot]);
@@ -243,7 +251,8 @@ function creerStyles(primaire: string, secondaire: string) {
 
     // Émetteur / destinataire
     parties: { flexDirection: "row", marginTop: 18 },
-    emetteur: { flex: 1, paddingRight: 18 },
+    // Même retrait haut que le cadre du destinataire : les deux étiquettes sont alignées.
+    emetteur: { flex: 1, paddingRight: 18, paddingTop: 10 },
     destinataire: {
       flex: 1,
       backgroundColor: fondDoux,
@@ -434,7 +443,7 @@ export function FacturePdf({
     rempli(emetteur.pays) && emetteur.pays.trim().toLowerCase() !== "france" ? emetteur.pays : null,
   ].filter(rempli);
   const identifiantsEmetteur = [
-    rempli(emetteur.siret) ? `SIRET : ${emetteur.siret}` : null,
+    rempli(emetteur.siret) ? `SIRET : ${emetteur.siret}` : rempli(emetteur.siren) ? `SIREN : ${emetteur.siren}` : null,
     rempli(emetteur.rna) ? `RNA : ${emetteur.rna}` : null,
     rempli(emetteur.numero_tva) ? `N° TVA : ${emetteur.numero_tva}` : null,
   ].filter(rempli);
@@ -462,7 +471,7 @@ export function FacturePdf({
   const paragraphesPied = [
     tauxTva > 0 ? emetteur.mention_tva : null, // à 0 % la mention figure déjà sous le total
     emetteur.mentions_legales,
-    professionnel ? emetteur.mentions_professionnels : null,
+    professionnel ? (rempli(emetteur.mentions_professionnels) ? emetteur.mentions_professionnels : MENTION_B2B_DEFAUT) : null,
   ]
     .filter(rempli)
     .map((p) => t(p.trim()));
@@ -470,7 +479,7 @@ export function FacturePdf({
     [
       emetteur.raison_sociale,
       emetteur.forme_juridique,
-      rempli(emetteur.siret) ? `SIRET ${emetteur.siret}` : null,
+      rempli(emetteur.siret) ? `SIRET ${emetteur.siret}` : rempli(emetteur.siren) ? `SIREN ${emetteur.siren}` : null,
       rempli(emetteur.rna) ? `RNA ${emetteur.rna}` : null,
     ]
       .filter(rempli)
@@ -631,8 +640,8 @@ export function FacturePdf({
           <View style={s.tableauEntete} fixed>
             <Text style={s.colDesignation}>DÉSIGNATION</Text>
             <Text style={s.colQuantite}>QTÉ</Text>
-            <Text style={s.colPrix}>PRIX UNITAIRE</Text>
-            <Text style={s.colTotal}>TOTAL</Text>
+            <Text style={s.colPrix}>{tauxTva > 0 ? "PRIX UNIT. HT" : "PRIX UNITAIRE"}</Text>
+            <Text style={s.colTotal}>{tauxTva > 0 ? "TOTAL HT" : "TOTAL"}</Text>
           </View>
           {lignes.length === 0 ? (
             <Text style={s.vide}>Aucune ligne pour le moment.</Text>

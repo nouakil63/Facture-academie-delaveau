@@ -3,10 +3,10 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { exigerUtilisateur } from "@/lib/auth";
-import { parseEurosEnCentimes } from "@/lib/format";
+import { parseEurosEnCentimes, pluriel } from "@/lib/format";
 import type { ClientSupabase } from "@/lib/supabase/server";
 import type { ResultatAction } from "@/lib/types";
-import { estUnitePredefinie, LONGUEUR_MAX_UNITE, pluriel, UNITE_AUTRE } from "@/components/prestations/unites";
+import { estUnitePredefinie, LONGUEUR_MAX_UNITE, UNITE_AUTRE } from "@/components/prestations/unites";
 
 /*
  * Server Actions du catalogue de prestations (commun aux deux académies) :

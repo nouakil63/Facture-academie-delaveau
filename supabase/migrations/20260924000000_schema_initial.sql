@@ -127,7 +127,7 @@ create table public.parametres (
   iban text,
   bic text,
   titulaire_compte text,
-  conditions_paiement text not null default 'Paiement par virement bancaire à réception de la facture.',
+  conditions_paiement text not null default 'Paiement par virement bancaire au plus tard à la date d''échéance.',
   delai_paiement_jours integer not null default 30 check (delai_paiement_jours between 0 and 90),
 
   -- TVA et mentions
@@ -306,6 +306,8 @@ create table public.factures (
     (statut = 'brouillon' and numero is null)
     or (statut <> 'brouillon' and numero is not null and date_emission is not null)
   ),
+  -- Année et séquence : attribuées par emettre_facture(), jamais portées par un brouillon.
+  constraint factures_sequence_emise check ((statut = 'brouillon') = (annee is null and sequence is null)),
   unique (annee, sequence)
 );
 
@@ -357,7 +359,43 @@ create table public.compteurs_factures (
 
 -- -----------------------------------------------------------------------------
 -- Règles d'intégrité des factures
+-- (les triggers d'une même table s'exécutent dans l'ordre alphabétique de leur nom)
 -- -----------------------------------------------------------------------------
+
+-- a0) Une facture naît brouillon : numéro, année, séquence, date d'émission et
+--     informations figées sont attribués uniquement par emettre_facture().
+create or replace function public.proteger_insertion_facture()
+returns trigger
+language plpgsql
+set search_path = public
+as $$
+begin
+  if new.statut <> 'brouillon'
+     or new.numero is not null
+     or new.annee is not null
+     or new.sequence is not null
+     or new.date_emission is not null
+     or new.client_snapshot is not null
+     or new.emetteur_snapshot is not null
+     or new.academie_snapshot is not null
+  then
+    raise exception 'Une facture est créée en brouillon ; le numéro est attribué par emettre_facture()';
+  end if;
+  -- Champs sans objet pour un brouillon : remis à zéro.
+  new.date_echeance := null;
+  new.envoyee_le := null;
+  new.payee_le := null;
+  new.mode_paiement := null;
+  new.reference_paiement := null;
+  new.annulee_le := null;
+  new.motif_annulation := null;
+  new.created_by := auth.uid();
+  return new;
+end;
+$$;
+
+create trigger a0_factures_insertion before insert on public.factures
+  for each row execute function public.proteger_insertion_facture();
 
 -- a) Académie d'un brouillon = académie de son client.
 create or replace function public.renseigner_academie_facture()
@@ -375,6 +413,27 @@ $$;
 
 create trigger a_factures_academie before insert or update on public.factures
   for each row execute function public.renseigner_academie_facture();
+
+-- a bis) Un client change d'académie : ses brouillons suivent immédiatement
+--        (les factures émises gardent l'académie figée à l'émission).
+create or replace function public.propager_academie_client()
+returns trigger
+language plpgsql
+set search_path = public
+as $$
+begin
+  update public.factures
+     set academie_id = new.academie_id
+   where client_id = new.id
+     and statut = 'brouillon'
+     and academie_id is distinct from new.academie_id;
+  return null;
+end;
+$$;
+
+create trigger clients_academie_brouillons after update of academie_id on public.clients
+  for each row when (old.academie_id is distinct from new.academie_id)
+  execute function public.propager_academie_client();
 
 -- b) Protection du contenu d'une facture émise + transitions de statut autorisées.
 create or replace function public.proteger_facture()
@@ -555,6 +614,26 @@ $$;
 create trigger parametres_proteger before update or delete on public.parametres
   for each row execute function public.proteger_parametres();
 
+-- Nouveau taux de TVA : appliqué aussitôt aux brouillons (totaux recalculés), pour que le
+-- montant relu avant l'émission soit celui qui sera émis. Les factures émises ne changent pas.
+create or replace function public.propager_tva_brouillons()
+returns trigger
+language plpgsql
+set search_path = public
+as $$
+begin
+  update public.factures
+     set taux_tva = new.taux_tva
+   where statut = 'brouillon'
+     and taux_tva is distinct from new.taux_tva;
+  return null;
+end;
+$$;
+
+create trigger parametres_tva_brouillons after update of taux_tva on public.parametres
+  for each row when (old.taux_tva is distinct from new.taux_tva)
+  execute function public.propager_tva_brouillons();
+
 -- -----------------------------------------------------------------------------
 -- Émission d'une facture : numéro séquentiel + figement
 -- -----------------------------------------------------------------------------
@@ -604,7 +683,7 @@ begin
 
   update public.factures
      set statut = 'emise',
-         numero = p.prefixe_facture || '-' || v_annee || '-' || lpad(v_seq::text, 4, '0'),
+         numero = p.prefixe_facture || '-' || v_annee || '-' || lpad(v_seq::text, greatest(4, length(v_seq::text)), '0'),
          annee = v_annee,
          sequence = v_seq,
          date_emission = v_date,
@@ -736,6 +815,7 @@ select f.*,
        c.prenom as client_prenom,
        c.raison_sociale as client_raison_sociale,
        c.email as client_email,
+       c.emails_cc as client_emails_cc,
        c.cavaliers as client_cavaliers,
        a.nom as academie_nom,
        a.couleur as academie_couleur

@@ -4,10 +4,12 @@ import Form from "next/form";
 import Link from "next/link";
 import { useRef } from "react";
 import { IconeRecherche } from "@/components/Icones";
+import { MOTIF_MOIS } from "./outils";
 
 /**
  * Recherche et mois facturé de la liste des factures (paramètres d'URL).
  * Le statut est conservé en champ caché : il se choisit avec les onglets au-dessus.
+ * Champs non contrôlés : le parent remonte le composant (key) quand les filtres de l'URL changent.
  */
 export function FiltresFactures({
   q,
@@ -59,7 +61,13 @@ export function FiltresFactures({
           name="mois"
           defaultValue={mois}
           className="champ"
-          onChange={() => formulaire.current?.requestSubmit()}
+          placeholder="AAAA-MM"
+          pattern="\d{4}-(0[1-9]|1[0-2])"
+          onChange={(e) => {
+            // Champ texte (Safari macOS, Firefox) : filtrer seulement une fois le mois complet ou effacé.
+            const valeur = e.currentTarget.value;
+            if (valeur === "" || MOTIF_MOIS.test(valeur)) formulaire.current?.requestSubmit();
+          }}
         />
       </div>
       <div className="flex gap-2">

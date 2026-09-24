@@ -21,7 +21,7 @@ import {
 import { variablesInconnues, VARIABLES_EMAIL } from "@/components/parametres/modeles-email";
 import { COOKIE_ACADEMIE } from "@/lib/academie-selectionnee";
 import { exigerUtilisateur } from "@/lib/auth";
-import { emailConfigure, envoyerEmail } from "@/lib/email";
+import { emailConfigure, envoyerEmail, messageErreurEmail } from "@/lib/email";
 import { formatDateHeure } from "@/lib/format";
 import type { ClientSupabase } from "@/lib/supabase/server";
 import type { ResultatAction } from "@/lib/types";
@@ -246,7 +246,7 @@ const schemaParametres = z
     conditions_paiement: texteObligatoire(
       500,
       "Conditions de paiement",
-      "Les conditions de paiement sont obligatoires (ex. « Paiement par virement à réception de la facture. »).",
+      "Les conditions de paiement sont obligatoires (ex. « Paiement par virement bancaire au plus tard à la date d'échéance. »).",
     ),
     delai_paiement_jours: entierBorne(0, 90, "Délai de paiement (jours)"),
 
@@ -565,27 +565,6 @@ export async function supprimerAcademie(academieId: string): Promise<ResultatAct
 // E-mail de test
 // -----------------------------------------------------------------------------
 
-/** Traduit une erreur d'envoi (codes nodemailer) en message exploitable. */
-function messageErreurEnvoi(e: unknown): string {
-  const erreur = (e ?? {}) as { code?: string; responseCode?: number; message?: string };
-  switch (erreur.code) {
-    case "EAUTH":
-    case "ENOAUTH":
-      return "Identifiants refusés par le serveur SMTP : SMTP_USER doit être l'adresse complète de la boîte (ex. contact@academiedelaveau.com) et SMTP_PASSWORD le mot de passe de cette boîte.";
-    case "ECONNECTION":
-    case "ECONNREFUSED":
-    case "ETIMEDOUT":
-    case "ESOCKET":
-    case "EDNS":
-    case "ETLS":
-      return "Connexion au serveur SMTP impossible : vérifiez SMTP_HOST (serveur indiqué dans l'espace client Amen), SMTP_PORT et SMTP_SECURE (port 465 → true, port 587 → false).";
-    case "EENVELOPE":
-      return "Adresse refusée par le serveur SMTP : vérifiez l'adresse de destination et l'expéditeur (EMAIL_FROM).";
-    default:
-      return `L'envoi a échoué : ${erreur.message ?? "erreur inconnue"}.`;
-  }
-}
-
 /** Envoie un e-mail de test pour vérifier la configuration SMTP. */
 export async function envoyerEmailTest(_precedent: ResultatAction | null, formData: FormData): Promise<ResultatAction> {
   const { supabase, utilisateur } = await exigerUtilisateur();
@@ -634,7 +613,7 @@ export async function envoyerEmailTest(_precedent: ResultatAction | null, formDa
       texte,
     });
   } catch (e) {
-    return { ok: false, erreur: messageErreurEnvoi(e) };
+    return { ok: false, erreur: messageErreurEmail(e) };
   }
 
   return {

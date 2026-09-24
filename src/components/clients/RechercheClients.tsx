@@ -10,7 +10,8 @@ import { IconeRecherche } from "@/components/Icones";
  */
 export function RechercheClients({ q, archives }: { q: string; archives: boolean }) {
   return (
-    <Form action="/clients" className="flex flex-col gap-3 sm:flex-row sm:items-center">
+    // key : champs non contrôlés, remis à jour quand la recherche de l'URL change (lien « Effacer »…).
+    <Form key={`${q}|${archives}`} action="/clients" className="flex flex-col gap-3 sm:flex-row sm:items-center">
       <div className="relative flex-1">
         <label htmlFor="recherche-clients" className="sr-only">
           Rechercher un client
@@ -19,7 +20,6 @@ export function RechercheClients({ q, archives }: { q: string; archives: boolean
           <IconeRecherche />
         </span>
         <input
-          key={q}
           id="recherche-clients"
           type="search"
           name="q"

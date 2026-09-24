@@ -5,7 +5,7 @@ import type { Academie, Facture, FactureComplete, Parametres } from "@/lib/types
 
 // E-mail : configuration et envoi simulés (les modèles et le HTML restent les vrais).
 const emailConfigure = vi.fn(() => true);
-const envoyerEmail = vi.fn<(msg: MessageEmail) => Promise<{ messageId: string }>>();
+const envoyerEmail = vi.fn<(msg: MessageEmail) => Promise<{ messageId: string; refusees: string[] }>>();
 vi.mock("@/lib/email", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/email")>()),
   emailConfigure,
@@ -30,7 +30,7 @@ type Ligne = Record<string, unknown>;
 type Resultat = { data: unknown; error: { message: string } | null };
 
 class Requete implements PromiseLike<Resultat> {
-  private filtres: [string, unknown][] = [];
+  private filtres: ((l: Ligne) => boolean)[] = [];
   private operation: "select" | "insert" | "update" = "select";
   private valeurs: Ligne | Ligne[] = {};
 
@@ -46,7 +46,11 @@ class Requete implements PromiseLike<Resultat> {
     return this;
   }
   eq(colonne: string, valeur: unknown) {
-    this.filtres.push([colonne, valeur]);
+    this.filtres.push((l) => l[colonne] === valeur);
+    return this;
+  }
+  in(colonne: string, valeurs: unknown[]) {
+    this.filtres.push((l) => valeurs.includes(l[colonne]));
     return this;
   }
   insert(valeurs: Ligne | Ligne[]) {
@@ -68,11 +72,11 @@ class Requete implements PromiseLike<Resultat> {
       }
       return { data: null, error: null };
     }
-    const selection = lignes.filter((l) => this.filtres.every(([c, v]) => l[c] === v));
+    const selection = lignes.filter((l) => this.filtres.every((f) => f(l)));
     if (this.operation === "update") {
       this.base.misesAJour.push({ table: this.table, valeurs: this.valeurs as Ligne });
       for (const l of selection) Object.assign(l, this.valeurs);
-      return { data: null, error: null };
+      return { data: selection.map((l) => structuredClone(l)), error: null };
     }
     return { data: selection.map((l) => structuredClone(l)), error: null };
   }
@@ -166,7 +170,7 @@ const EMISE = {
 
 beforeEach(() => {
   emailConfigure.mockReset().mockReturnValue(true);
-  envoyerEmail.mockReset().mockResolvedValue({ messageId: "<message@test>" });
+  envoyerEmail.mockReset().mockResolvedValue({ messageId: "<message@test>", refusees: [] });
   genererPdfFacture.mockClear();
 });
 
@@ -217,7 +221,7 @@ describe("envoyerFacture", () => {
     const { faux, supabase } = base({}, { email_copie: "archives@academie.fr" });
     const resultat = await envoyerFacture(supabase, faux.facture.id);
 
-    expect(resultat).toEqual({ ok: true, destinataires: ["marie@exemple.fr", "papa@exemple.fr"] });
+    expect(resultat).toEqual({ ok: true, destinataires: ["marie@exemple.fr", "papa@exemple.fr"], refusees: [] });
     expect(faux.appelsRpc).toEqual([{ nom: "emettre_facture", args: { p_facture_id: faux.facture.id } }]);
     expect(genererPdfFacture).toHaveBeenCalledOnce();
 
@@ -332,12 +336,91 @@ describe("envoyerFacture", () => {
     const resultat = await envoyerFacture(supabase, faux.facture.id);
 
     expect(resultat.ok).toBe(false);
-    if (!resultat.ok) expect(resultat.erreur).toMatch(/identification/);
+    if (!resultat.ok) expect(resultat.erreur).toMatch(/Identifiants refusés/);
     expect(faux.envois).toEqual([
-      expect.objectContaining({ succes: false, erreur: expect.stringMatching(/identification/) }),
+      expect.objectContaining({ succes: false, erreur: expect.stringMatching(/Identifiants refusés/) }),
     ]);
     expect(faux.facture.statut).toBe("emise");
     expect(faux.facture.envoyee_le).toBeNull();
+  });
+
+  it("facture émise : PDF avec le client figé, e-mail à l'adresse actuelle de la fiche client", async () => {
+    const { faux, supabase } = base({
+      statut: "emise",
+      facture: EMISE,
+      client: { email: "nouvelle@exemple.fr", emails_cc: [] },
+    });
+    // Instantané de l'émission : ancien nom, aucune adresse e-mail à l'époque.
+    const client = faux.tables.clients[0];
+    faux.tables.factures[0].client_snapshot = { ...client, nom: "Ancien nom", email: null, emails_cc: [] };
+    const resultat = await envoyerFacture(supabase, faux.facture.id);
+
+    expect(resultat).toEqual({ ok: true, destinataires: ["nouvelle@exemple.fr"], refusees: [] });
+    expect(envoyerEmail.mock.calls[0][0].a).toEqual(["nouvelle@exemple.fr"]);
+    expect(genererPdfFacture.mock.calls[0][0].client.nom).toBe("Ancien nom");
+    expect(faux.facture.statut).toBe("envoyee");
+  });
+
+  it("n'efface pas un paiement enregistré pendant l'envoi", async () => {
+    const { faux, supabase } = base({ statut: "emise", facture: EMISE });
+    envoyerEmail.mockImplementation(async () => {
+      // L'autre utilisatrice marque la facture payée pendant l'échange SMTP.
+      Object.assign(faux.tables.factures[0], { statut: "payee", payee_le: "2026-09-20", mode_paiement: "Chèque" });
+      return { messageId: "<m>", refusees: [] };
+    });
+    const resultat = await envoyerFacture(supabase, faux.facture.id);
+
+    expect(resultat.ok).toBe(true);
+    expect(faux.facture.statut).toBe("payee");
+    expect(faux.facture.payee_le).toBe("2026-09-20");
+    expect(faux.facture.mode_paiement).toBe("Chèque");
+    expect(faux.facture.envoyee_le).toEqual(expect.any(String));
+  });
+
+  it("adresse en copie refusée : envoi réussi, refus signalé et journalisé", async () => {
+    envoyerEmail.mockResolvedValue({ messageId: "<m>", refusees: ["papa@exemple.fr"] });
+    const { faux, supabase } = base({ statut: "emise", facture: EMISE });
+    const resultat = await envoyerFacture(supabase, faux.facture.id);
+
+    expect(resultat).toEqual({ ok: true, destinataires: ["marie@exemple.fr"], refusees: ["papa@exemple.fr"] });
+    expect(faux.envois).toEqual([
+      expect.objectContaining({ succes: true, erreur: expect.stringMatching(/refusée\(s\).*papa@exemple\.fr/) }),
+    ]);
+    expect(faux.facture.statut).toBe("envoyee");
+  });
+
+  it("adresse principale refusée : échec, la facture reste « émise »", async () => {
+    envoyerEmail.mockResolvedValue({ messageId: "<m>", refusees: ["marie@exemple.fr"] });
+    const { faux, supabase } = base({ statut: "emise", facture: EMISE });
+    const resultat = await envoyerFacture(supabase, faux.facture.id);
+
+    expect(resultat.ok).toBe(false);
+    if (!resultat.ok) expect(resultat.erreur).toMatch(/Adresse principale refusée.*marie@exemple\.fr/);
+    expect(faux.envois).toEqual([expect.objectContaining({ succes: false })]);
+    expect(faux.facture.statut).toBe("emise");
+    expect(faux.facture.envoyee_le).toBeNull();
+  });
+
+  it("exigerBrouillon : une facture émise entre-temps est ignorée, sans e-mail", async () => {
+    const { faux, supabase } = base({ statut: "envoyee", facture: { ...EMISE, envoyee_le: "2026-09-01T08:00:00Z" } });
+    const resultat = await envoyerFacture(supabase, faux.facture.id, { exigerBrouillon: true });
+
+    expect(resultat).toEqual({ ok: false, erreur: expect.stringMatching(/^Ignorée : déjà émise/), ignoree: true });
+    expect(envoyerEmail).not.toHaveBeenCalled();
+    expect(faux.envois).toHaveLength(0);
+  });
+
+  it("exigerBrouillon : un brouillon émis au même instant par un autre envoi est ignoré", async () => {
+    const { faux, supabase } = base();
+    faux.rpc = () => ({
+      single: async () => ({ data: null, error: { message: "La facture AD-2026-0001 est déjà émise" } }),
+    });
+    const resultats = await envoyerFactures(supabase, [faux.facture.id], { exigerBrouillon: true });
+
+    expect(resultats).toEqual([
+      { id: faux.facture.id, ok: false, erreur: expect.stringMatching(/^Ignorée : déjà émise/), ignoree: true },
+    ]);
+    expect(envoyerEmail).not.toHaveBeenCalled();
   });
 
   it("répond clairement si la facture n'existe pas", async () => {

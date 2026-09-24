@@ -187,8 +187,7 @@ export default async function PageFacture(props: PageProps<"/factures/[id]">) {
         <p className="avertissement flex items-start gap-2">
           <IconeAlerte className="mt-0.5 size-4 text-amber-600" />
           <span>
-            {brouillon ? "Ce client n'a pas d'adresse e-mail" : "Aucune adresse e-mail n'était renseignée à l'émission"} :
-            la facture ne peut pas être envoyée par e-mail.{" "}
+            Ce client n&apos;a pas d&apos;adresse e-mail : la facture ne peut pas être envoyée par e-mail.{" "}
             <Link href={`/clients/${facture.client_id}`} className="font-medium underline">
               Voir la fiche client
             </Link>
@@ -208,6 +207,7 @@ export default async function PageFacture(props: PageProps<"/factures/[id]">) {
             emailConfigure={emailConfigure()}
             envoyeeLe={facture.envoyee_le}
             aujourdhui={aujourdhui}
+            generationAuto={facture.generation_auto}
             nomClient={nom}
             clientId={facture.client_id}
             prefixe={emetteur.prefixe_facture}
@@ -314,7 +314,10 @@ export default async function PageFacture(props: PageProps<"/factures/[id]">) {
               )}
               {client.telephone && <p className="text-muted">{client.telephone}</p>}
               {!brouillon && (
-                <p className="aide">Coordonnées figées à l&apos;émission, telles qu&apos;imprimées sur la facture.</p>
+                <p className="aide">
+                  Coordonnées figées à l&apos;émission, telles qu&apos;imprimées sur la facture. Les adresses e-mail
+                  sont celles de la fiche client actuelle.
+                </p>
               )}
             </div>
           </section>
@@ -341,7 +344,7 @@ export default async function PageFacture(props: PageProps<"/factures/[id]">) {
                   Échéance de paiement{enRetard ? " dépassée" : ""}
                 </Etape>
               )}
-              {facture.envoyee_le && <Etape date={formatDateHeure(facture.envoyee_le)}>Envoyée par e-mail</Etape>}
+              {facture.envoyee_le && <Etape date={formatDateHeure(facture.envoyee_le)}>Dernier envoi par e-mail</Etape>}
               {facture.payee_le && (
                 <Etape date={formatDate(facture.payee_le)} ton="succes">
                   Payée{facture.mode_paiement ? ` · ${facture.mode_paiement}` : ""}
@@ -439,7 +442,7 @@ function BlocEmetteur({
           Émetteur
         </h2>
         {brouillon && (
-          <Link href="/parametres" className="btn-lien text-xs">
+          <Link href="/parametres#legal" className="btn-lien text-xs">
             Paramètres
           </Link>
         )}

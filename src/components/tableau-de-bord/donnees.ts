@@ -1,10 +1,9 @@
 import "server-only";
 import type { AcademieMenu } from "@/components/coquille/donnees";
 import { chargerParametres, genererBrouillonsMensuels, periodeAFacturer } from "@/lib/facturation/service";
-import { aujourdhuiParis, premierDuMois } from "@/lib/format";
+import { aujourdhuiParis, datesGeneration, premierDuMois } from "@/lib/format";
 import type { ClientSupabase } from "@/lib/supabase/server";
 import type { Client, Facture, FactureVue } from "@/lib/types";
-import { datesGeneration } from "./outils";
 
 /** Colonnes de factures_vue utiles aux tableaux du tableau de bord. */
 export type FactureResumee = Pick<

@@ -18,8 +18,18 @@
   --font-display: var(--font-titre);
 }
 
+/*
+ * Ancres (#paiement, #email…) : le titre visé s'arrête sous l'en-tête collant du mobile
+ * (h-16, masqué à partir de lg), avec une petite marge.
+ */
 html {
   color-scheme: light;
+  scroll-padding-top: 5rem;
+}
+@media (width >= 64rem) {
+  html {
+    scroll-padding-top: 1.5rem;
+  }
 }
 
 body {

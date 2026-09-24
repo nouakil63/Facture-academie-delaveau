@@ -52,7 +52,7 @@ export function parametresExemple(modifications: Partial<Parametres> = {}): Para
     iban: null,
     bic: null,
     titulaire_compte: null,
-    conditions_paiement: "Paiement par virement bancaire à réception de la facture.",
+    conditions_paiement: "Paiement par virement bancaire au plus tard à la date d'échéance.",
     delai_paiement_jours: 30,
     taux_tva: 0,
     mention_tva: "TVA non applicable, art. 293 B du CGI",

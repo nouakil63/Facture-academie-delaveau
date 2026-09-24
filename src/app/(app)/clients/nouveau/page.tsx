@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { FormulaireClient } from "@/components/clients/FormulaireClient";
 import { IconeRetour } from "@/components/Icones";
-import { academieSelectionnee } from "@/lib/academie-selectionnee";
+import { academieSelectionnee, resoudreAcademie } from "@/lib/academie-selectionnee";
 import { exigerUtilisateur } from "@/lib/auth";
 import { chargerAcademies } from "@/lib/facturation/service";
 import type { Academie } from "@/lib/types";
@@ -21,7 +21,7 @@ export default async function PageNouveauClient() {
     erreur = e instanceof Error ? e.message : String(e);
   }
   // Par défaut : l'académie affichée dans le filtre, sinon la première.
-  const academieParDefaut = academies.some((a) => a.id === selection) ? selection : (academies[0]?.id ?? null);
+  const academieParDefaut = resoudreAcademie(selection, academies)?.id ?? academies[0]?.id ?? null;
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
@@ -43,7 +43,7 @@ export default async function PageNouveauClient() {
       ) : academies.length === 0 ? (
         <p className="avertissement">
           Aucune académie active : activez l&apos;Académie Delaveau ou l&apos;Académie Espoir dans{" "}
-          <Link href="/parametres" className="font-medium underline">
+          <Link href="/parametres#academies" className="font-medium underline">
             Paramètres
           </Link>{" "}
           avant de créer un client.

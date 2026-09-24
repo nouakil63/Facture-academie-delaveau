@@ -4,12 +4,12 @@ import { AcademieBadge } from "@/components/AcademieBadge";
 import { FiltresFactures } from "@/components/factures/FiltresFactures";
 import { IconeCalendrier, IconeFacture, IconePlus } from "@/components/Icones";
 import { ListeFactures, type FactureListe } from "@/components/factures/ListeFactures";
-import { estFiltreStatut, FILTRES_STATUT, moisVersPeriode, pluriel } from "@/components/factures/outils";
-import { academieSelectionnee } from "@/lib/academie-selectionnee";
+import { estFiltreStatut, FILTRES_STATUT, moisVersPeriode } from "@/components/factures/outils";
+import { academieSelectionnee, resoudreAcademie } from "@/lib/academie-selectionnee";
 import { exigerUtilisateur } from "@/lib/auth";
 import { emailConfigure } from "@/lib/email";
 import { chargerAcademies } from "@/lib/facturation/service";
-import { avecArticle, formatPeriode } from "@/lib/format";
+import { avecArticle, formatPeriode, pluriel } from "@/lib/format";
 import type { Academie } from "@/lib/types";
 
 export const metadata: Metadata = { title: "Factures" };
@@ -21,7 +21,7 @@ const LIMITE = 500;
 
 const COLONNES =
   "id, numero, statut, objet, periode, date_emission, date_echeance, total_ht_centimes, total_ttc_centimes, " +
-  "en_retard, client_id, client_type, client_nom, client_prenom, client_raison_sociale, client_email, " +
+  "en_retard, client_id, client_type, client_nom, client_prenom, client_raison_sociale, client_email, client_emails_cc, " +
   "client_cavaliers, academie_id, academie_nom, academie_couleur";
 
 const COLONNES_RECHERCHE = ["numero", "client_nom", "client_prenom", "client_raison_sociale", "client_cavaliers"];
@@ -58,7 +58,7 @@ export default async function PageFactures(props: PageProps<"/factures">) {
     return <ErreurChargement message={e instanceof Error ? e.message : String(e)} />;
   }
   // Filtre de la barre latérale (cookie) : ignoré s'il désigne une académie inconnue ou désactivée.
-  const academie = idCookie ? academies.find((a) => a.id === idCookie && a.actif) : undefined;
+  const academie = resoudreAcademie(idCookie, academies);
 
   let requete = supabase.from("factures_vue").select(COLONNES, { count: "exact" });
   if (academie) requete = requete.eq("academie_id", academie.id);
@@ -146,7 +146,13 @@ export default async function PageFactures(props: PageProps<"/factures">) {
           })}
         </nav>
         <div className="carte-corps">
-          <FiltresFactures q={q} mois={mois} statut={statut} filtresActifs={filtresActifs} />
+          <FiltresFactures
+            key={`${statut}|${mois}|${q}`}
+            q={q}
+            mois={mois}
+            statut={statut}
+            filtresActifs={filtresActifs}
+          />
         </div>
       </div>
 

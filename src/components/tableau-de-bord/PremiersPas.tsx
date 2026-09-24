@@ -74,7 +74,7 @@ export function PremiersPas({
               <strong className="font-semibold">IBAN à compléter.</strong> Il est imprimé sur chaque facture pour le
               règlement par virement : renseignez-le avant d&apos;envoyer vos premières factures.
             </p>
-            <Link href="/parametres" className="btn-secondaire btn-petit shrink-0">
+            <Link href="/parametres#paiement" className="btn-secondaire btn-petit shrink-0">
               Compléter l&apos;IBAN
               <IconeFleche className="h-3.5 w-3.5" />
             </Link>

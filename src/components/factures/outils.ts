@@ -18,14 +18,19 @@ export function libelleNumero(numero: string | null | undefined): string {
   return numero ?? "Brouillon";
 }
 
-/** « 1 facture », « 3 factures » ; `pluriel` par défaut = singulier + « s ». */
-export function pluriel(n: number, singulier: string, plurielForme = `${singulier}s`): string {
-  return `${n} ${n > 1 ? plurielForme : singulier}`;
-}
-
 // -----------------------------------------------------------------------------
 // Mois / période
 // -----------------------------------------------------------------------------
+
+/** Mois complet « AAAA-MM » (saisie d'un <input type="month">, champ texte sur Safari macOS / Firefox). */
+export const MOTIF_MOIS = /^\d{4}-(0[1-9]|1[0-2])$/;
+
+/** "2026-10" + 1 → "2026-11" ; "2026-01" - 1 → "2025-12". */
+export function moisVoisin(mois: string, decalage: number): string {
+  const [annee, m] = mois.split("-").map(Number);
+  const total = annee * 12 + (m - 1) + decalage;
+  return `${Math.floor(total / 12)}-${String((total % 12) + 1).padStart(2, "0")}`;
+}
 
 /** "2026-10" (valeur d'un <input type="month">) → "2026-10-01", ou null si invalide. */
 export function moisVersPeriode(mois: string | null | undefined): string | null {
@@ -93,6 +98,14 @@ export function estFiltreStatut(v: unknown): v is FiltreStatut {
 // Envois groupés
 // -----------------------------------------------------------------------------
 
+/**
+ * Envoi groupé : le navigateur appelle la Server Action par lots de LOT_ENVOI factures
+ * (PDF + SMTP : quelques secondes chacune), loin de la durée maximale d'une requête.
+ * LOT_ENVOI_MAX : plafond accepté par les Server Actions pour un appel.
+ */
+export const LOT_ENVOI = 10;
+export const LOT_ENVOI_MAX = 20;
+
 /** Résultat de l'envoi d'une facture dans un lot (liste des factures, facturation mensuelle). */
 export interface ResultatEnvoiFacture {
   id: string;
@@ -103,4 +116,15 @@ export interface ResultatEnvoiFacture {
   /** true : la facture n'a pas été traitée (annulée, sans destinataire…). */
   ignoree?: boolean;
   erreur?: string;
+}
+
+/** Phrase de synthèse d'un lot envoyé. */
+export function syntheseEnvoi(resultats: ResultatEnvoiFacture[]): string {
+  const envoyees = resultats.filter((r) => r.ok).length;
+  const echecs = resultats.filter((r) => !r.ok && !r.ignoree).length;
+  const ignorees = resultats.filter((r) => r.ignoree).length;
+  const morceaux = [`${envoyees} facture${envoyees > 1 ? "s" : ""} envoyée${envoyees > 1 ? "s" : ""}`];
+  if (echecs > 0) morceaux.push(`${echecs} en échec`);
+  if (ignorees > 0) morceaux.push(`${ignorees} ignorée${ignorees > 1 ? "s" : ""}`);
+  return `${morceaux.join(", ")}.`;
 }

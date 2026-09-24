@@ -34,6 +34,7 @@ function aCompleter(p: Parametres): { libelle: string; ancre: string }[] {
   if (!p.adresse_ligne1 || !p.code_postal || !p.ville) manques.push({ libelle: "adresse", ancre: "coordonnees" });
   if (!p.email_contact) manques.push({ libelle: "e-mail de contact", ancre: "coordonnees" });
   if (Number(p.taux_tva) === 0 && !p.mention_tva) manques.push({ libelle: "mention TVA", ancre: "tva" });
+  if (!p.mentions_professionnels?.trim()) manques.push({ libelle: "mentions clients professionnels", ancre: "tva" });
   return manques;
 }
 
@@ -68,7 +69,7 @@ export default async function PageParametres() {
       supabase.from("membres").select("email, nom, created_at").order("created_at"),
       supabase.from("compteurs_factures").select("annee, dernier_numero").order("annee", { ascending: false }),
       compter(
-        supabase.from("clients").select("id", { count: "exact", head: true }).eq("actif", true).is("email", null),
+        supabase.from("clients").select("id", { count: "exact", head: true }).eq("actif", true).is("email", null).eq("emails_cc", "{}"),
       ),
       // Rattachements de chaque académie : affichés, et bloquants pour la suppression.
       Promise.all(
@@ -221,7 +222,7 @@ export default async function PageParametres() {
           <GestionAcademies academies={academiesGestion} />
 
           {/* Envoi des e-mails */}
-          <section id="envoi-emails" aria-labelledby="envoi-emails-titre" className="carte scroll-mt-6">
+          <section id="envoi-emails" aria-labelledby="envoi-emails-titre" className="carte">
             <div className="flex flex-wrap items-start justify-between gap-3 border-b border-line px-5 py-4">
               <div className="flex items-start gap-3">
                 <span className="rounded-lg bg-brand-light p-2 text-brand">
@@ -286,7 +287,7 @@ export default async function PageParametres() {
           </section>
 
           {/* Utilisateurs */}
-          <section id="utilisateurs" aria-labelledby="utilisateurs-titre" className="carte scroll-mt-6">
+          <section id="utilisateurs" aria-labelledby="utilisateurs-titre" className="carte">
             <div className="flex items-start gap-3 border-b border-line px-5 py-4">
               <span className="rounded-lg bg-brand-light p-2 text-brand">
                 <IconeUtilisateurs className="size-5" />

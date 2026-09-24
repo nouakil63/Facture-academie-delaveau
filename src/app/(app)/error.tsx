@@ -18,8 +18,9 @@ export default function ErreurApplication({ error, retry }: { error: Error & { d
         </span>
         <h1 className="titre-section mt-4">Une erreur est survenue</h1>
         <p className="mt-2 text-sm text-muted">
-          Cette page n&apos;a pas pu être chargée. Il s&apos;agit peut-être d&apos;une coupure réseau ou d&apos;un service
-          momentanément indisponible. Vos données n&apos;ont pas été modifiées.
+          Cette page n&apos;a pas pu être affichée. Il s&apos;agit peut-être d&apos;une coupure réseau ou d&apos;un service
+          momentanément indisponible. Si vous veniez d&apos;enregistrer, rechargez la page pour vérifier ce qui a été
+          pris en compte.
         </p>
 
         {process.env.NODE_ENV === "development" && error.message && (
