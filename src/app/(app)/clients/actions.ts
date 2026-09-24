@@ -160,14 +160,11 @@ const schemaClient = z
     cavaliers: texteFacultatif(300, "Cavalier(s)"),
     notes: texteFacultatif(4000, "Notes internes"),
   })
-  .superRefine((c, ctx) => {
-    if (c.type === "professionnel" && !c.raison_sociale) {
-      ctx.addIssue({
-        code: "custom",
-        path: ["raison_sociale"],
-        message: "La raison sociale est obligatoire pour un client professionnel.",
-      });
-    }
+  .refine((c) => c.type !== "professionnel" || Boolean(c.raison_sociale), {
+    path: ["raison_sociale"],
+    error: "La raison sociale est obligatoire pour un client professionnel.",
+    // Vérifiée même si d'autres champs sont en erreur : toutes les erreurs s'affichent d'un coup.
+    when: (payload) => !payload.issues.some((i) => i.path?.[0] === "type" || i.path?.[0] === "raison_sociale"),
   })
   .transform((c) =>
     // Un particulier n'a ni raison sociale, ni SIRET, ni numéro de TVA.
