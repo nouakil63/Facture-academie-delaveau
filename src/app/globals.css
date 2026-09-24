@@ -1,0 +1,115 @@
+@import "tailwindcss";
+
+/*
+ * Charte Académie Delaveau : bleu #0050A0, gris clair #DADADA, blanc.
+ * Classes de composants partagées : utilisez-les plutôt que de répéter des utilitaires.
+ */
+@theme inline {
+  --color-brand: #0050a0;
+  --color-brand-dark: #003d7a;
+  --color-brand-light: #e6eef7;
+  --color-brand-grey: #dadada;
+  --color-surface: #ffffff;
+  --color-page: #f5f7fa;
+  --color-ink: #1c2430;
+  --color-muted: #5b6573;
+  --color-line: #e3e7ed;
+  --font-sans: var(--font-texte);
+  --font-display: var(--font-titre);
+}
+
+html {
+  color-scheme: light;
+}
+
+body {
+  background: var(--color-page);
+  color: var(--color-ink);
+}
+
+@layer components {
+  /* Titres */
+  .titre-page {
+    @apply font-display text-2xl font-medium tracking-wide text-ink;
+  }
+  .titre-section {
+    @apply font-display text-lg font-medium tracking-wide text-ink;
+  }
+
+  /* Cartes */
+  .carte {
+    @apply rounded-xl border border-line bg-surface shadow-sm;
+  }
+  .carte-corps {
+    @apply p-5;
+  }
+
+  /* Boutons : .btn-primaire, .btn-secondaire, .btn-danger (+ .btn-petit), .btn-lien */
+  .btn,
+  .btn-primaire,
+  .btn-secondaire,
+  .btn-danger {
+    @apply inline-flex cursor-pointer items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium
+      transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand
+      disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  .btn-primaire {
+    @apply bg-brand text-white hover:bg-brand-dark;
+  }
+  .btn-secondaire {
+    @apply border border-line bg-surface text-ink hover:bg-page;
+  }
+  .btn-danger {
+    @apply bg-red-600 text-white hover:bg-red-700;
+  }
+  .btn-lien {
+    @apply inline-flex cursor-pointer items-center gap-1 text-sm font-medium text-brand hover:underline;
+  }
+  .btn-petit {
+    @apply px-2.5 py-1 text-xs;
+  }
+
+  /* Formulaires */
+  .label {
+    @apply mb-1 block text-sm font-medium text-ink;
+  }
+  .champ {
+    @apply block w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm text-ink
+      placeholder:text-muted/70 focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/20
+      disabled:bg-page disabled:text-muted;
+  }
+  .aide {
+    @apply mt-1 text-xs text-muted;
+  }
+  .erreur {
+    @apply rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800;
+  }
+  .succes {
+    @apply rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800;
+  }
+  .avertissement {
+    @apply rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900;
+  }
+
+  /* Tableaux */
+  .tableau {
+    @apply w-full text-left text-sm;
+  }
+  .tableau thead th {
+    @apply border-b border-line bg-page px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-muted;
+  }
+  .tableau tbody td {
+    @apply border-b border-line px-4 py-3 align-middle;
+  }
+  .tableau tbody tr:last-child td {
+    @apply border-b-0;
+  }
+  .tableau tbody tr:hover {
+    @apply bg-page/60;
+  }
+
+  /* Pastilles */
+  .badge {
+    @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium whitespace-nowrap;
+  }
+}
