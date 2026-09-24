@@ -8,9 +8,9 @@ export type StatutFacture = "brouillon" | "emise" | "envoyee" | "payee" | "annul
 export type TypeClient = "particulier" | "professionnel";
 export type MoisFacture = "courant" | "precedent";
 
-export interface Entite {
-  id: string;
-  nom: string;
+/** Paramètres de la structure émettrice (ligne unique de la table `parametres`). */
+export interface Parametres {
+  id: true;
   prefixe_facture: string;
   couleur_primaire: string;
   couleur_secondaire: string;
@@ -47,6 +47,15 @@ export interface Entite {
   email_objet: string;
   email_corps: string;
   email_copie: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Académie de rattachement des élèves (Académie Delaveau, Académie Espoir). */
+export interface Academie {
+  id: string;
+  nom: string;
+  couleur: string;
   actif: boolean;
   ordre: number;
   created_at: string;
@@ -55,7 +64,6 @@ export interface Entite {
 
 export interface Prestation {
   id: string;
-  entite_id: string;
   libelle: string;
   description: string | null;
   prix_unitaire_centimes: number;
@@ -69,7 +77,7 @@ export interface Prestation {
 
 export interface Client {
   id: string;
-  entite_id: string;
+  academie_id: string;
   type: TypeClient;
   civilite: string | null;
   nom: string;
@@ -112,8 +120,9 @@ export interface TarifClient {
 
 export interface Facture {
   id: string;
-  entite_id: string;
   client_id: string;
+  /** Repris automatiquement du client (trigger) tant que la facture est un brouillon. */
+  academie_id: string;
   numero: string | null;
   annee: number | null;
   sequence: number | null;
@@ -129,7 +138,8 @@ export interface Facture {
   notes: string | null;
   notes_internes: string | null;
   client_snapshot: Client | null;
-  entite_snapshot: Entite | null;
+  emetteur_snapshot: Parametres | null;
+  academie_snapshot: Academie | null;
   envoyee_le: string | null;
   payee_le: string | null;
   mode_paiement: string | null;
@@ -151,9 +161,8 @@ export interface FactureVue extends Facture {
   client_raison_sociale: string | null;
   client_email: string | null;
   client_cavaliers: string | null;
-  entite_nom: string;
-  entite_prefixe: string;
-  entite_couleur: string;
+  academie_nom: string;
+  academie_couleur: string;
 }
 
 export interface LigneFacture {
@@ -196,7 +205,9 @@ export interface FactureComplete {
   lignes: LigneFacture[];
   /** Coordonnées à imprimer : l'instantané figé si la facture est émise, sinon la fiche actuelle. */
   client: Client;
-  entite: Entite;
+  /** Émetteur (paramètres) : instantané figé si émise, sinon paramètres actuels. */
+  emetteur: Parametres;
+  academie: Academie;
 }
 
 /** Retour standard des Server Actions. */

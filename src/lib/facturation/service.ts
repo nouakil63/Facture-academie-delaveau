@@ -1,7 +1,7 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { premierDuMois } from "@/lib/format";
-import type { Client, Entite, Facture, FactureComplete, LigneFacture, ResultatGeneration } from "@/lib/types";
+import type { Academie, Client, Facture, FactureComplete, LigneFacture, Parametres, ResultatGeneration } from "@/lib/types";
 
 /**
  * Opérations métier sur les factures, partagées par les pages, les Server Actions
@@ -9,28 +9,47 @@ import type { Client, Entite, Facture, FactureComplete, LigneFacture, ResultatGe
  * (utilisateur connecté → RLS, ou client admin pour le cron).
  */
 
-/** Charge une facture, ses lignes, son client et son entité. null si introuvable. */
+/** Paramètres de la structure émettrice (ligne unique). */
+export async function chargerParametres(supabase: SupabaseClient): Promise<Parametres> {
+  const { data, error } = await supabase.from("parametres").select("*").maybeSingle<Parametres>();
+  if (error) throw new Error(error.message);
+  if (!data) throw new Error("Paramètres de facturation introuvables (migration non appliquée ou accès refusé).");
+  return data;
+}
+
+/** Académies (Delaveau, Espoir), triées. `actives` = uniquement les actives. */
+export async function chargerAcademies(supabase: SupabaseClient, actives = false): Promise<Academie[]> {
+  let requete = supabase.from("academies").select("*").order("ordre").order("nom");
+  if (actives) requete = requete.eq("actif", true);
+  const { data, error } = await requete;
+  if (error) throw new Error(error.message);
+  return (data ?? []) as Academie[];
+}
+
+/** Charge une facture, ses lignes, son client, l'émetteur et l'académie. null si introuvable. */
 export async function chargerFactureComplete(supabase: SupabaseClient, factureId: string): Promise<FactureComplete | null> {
   const { data: facture, error } = await supabase.from("factures").select("*").eq("id", factureId).maybeSingle<Facture>();
   if (error) throw new Error(error.message);
   if (!facture) return null;
 
-  const [lignes, client, entite] = await Promise.all([
+  const [lignes, client, academie, parametres] = await Promise.all([
     supabase.from("lignes_facture").select("*").eq("facture_id", factureId).order("ordre").order("created_at"),
     supabase.from("clients").select("*").eq("id", facture.client_id).single<Client>(),
-    supabase.from("entites").select("*").eq("id", facture.entite_id).single<Entite>(),
+    supabase.from("academies").select("*").eq("id", facture.academie_id).single<Academie>(),
+    chargerParametres(supabase),
   ]);
   if (lignes.error) throw new Error(lignes.error.message);
   if (client.error) throw new Error(client.error.message);
-  if (entite.error) throw new Error(entite.error.message);
+  if (academie.error) throw new Error(academie.error.message);
 
-  // Une facture émise s'imprime avec les coordonnées figées au moment de l'émission.
+  // Une facture émise s'imprime avec les informations figées au moment de l'émission.
   const emise = facture.statut !== "brouillon";
   return {
     facture,
     lignes: (lignes.data as LigneFacture[]).map((l) => ({ ...l, quantite: Number(l.quantite) })),
     client: emise && facture.client_snapshot ? { ...client.data, ...facture.client_snapshot } : client.data,
-    entite: emise && facture.entite_snapshot ? { ...entite.data, ...facture.entite_snapshot } : entite.data,
+    emetteur: emise && facture.emetteur_snapshot ? { ...parametres, ...facture.emetteur_snapshot } : parametres,
+    academie: emise && facture.academie_snapshot ? { ...academie.data, ...facture.academie_snapshot } : academie.data,
   };
 }
 
@@ -42,28 +61,28 @@ export async function emettreFacture(supabase: SupabaseClient, factureId: string
 }
 
 /**
- * Crée (ou prévisualise avec `apercu = true`) les brouillons mensuels d'une entité.
+ * Crée (ou prévisualise avec `apercu: true`) les brouillons mensuels.
  * `periode` : n'importe quel jour du mois à facturer ("AAAA-MM-JJ").
+ * `academieId` : limiter à une académie (null/absent = toutes).
  * Idempotent : un client déjà facturé pour ce mois est renvoyé avec `deja_existante = true`.
  */
 export async function genererBrouillonsMensuels(
   supabase: SupabaseClient,
-  entiteId: string,
   periode: string,
-  apercu = false,
+  options: { academieId?: string | null; apercu?: boolean } = {},
 ): Promise<ResultatGeneration[]> {
   const { data, error } = await supabase.rpc("generer_brouillons_mensuels", {
-    p_entite_id: entiteId,
     p_periode: periode,
-    p_dry_run: apercu,
+    p_academie_id: options.academieId ?? null,
+    p_dry_run: options.apercu ?? false,
   });
   if (error) throw new Error(error.message);
   return (data ?? []) as ResultatGeneration[];
 }
 
-/** Mois à facturer pour une entité à une date donnée, selon son réglage (mois courant ou précédent). */
-export function periodeAFacturer(entite: Pick<Entite, "mois_facture">, date?: string): string {
-  return premierDuMois(date, entite.mois_facture === "precedent" ? -1 : 0);
+/** Mois à facturer à une date donnée, selon le réglage (mois courant ou précédent). */
+export function periodeAFacturer(parametres: Pick<Parametres, "mois_facture">, date?: string): string {
+  return premierDuMois(date, parametres.mois_facture === "precedent" ? -1 : 0);
 }
 
 /** Destinataires d'une facture : e-mail principal + copies. */
