@@ -131,6 +131,7 @@ function villeComplete(codePostal: string | null, ville: string | null): string 
 // -----------------------------------------------------------------------------
 
 const A4_LARGEUR = 595.28;
+const A4_HAUTEUR = 841.89;
 const MARGE_X = 42;
 const MARGE_HAUT = 38;
 const LARGEUR_UTILE = A4_LARGEUR - 2 * MARGE_X;
@@ -157,7 +158,9 @@ function hauteurPied(paragraphes: string[], ligneLegale: string): number {
 
   let hauteur = 9; // filet + marge haute
   for (const p of paragraphes) hauteur += lignes(p, caracteresParLigne) * hauteurLigne + 2.5;
-  hauteur += lignes(ligneLegale, Math.floor((LARGEUR_UTILE - LARGEUR_NUMERO_PAGE - 8) / (7.2 * 0.6))) * (7.2 * INTERLIGNE_PIED) + 3;
+  hauteur +=
+    lignes(ligneLegale, Math.floor((LARGEUR_UTILE - LARGEUR_NUMERO_PAGE - 8) / (7.2 * 0.6))) * (7.2 * INTERLIGNE_PIED) +
+    3;
   return hauteur;
 }
 
@@ -187,9 +190,9 @@ function creerStyles(primaire: string, secondaire: string) {
     },
     filigrane: {
       fontFamily: "Helvetica-Bold",
-      fontSize: 92,
-      letterSpacing: 8,
-      transform: "rotate(-35deg)",
+      fontSize: 80,
+      letterSpacing: 5,
+      transform: "rotate(-38deg)",
     },
 
     // Rappel en haut des pages suivantes
@@ -271,12 +274,12 @@ function creerStyles(primaire: string, secondaire: string) {
     // Objet et période
     objet: {
       marginTop: 18,
-      marginBottom: 10,
+      marginBottom: 5,
       flexDirection: "row",
       flexWrap: "wrap",
       alignItems: "flex-end",
     },
-    objetBloc: { marginRight: 26, marginBottom: 2 },
+    objetBloc: { marginRight: 26, marginBottom: 7 },
     objetLibelle: { fontSize: 7.5, color: DISCRET, letterSpacing: 0.8 },
     objetValeur: { fontFamily: "Helvetica-Bold", fontSize: 10 },
 
@@ -293,7 +296,7 @@ function creerStyles(primaire: string, secondaire: string) {
     },
     ligne: {
       flexDirection: "row",
-      paddingVertical: 6.5,
+      paddingVertical: 5.5,
       borderBottomWidth: 0.6,
       borderBottomColor: FILET,
     },
@@ -381,10 +384,12 @@ function creerStyles(primaire: string, secondaire: string) {
       color: assombrir(primaire, 0.15),
       fontFamily: "Helvetica-Bold",
     },
+    // Texte dynamique (render) : ancré par `top`, car react-pdf 4.9 calcule une hauteur
+    // aberrante pour un texte dynamique ancré par `bottom`.
     piedPage: {
       position: "absolute",
       right: MARGE_X,
-      bottom: BAS_PIED,
+      top: A4_HAUTEUR - BAS_PIED - 7.2 * INTERLIGNE_PIED,
       width: LARGEUR_NUMERO_PAGE,
       textAlign: "right",
       fontSize: 7.2,
@@ -442,9 +447,7 @@ export function FacturePdf({
   // --- Client
   const nom = nomClient(client);
   const nomAffiche = !professionnel && rempli(client.civilite) ? `${client.civilite} ${nom}` : nom;
-  const contactPro = professionnel
-    ? [client.civilite, client.prenom, client.nom].filter(rempli).join(" ")
-    : "";
+  const contactPro = professionnel ? [client.civilite, client.prenom, client.nom].filter(rempli).join(" ") : "";
   const lignesClient = [
     client.adresse_ligne1,
     client.adresse_ligne2,
@@ -500,12 +503,7 @@ export function FacturePdf({
       <Page size="A4" style={[s.page, { paddingBottom: paddingBas }]}>
         {filigrane && (
           <View fixed style={s.filigraneConteneur}>
-            <Text
-              style={[
-                s.filigrane,
-                { color: annulee ? ROUGE : primaire, opacity: annulee ? 0.1 : 0.075 },
-              ]}
-            >
+            <Text style={[s.filigrane, { color: annulee ? ROUGE : primaire, opacity: annulee ? 0.1 : 0.075 }]}>
               {filigrane}
             </Text>
           </View>
@@ -515,7 +513,12 @@ export function FacturePdf({
 
         {/* En-tête : logo, titre, numéro et dates */}
         <View style={s.entete}>
-          <View style={s.enteteGauche}>{logo ? <Image src={logo} style={styleLogo} /> : null}</View>
+          <View style={s.enteteGauche}>
+            {logo ? (
+              // eslint-disable-next-line jsx-a11y/alt-text -- composant Image de react-pdf : pas d'attribut alt en PDF
+              <Image src={logo} style={styleLogo} />
+            ) : null}
+          </View>
           <View style={s.enteteDroite}>
             {brouillon ? (
               <>
@@ -548,14 +551,14 @@ export function FacturePdf({
             <Text style={s.bandeauTitre}>ANNULÉE</Text>
             <View style={s.bandeauCorps}>
               <Text style={s.bandeauTexte}>
-              {t(
-                [
-                  facture.annulee_le ? `Facture annulée le ${formatDate(facture.annulee_le)}` : "Facture annulée",
-                  rempli(facture.motif_annulation) ? `Motif : ${facture.motif_annulation.trim()}` : null,
-                ]
-                  .filter(rempli)
-                  .join(" – "),
-              )}
+                {t(
+                  [
+                    facture.annulee_le ? `Facture annulée le ${formatDate(facture.annulee_le)}` : "Facture annulée",
+                    rempli(facture.motif_annulation) ? `Motif : ${facture.motif_annulation.trim()}` : null,
+                  ]
+                    .filter(rempli)
+                    .join(" – "),
+                )}
               </Text>
             </View>
           </View>
@@ -586,7 +589,9 @@ export function FacturePdf({
             <Text style={s.etiquette}>FACTURÉ À</Text>
             <Text style={s.nomPartie}>{t(nomAffiche)}</Text>
             {rempli(contactPro) && contactPro !== nom && (
-              <Text style={s.lignePartieDiscrete}>{t(`À l'attention de ${contactPro}`)}</Text>
+              <Text style={s.lignePartieDiscrete}>
+                {t(`À l'attention ${/^[aeiouyàâäéèêëîïôöùûüœ]/i.test(contactPro) ? "d'" : "de "}${contactPro}`)}
+              </Text>
             )}
             {lignesClient.map((l, i) => (
               <Text key={`c${i}`} style={s.lignePartie}>
@@ -749,7 +754,7 @@ export function FacturePdf({
             <Text style={s.piedLegalTexte}>{ligneLegale}</Text>
           </View>
         </View>
-        {/* Numéro de page : élément fixe distinct (un texte dynamique imbriqué est mal positionné) */}
+        {/* Numéro de page : élément fixe distinct, aligné sur la dernière ligne du pied */}
         <Text fixed style={s.piedPage} render={({ pageNumber, totalPages }) => `${pageNumber}/${totalPages}`} />
       </Page>
     </Document>

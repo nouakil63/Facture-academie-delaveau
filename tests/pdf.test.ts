@@ -8,7 +8,7 @@ import type { Entite } from "@/lib/types";
 vi.mock("server-only", () => ({}));
 
 const { genererPdfFacture, nomFichierFacture } = await import("@/lib/pdf");
-const { donneesExemple } = await import("@/lib/pdf/exemple");
+const { donneesExemple, entiteExemple } = await import("@/lib/pdf/exemple");
 
 /**
  * Les PDF rendus sont écrits dans APERCU_PDF_DIR (ou le dossier temporaire du système)
@@ -17,51 +17,13 @@ const { donneesExemple } = await import("@/lib/pdf/exemple");
  */
 const DOSSIER_APERCU = process.env.APERCU_PDF_DIR ?? tmpdir();
 
-const ENTITE: Entite = {
-  id: "11111111-1111-4111-8111-111111111111",
-  nom: "Académie Delaveau",
-  prefixe_facture: "AD",
-  couleur_primaire: "#0050A0",
-  couleur_secondaire: "#DADADA",
-  logo_url: null,
-  raison_sociale: "Académie Delaveau",
-  forme_juridique: "Association déclarée",
-  adresse_ligne1: "5 chemin du Foyer",
-  adresse_ligne2: null,
-  code_postal: "14800",
-  ville: "Vauville",
-  pays: "France",
-  siren: "853 472 298",
-  siret: "853 472 298 00019",
-  rna: "W143007272",
-  numero_tva: null,
-  objet_social: "Formation de jeunes cavaliers vers le haut niveau à travers le double projet sportif et scolaire.",
-  email_contact: "contact@academiedelaveau.com",
+const ENTITE: Entite = entiteExemple({
   telephone: "06 12 34 56 78",
-  site_web: null,
   iban: "FR7630006000011234567890189",
   bic: "AGRIFRPPXXX",
   titulaire_compte: "Académie Delaveau",
-  conditions_paiement: "Paiement par virement bancaire à réception de la facture.",
-  delai_paiement_jours: 30,
-  taux_tva: 0,
-  mention_tva: "TVA non applicable, art. 293 B du CGI",
   mentions_legales: "Association loi 1901 – Formation de jeunes cavaliers vers le haut niveau.",
-  mentions_professionnels:
-    "En cas de retard de paiement : pénalités au taux de trois fois le taux d'intérêt légal et indemnité forfaitaire pour frais de recouvrement de 40 € (art. L441-10 et D441-5 du Code de commerce). Pas d'escompte pour paiement anticipé.",
-  objet_facture_mensuelle: "Formation et accompagnement",
-  jour_generation: 1,
-  mois_facture: "courant",
-  generation_auto: false,
-  envoi_auto: false,
-  email_objet: "Facture {numero} – {entite}",
-  email_corps: "Bonjour {client},",
-  email_copie: null,
-  actif: true,
-  ordre: 1,
-  created_at: "2026-09-24T08:00:00Z",
-  updated_at: "2026-09-24T08:00:00Z",
-};
+});
 
 function nombrePages(pdf: Buffer): number {
   return (pdf.toString("latin1").match(/\/Type\s*\/Page\b(?!s)/g) ?? []).length;
@@ -181,7 +143,7 @@ describe("PDF de facture", () => {
     ecrireApercu("apercu-annulee.pdf", pdfAnnulee);
   });
 
-  it("utilise une facture sans aucune ligne sans planter", async () => {
+  it("rend une facture sans aucune ligne sans planter", async () => {
     const pdf = await genererPdfFacture(donneesExemple(ENTITE, { lignes: [] }));
     expect(pdf.subarray(0, 5).toString()).toBe("%PDF-");
   });
