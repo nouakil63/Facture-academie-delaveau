@@ -7,13 +7,13 @@ import type { Prestation, ResultatAction } from "@/lib/types";
 import { FormulairePrestation } from "./FormulairePrestation";
 import {
   IconeArchive,
-  IconeCatalogue,
+  IconePrestations,
   IconeCorbeille,
   IconeCrayon,
   IconePlus,
   IconeRepeter,
   IconeRestaurer,
-} from "./Icones";
+} from "@/components/Icones";
 import { Modale } from "@/components/Modale";
 import { pluriel, suffixeUnite } from "./unites";
 
@@ -172,7 +172,7 @@ function ListePrestations({
       {prestations.length === 0 ? (
         <div className="flex flex-col items-center px-6 py-10 text-center">
           <span className="rounded-full bg-brand-light p-3 text-brand">
-            <IconeCatalogue className="size-6" />
+            <IconePrestations className="size-6" />
           </span>
           <p className="mt-4 font-medium text-ink">
             {nbArchiveesMasquees > 0 ? "Aucune prestation active" : "Le catalogue est vide"}

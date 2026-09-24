@@ -3,7 +3,7 @@
 import { useActionState } from "react";
 import { seDeconnecter } from "@/app/(app)/actions-session";
 import type { ResultatAction } from "@/lib/types";
-import { IconeDeconnexion } from "./Icones";
+import { IconeDeconnexion } from "@/components/Icones";
 
 export function BoutonDeconnexion() {
   const [etat, deconnecter, enCours] = useActionState<ResultatAction | null>(seDeconnecter, null);

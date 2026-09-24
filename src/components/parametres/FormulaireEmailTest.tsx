@@ -3,7 +3,7 @@
 import { startTransition, useActionState } from "react";
 import { envoyerEmailTest } from "@/app/(app)/parametres/actions";
 import type { ResultatAction } from "@/lib/types";
-import { IconeEnveloppe } from "@/components/prestations/Icones";
+import { IconeEnveloppe } from "@/components/Icones";
 
 /** Envoi d'un e-mail de test à une adresse (vérification de la configuration SMTP). */
 export function FormulaireEmailTest({ adresseParDefaut, actif }: { adresseParDefaut: string; actif: boolean }) {

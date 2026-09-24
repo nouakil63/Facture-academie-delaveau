@@ -8,7 +8,7 @@ import { centimesVersSaisie, formatEuros, formatQuantite, parseEurosEnCentimes }
 import { parseQuantite, quantiteVersSaisie, totalLigneCentimes } from "@/lib/tarifs";
 import type { LigneFacture, ResultatAction } from "@/lib/types";
 import type { PrestationFormulaire } from "./FormulaireNouvelleFacture";
-import { IconeCorbeille, IconeCrayon, IconeFlecheBas, IconeFlecheHaut, IconePlus } from "./Icones";
+import { IconeCorbeille, IconeCrayon, IconeFlecheBas, IconeFlecheHaut, IconePlus } from "@/components/Icones";
 import { BlocTotaux, type Totaux } from "./LignesFacture";
 
 type Edition = { ligne: LigneFacture | null } | null;

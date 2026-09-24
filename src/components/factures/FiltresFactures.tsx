@@ -3,7 +3,7 @@
 import Form from "next/form";
 import Link from "next/link";
 import { useRef } from "react";
-import { IconeRecherche } from "./Icones";
+import { IconeRecherche } from "@/components/Icones";
 
 /**
  * Recherche et mois facturé de la liste des factures (paramètres d'URL).

@@ -8,11 +8,11 @@ import {
   type LigneInitiale,
   type PrestationFormulaire,
 } from "@/components/factures/FormulaireNouvelleFacture";
-import { IconePlus, IconeRetour } from "@/components/factures/Icones";
+import { IconePlus, IconeRetour } from "@/components/Icones";
 import { academieSelectionnee } from "@/lib/academie-selectionnee";
 import { exigerUtilisateur } from "@/lib/auth";
 import { chargerAcademies, chargerParametres, destinatairesFacture } from "@/lib/facturation/service";
-import { aujourdhuiParis, nomClient } from "@/lib/format";
+import { aujourdhuiParis, avecArticle, nomClient } from "@/lib/format";
 import { prixApplique } from "@/lib/tarifs";
 import type { Academie, Client, Parametres, Prestation, TarifClient } from "@/lib/types";
 
@@ -176,10 +176,6 @@ export default async function PageNouvelleFacture(props: PageProps<"/factures/no
 }
 
 /** « Académie Espoir » → « l'Académie Espoir » ; autre nom → « « Nom » ». */
-function avecArticle(nom: string): string {
-  return /^académie\b/i.test(nom) ? `l'${nom}` : `« ${nom} »`;
-}
-
 function ErreurChargement({ message }: { message: string }) {
   return (
     <div className="space-y-6">

@@ -10,12 +10,12 @@ import type { PrestationFormulaire } from "@/components/factures/FormulaireNouve
 import {
   IconeAlerte,
   IconeAnnuler,
-  IconeExterne,
+  IconeLienExterne,
   IconeHorloge,
   IconeRetour,
   IconeTelecharger,
   IconeValide,
-} from "@/components/factures/Icones";
+} from "@/components/Icones";
 import { InfosBrouillon, NotesInternes } from "@/components/factures/InfosBrouillon";
 import { LignesLectureSeule, type Totaux } from "@/components/factures/LignesFacture";
 import { libelleNumero, nomClientFacture } from "@/components/factures/outils";
@@ -135,7 +135,7 @@ export default async function PageFacture(props: PageProps<"/factures/[id]">) {
             </p>
             <div className="flex flex-wrap gap-2">
               <a href={urlPdf} target="_blank" rel="noopener" className="btn-secondaire btn-petit">
-                <IconeExterne className="size-3.5" />
+                <IconeLienExterne className="size-3.5" />
                 Aperçu PDF
               </a>
               <a href={`${urlPdf}?telecharger=1`} className="btn-secondaire btn-petit" download>

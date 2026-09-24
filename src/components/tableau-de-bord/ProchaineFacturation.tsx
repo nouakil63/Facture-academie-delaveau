@@ -1,8 +1,9 @@
 import Link from "next/link";
-import { IconeCalendrier, IconeFleche, IconeParametres } from "@/components/coquille/Icones";
+import { IconeCalendrier, IconeFleche, IconeParametres } from "@/components/Icones";
 import { formatPeriode } from "@/lib/format";
 import type { EtatFacturationMensuelle } from "./donnees";
-import { dateLongue, jourDuMois, pluriel } from "./outils";
+import { formatDateLongue, jourDuMois } from "@/lib/format";
+import { pluriel } from "./outils";
 
 /** Mois au format du paramètre ?mois= de la page Facturation mensuelle : "2026-10-01" → "2026-10". */
 function paramMois(periode: string): string {
@@ -38,7 +39,7 @@ export function ProchaineFacturation({
             <h2 id="titre-prochaine-facturation" className="text-sm font-medium text-muted">
               Prochaine facturation
             </h2>
-            <p className="mt-1 text-xl font-semibold tracking-tight text-ink">{dateLongue(prochaineDate)}</p>
+            <p className="mt-1 text-xl font-semibold tracking-tight text-ink">{formatDateLongue(prochaineDate)}</p>
             <p className="text-sm text-muted">Factures de {formatPeriode(prochainePeriode)}</p>
 
             {generationAuto ? (

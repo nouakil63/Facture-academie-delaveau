@@ -2,7 +2,8 @@
 
 import { useRouter } from "next/navigation";
 import { useId, useTransition } from "react";
-import { ACADEMIE_TOUTES, nomCourtAcademie } from "./outils";
+import { nomCourtAcademie } from "@/lib/format";
+import { ACADEMIE_TOUTES } from "./outils";
 
 /**
  * Choix de l'académie (Toutes / Delaveau / Espoir) et du mois de la facturation

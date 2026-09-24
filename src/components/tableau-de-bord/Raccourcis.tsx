@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { IconeCalendrier, IconeNouveauClient, IconePlus } from "@/components/coquille/Icones";
+import { IconeCalendrier, IconeNouveauClient, IconePlus } from "@/components/Icones";
 
 /** Actions fréquentes, en tête du tableau de bord. */
 export function Raccourcis() {

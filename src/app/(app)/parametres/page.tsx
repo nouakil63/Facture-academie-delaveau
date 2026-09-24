@@ -7,12 +7,12 @@ import { titreSection } from "@/components/parametres/sections";
 import {
   IconeAlerte,
   IconeCoche,
-  IconeDocument,
+  IconeFacture,
   IconeEnveloppe,
   IconeInfo,
   IconeLienExterne,
   IconeUtilisateurs,
-} from "@/components/prestations/Icones";
+} from "@/components/Icones";
 import { exigerUtilisateur } from "@/lib/auth";
 import { emailConfigure } from "@/lib/email";
 import { chargerAcademies, chargerParametres } from "@/lib/facturation/service";
@@ -149,7 +149,7 @@ export default async function PageParametres() {
           className="btn-secondaire"
           title="Ouvre un PDF d'exemple dans un nouvel onglet, avec les paramètres enregistrés"
         >
-          <IconeDocument />
+          <IconeFacture />
           Aperçu d&apos;une facture type
           <IconeLienExterne className="size-3.5 text-muted" />
           <span className="sr-only">(nouvel onglet)</span>

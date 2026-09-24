@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { academieFiltree, chargerAcademiesActives, verifierAcces } from "@/components/coquille/donnees";
-import { IconeAlerte, IconeBillet, IconeCrayon, IconeFleche, IconeHorloge, IconeValide } from "@/components/coquille/Icones";
+import { IconeAlerte, IconeBillet, IconeCrayon, IconeFleche, IconeHorloge, IconeValide } from "@/components/Icones";
 import { chargerTableauDeBord } from "@/components/tableau-de-bord/donnees";
 import { Indicateur } from "@/components/tableau-de-bord/Indicateur";
 import { pluriel } from "@/components/tableau-de-bord/outils";

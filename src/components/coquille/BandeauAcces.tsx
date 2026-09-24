@@ -1,5 +1,5 @@
 import type { EtatAcces } from "./donnees";
-import { IconeAlerte } from "./Icones";
+import { IconeAlerte } from "@/components/Icones";
 
 /** Avertissement affiché en haut du contenu quand le compte ne peut pas lire les données. */
 export function BandeauAcces({ etat, email }: { etat: EtatAcces; email: string }) {

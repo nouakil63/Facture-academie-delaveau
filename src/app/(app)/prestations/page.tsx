@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Catalogue, type PrestationCatalogue } from "@/components/prestations/Catalogue";
-import { IconeInfo } from "@/components/prestations/Icones";
+import { IconeInfo } from "@/components/Icones";
 import { pluriel } from "@/components/prestations/unites";
 import { exigerUtilisateur } from "@/lib/auth";
 import type { Prestation } from "@/lib/types";

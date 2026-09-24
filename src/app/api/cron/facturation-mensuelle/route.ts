@@ -184,29 +184,25 @@ export async function GET(request: NextRequest) {
   const nouveaux = resultats.filter((r) => !r.deja_existante);
   const idsAEnvoyer = nouveaux.map((r) => r.facture_id).filter((id): id is string => Boolean(id));
 
+  // Envoi automatique : uniquement les brouillons créés par cette exécution
+  // (envoyerFactures ne lève pas d'exception : chaque échec est journalisé et listé).
   let envoyees = 0;
   let echecsEnvoi: EchecEnvoi[] = [];
-  let erreurEnvoi: string | undefined;
   if (parametres.envoi_auto && !apercu && idsAEnvoyer.length > 0) {
-    try {
-      const envois = await envoyerFactures(admin, idsAEnvoyer);
-      envoyees = envois.filter((r) => r.ok).length;
-      echecsEnvoi = envois
-        .filter((r) => !r.ok)
-        .map((r) => ({ facture_id: r.id, erreur: r.erreur ?? "Échec de l'envoi." }));
-      for (const echec of echecsEnvoi) {
-        console.error(`Cron facturation mensuelle : facture ${echec.facture_id} non envoyée : ${echec.erreur}`);
-      }
-    } catch (e) {
-      erreurEnvoi = `Envoi automatique interrompu : ${messageDe(e)}`;
-      console.error("Cron facturation mensuelle : envoi automatique interrompu :", e);
+    const envois = await envoyerFactures(admin, idsAEnvoyer);
+    envoyees = envois.filter((r) => r.ok).length;
+    echecsEnvoi = envois
+      .filter((r) => !r.ok)
+      .map((r) => ({ facture_id: r.id, erreur: r.erreur ?? "Échec de l'envoi." }));
+    for (const echec of echecsEnvoi) {
+      console.error(`Cron facturation mensuelle : facture ${echec.facture_id} non envoyée : ${echec.erreur}`);
     }
   }
 
   const parAcademie = await repartitionParAcademie(admin, resultats);
 
-  return json(erreurEnvoi ? 500 : 200, {
-    ok: !erreurEnvoi,
+  return json(200, {
+    ok: true,
     date,
     jour,
     apercu,
@@ -219,6 +215,5 @@ export async function GET(request: NextRequest) {
     envoi_auto: parametres.envoi_auto,
     envoyees,
     echecs_envoi: echecsEnvoi,
-    ...(erreurEnvoi ? { erreur: erreurEnvoi } : {}),
   });
 }

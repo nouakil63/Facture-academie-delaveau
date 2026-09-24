@@ -1,7 +1,7 @@
 "use client";
 
 import { useId, useState } from "react";
-import { IconeCoche } from "@/components/prestations/Icones";
+import { IconeCoche } from "@/components/Icones";
 import { normaliserCouleur } from "./controles";
 
 /*

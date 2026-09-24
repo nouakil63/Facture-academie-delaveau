@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { IconeAlerte, IconeCroix, IconeValide } from "./Icones";
+import { IconeAlerte, IconeFermer, IconeValide } from "@/components/Icones";
 import { libelleNumero, type ResultatEnvoiFacture } from "./outils";
 
 /** Compte rendu d'un envoi groupé : une ligne par facture (succès, échec ou ignorée). */
@@ -41,7 +41,7 @@ export function ResultatsEnvoi({
             className="-m-1 rounded-md p-1 text-muted hover:bg-white/60 hover:text-ink"
             aria-label="Fermer le compte rendu"
           >
-            <IconeCroix className="size-4" />
+            <IconeFermer className="size-4" />
           </button>
         )}
       </div>
@@ -54,7 +54,7 @@ export function ResultatsEnvoi({
               ) : r.ignoree ? (
                 <IconeAlerte className="size-4 text-muted" />
               ) : (
-                <IconeCroix className="size-4 text-red-600" />
+                <IconeFermer className="size-4 text-red-600" />
               )}
               <Link href={`/factures/${r.id}`} className="font-medium text-brand hover:underline">
                 {libelleNumero(r.numero)}

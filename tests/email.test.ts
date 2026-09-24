@@ -53,9 +53,9 @@ describe("remplirModele", () => {
     expect(remplirModele("{structure} / {academie}", d)).toBe("Association Académie Delaveau / Académie Espoir");
   });
 
-  it("remplace chaque occurrence et laisse les accolades inconnues (dont l'ancienne {entite})", () => {
-    expect(remplirModele("{numero} / {numero} {inconnue} {Client} {entite}", factureEmise())).toBe(
-      "AD-2026-0007 / AD-2026-0007 {inconnue} {Client} {entite}",
+  it("remplace chaque occurrence et laisse les accolades inconnues", () => {
+    expect(remplirModele("{numero} / {numero} {inconnue} {Client}", factureEmise())).toBe(
+      "AD-2026-0007 / AD-2026-0007 {inconnue} {Client}",
     );
   });
 

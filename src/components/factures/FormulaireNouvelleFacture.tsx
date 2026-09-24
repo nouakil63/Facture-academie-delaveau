@@ -7,7 +7,7 @@ import { AcademieBadge } from "@/components/AcademieBadge";
 import { centimesVersSaisie, formatEuros, parseEurosEnCentimes } from "@/lib/format";
 import { parseQuantite, quantiteVersSaisie, totalLigneCentimes } from "@/lib/tarifs";
 import type { ResultatAction } from "@/lib/types";
-import { IconeAlerte, IconeCorbeille, IconePlus } from "./Icones";
+import { IconeAlerte, IconeCorbeille, IconePlus } from "@/components/Icones";
 import type { LigneSaisie } from "./outils";
 
 /** Académie de rattachement des clients proposés (regroupement et pastille). */

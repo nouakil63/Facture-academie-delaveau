@@ -8,7 +8,7 @@ import { ModaleConfirmation } from "@/components/Modale";
 import { StatutBadge } from "@/components/StatutBadge";
 import { formatDate, formatEuros, formatPeriode } from "@/lib/format";
 import type { FactureVue } from "@/lib/types";
-import { IconeAlerte, IconeEnvoi } from "./Icones";
+import { IconeAlerte, IconeEnvoi } from "@/components/Icones";
 import { libelleNumero, nomClientFacture, pluriel, type ResultatEnvoiFacture } from "./outils";
 import { ResultatsEnvoi } from "./ResultatsEnvoi";
 

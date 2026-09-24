@@ -5,7 +5,7 @@ import { AcademieBadge } from "@/components/AcademieBadge";
 import { ActionsClient } from "@/components/clients/ActionsClient";
 import { FacturesClient, type FactureDuClient } from "@/components/clients/FacturesClient";
 import { FormulaireClient } from "@/components/clients/FormulaireClient";
-import { IconeAlerte, IconeRetour } from "@/components/clients/Icones";
+import { IconeAlerte, IconeRetour } from "@/components/Icones";
 import { TarifsClient } from "@/components/clients/TarifsClient";
 import { exigerUtilisateur } from "@/lib/auth";
 import { chargerAcademies } from "@/lib/facturation/service";

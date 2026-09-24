@@ -3,7 +3,7 @@
 import { startTransition, useActionState, useState, useTransition } from "react";
 import { changerActivationAcademie, enregistrerAcademie, supprimerAcademie } from "@/app/(app)/parametres/actions";
 import { AcademieBadge } from "@/components/AcademieBadge";
-import { IconeCorbeille, IconeCrayon, IconeInfo, IconePlus } from "@/components/prestations/Icones";
+import { IconeCorbeille, IconeCrayon, IconeInfo, IconePlus } from "@/components/Icones";
 import { Modale } from "@/components/Modale";
 import { pluriel } from "@/components/prestations/unites";
 import type { Academie, ResultatAction } from "@/lib/types";

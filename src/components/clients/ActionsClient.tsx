@@ -2,8 +2,8 @@
 
 import { useState, useTransition } from "react";
 import { changerArchivageClient, supprimerClient } from "@/app/(app)/clients/actions";
-import { IconeArchive, IconeCorbeille } from "./Icones";
-import { ModaleConfirmation } from "./Modale";
+import { IconeArchive, IconeCorbeille } from "@/components/Icones";
+import { ModaleConfirmation } from "@/components/Modale";
 
 /** Boutons « Archiver / Réactiver » et « Supprimer » de la fiche client. */
 export function ActionsClient({
@@ -75,7 +75,7 @@ export function ActionsClient({
         titre="Archiver ce client ?"
         libelleConfirmer="Archiver"
         onConfirmer={() => changerArchivageClient(clientId, true)}
-        onSucces={(texte) => texte && setMessage({ ok: true, texte })}
+        onSucces={(r) => r.message && setMessage({ ok: true, texte: r.message })}
       >
         <p>
           <strong>{nom}</strong> ne sera plus inclus dans la facturation mensuelle et n&apos;apparaîtra plus dans la
@@ -104,7 +104,7 @@ export function ActionsClient({
           titre="Suppression impossible"
           libelleConfirmer={actif ? "Archiver plutôt" : "Compris"}
           onConfirmer={async () => (actif ? changerArchivageClient(clientId, true) : undefined)}
-          onSucces={(texte) => texte && setMessage({ ok: true, texte })}
+          onSucces={(r) => r.message && setMessage({ ok: true, texte: r.message })}
         >
           <p>
             <strong>{nom}</strong> a {nbFactures} facture{nbFactures > 1 ? "s" : ""}. Les factures doivent être

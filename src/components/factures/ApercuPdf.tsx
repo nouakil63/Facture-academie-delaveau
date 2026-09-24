@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { IconeExterne, IconeFlecheBas, IconeFlecheHaut, IconeOeil } from "./Icones";
+import { IconeLienExterne, IconeFlecheBas, IconeFlecheHaut, IconeOeil } from "@/components/Icones";
 
 /**
  * Aperçu PDF intégré, replié par défaut : l'iframe n'est chargée qu'à l'ouverture.
@@ -38,7 +38,7 @@ export function ApercuPdf({ factureId, version, brouillon }: { factureId: string
             <span>L&apos;aperçu ne s&apos;affiche pas sur certains mobiles.</span>
             <a href={url} target="_blank" rel="noopener" className="btn-lien text-xs">
               Ouvrir dans un nouvel onglet
-              <IconeExterne className="size-3.5" />
+              <IconeLienExterne className="size-3.5" />
             </a>
           </p>
         </div>

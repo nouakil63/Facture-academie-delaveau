@@ -2,7 +2,7 @@
 
 import Form from "next/form";
 import Link from "next/link";
-import { IconeRecherche } from "./Icones";
+import { IconeRecherche } from "@/components/Icones";
 
 /**
  * Barre de recherche de la liste des clients (formulaire GET : ?q=…&archives=1).

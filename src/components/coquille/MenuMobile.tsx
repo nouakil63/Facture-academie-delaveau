@@ -2,7 +2,7 @@
 
 import { usePathname } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
-import { IconeFermer, IconeMenu } from "./Icones";
+import { IconeFermer, IconeMenu } from "@/components/Icones";
 
 /**
  * Barre supérieure et menu repliable (écrans < lg).
@@ -42,7 +42,7 @@ export function MenuMobile({ logo, indicateur, children }: { logo: ReactNode; in
             aria-controls="menu-mobile"
             onClick={() => setOuvertSur(ouvert ? null : chemin)}
           >
-            {ouvert ? <IconeFermer /> : <IconeMenu />}
+            {ouvert ? <IconeFermer className="size-5" /> : <IconeMenu className="size-5" />}
             <span className="sr-only">{ouvert ? "Fermer le menu" : "Ouvrir le menu"}</span>
           </button>
         </div>

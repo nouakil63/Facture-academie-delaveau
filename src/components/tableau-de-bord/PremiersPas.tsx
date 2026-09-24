@@ -1,7 +1,7 @@
 import Link from "next/link";
-import { IconeAlerte, IconeCoche, IconeFleche } from "@/components/coquille/Icones";
+import { IconeAlerte, IconeCoche, IconeFleche } from "@/components/Icones";
 import type { DonneesTableauDeBord } from "./donnees";
-import { jourDuMois, nomAvecArticle } from "./outils";
+import { avecArticle, jourDuMois } from "@/lib/format";
 
 /**
  * Accueil du premier démarrage (aucune facture dans le périmètre affiché), guide pas à pas :
@@ -34,7 +34,7 @@ export function PremiersPas({
       texte: sansTarifs
         ? "Ouvrez la fiche de chaque client pour lui ajouter les prestations à facturer chaque mois (au prix du catalogue ou à un prix personnalisé)."
         : `Chaque famille ou structure facturée, rattachée ${
-            nomAcademie ? `à ${nomAvecArticle(nomAcademie)}` : "à l'Académie Delaveau ou à l'Académie Espoir"
+            nomAcademie ? `à ${avecArticle(nomAcademie)}` : "à l'Académie Delaveau ou à l'Académie Espoir"
           }, avec les prestations à lui facturer chaque mois.`,
       href: compteurs.clients > 0 ? "/clients" : "/clients/nouveau",
       action: compteurs.clients > 0 ? "Ajouter les tarifs" : "Nouveau client",
@@ -61,7 +61,7 @@ export function PremiersPas({
           Bienvenue{nomAcademie ? ` — ${nomAcademie}` : ""}
         </h2>
         <p className="mt-1 text-sm text-muted">
-          {nomAcademie ? `Aucune facture pour ${nomAvecArticle(nomAcademie)} pour l'instant. ` : "Aucune facture pour l'instant. "}
+          {nomAcademie ? `Aucune facture pour ${avecArticle(nomAcademie)} pour l'instant. ` : "Aucune facture pour l'instant. "}
           Commencez par créer vos prestations puis vos clients : la facturation mensuelle s&apos;appuie sur eux.
         </p>
       </div>

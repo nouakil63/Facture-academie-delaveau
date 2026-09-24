@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useRef, useState, useTransition } from "react";
 import type { ResultatAction } from "@/lib/types";
+import { IconeFermer } from "@/components/Icones";
 
 /**
  * Fenêtres modales partagées par tous les modules (élément <dialog> natif :
@@ -74,17 +75,7 @@ export function Modale({
               className="-m-1 shrink-0 rounded-md p-1 text-muted hover:bg-page hover:text-ink focus-visible:outline-2 focus-visible:outline-brand"
               aria-label="Fermer"
             >
-              <svg
-                viewBox="0 0 24 24"
-                className="size-5"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth={1.75}
-                strokeLinecap="round"
-                aria-hidden="true"
-              >
-                <path d="M6 6l12 12M18 6 6 18" />
-              </svg>
+              <IconeFermer className="size-5" />
             </button>
           </div>
           {children}

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { FormulaireClient } from "@/components/clients/FormulaireClient";
-import { IconeRetour } from "@/components/clients/Icones";
+import { IconeRetour } from "@/components/Icones";
 import { academieSelectionnee } from "@/lib/academie-selectionnee";
 import { exigerUtilisateur } from "@/lib/auth";
 import { chargerAcademies } from "@/lib/facturation/service";

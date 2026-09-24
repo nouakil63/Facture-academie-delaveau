@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect } from "react";
-import { IconeAlerte } from "@/components/coquille/Icones";
+import { IconeAlerte } from "@/components/Icones";
 
 /** Erreur inattendue dans une page de l'application (la coquille reste affichée). */
 export default function ErreurApplication({ error, retry }: { error: Error & { digest?: string }; retry: () => void }) {

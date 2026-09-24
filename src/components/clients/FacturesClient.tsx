@@ -3,7 +3,7 @@ import { AcademieBadge } from "@/components/AcademieBadge";
 import { StatutBadge } from "@/components/StatutBadge";
 import { formatDate, formatEuros, formatPeriode } from "@/lib/format";
 import type { FactureVue } from "@/lib/types";
-import { IconeDocument, IconePlus } from "./Icones";
+import { IconeFacture, IconePlus } from "@/components/Icones";
 
 export type FactureDuClient = Pick<
   FactureVue,
@@ -61,7 +61,7 @@ export function FacturesClient({
       {factures.length === 0 ? (
         <div className="flex flex-col items-center px-5 py-10 text-center">
           <span className="rounded-full bg-brand-light p-3 text-brand">
-            <IconeDocument className="size-6" />
+            <IconeFacture className="size-6" />
           </span>
           <p className="mt-3 font-medium text-ink">Ce client n&apos;a pas encore été facturé</p>
           <p className="mt-1 max-w-md text-sm text-muted">

@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { envoyerBrouillonsMensuels, genererBrouillons } from "@/app/(app)/facturation-mensuelle/actions";
 import { ModaleConfirmation } from "@/components/Modale";
 import { formatEuros } from "@/lib/format";
-import { IconeAlerte, IconeEnvoi, IconePlus, IconeValide } from "./Icones";
+import { IconeAlerte, IconeEnvoi, IconePlus, IconeValide } from "@/components/Icones";
 import { pluriel, type ResultatEnvoiFacture } from "./outils";
 import { ResultatsEnvoi } from "./ResultatsEnvoi";
 

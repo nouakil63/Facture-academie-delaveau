@@ -41,24 +41,39 @@ export function centimesVersSaisie(centimes: number | null | undefined): string 
   return (centimes / 100).toFixed(2).replace(".", ",");
 }
 
-/** Crée une Date locale à partir de "AAAA-MM-JJ" sans décalage de fuseau. */
+/**
+ * Date SQL "AAAA-MM-JJ" → Date à minuit UTC, formatée ensuite en UTC : le jour affiché
+ * est toujours celui de la base, quel que soit le fuseau du serveur ou du navigateur.
+ */
 function dateSql(d: string): Date {
   const [a, m, j] = d.slice(0, 10).split("-").map(Number);
-  return new Date(a, m - 1, j);
+  return new Date(Date.UTC(a, m - 1, j));
+}
+
+/** Date SQL (jour seul) ou horodatage ISO → Date + fuseau d'affichage. */
+function dateEtFuseau(d: string): { date: Date; timeZone: string } {
+  return d.length === 10 ? { date: dateSql(d), timeZone: "UTC" } : { date: new Date(d), timeZone: "Europe/Paris" };
 }
 
 /** "2026-10-05" ou ISO → « 05/10/2026 ». */
 export function formatDate(d: string | null | undefined): string {
   if (!d) return "—";
-  const date = d.length === 10 ? dateSql(d) : new Date(d);
-  return date.toLocaleDateString("fr-FR", { timeZone: "Europe/Paris" });
+  const { date, timeZone } = dateEtFuseau(d);
+  return date.toLocaleDateString("fr-FR", { timeZone });
 }
 
-/** "2026-10-05" → « 5 octobre 2026 ». */
+/** "2026-10-05" → « 5 octobre 2026 » ; "2026-10-01" → « 1er octobre 2026 ». */
 export function formatDateLongue(d: string | null | undefined): string {
   if (!d) return "—";
-  const date = d.length === 10 ? dateSql(d) : new Date(d);
-  return date.toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric", timeZone: "Europe/Paris" });
+  const { date, timeZone } = dateEtFuseau(d);
+  return date
+    .toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric", timeZone })
+    .replace(/^1 /, "1er ");
+}
+
+/** Jour du mois à la française : 1 → « 1er », 15 → « 15 ». */
+export function jourDuMois(jour: number): string {
+  return jour === 1 ? "1er" : String(jour);
 }
 
 /** Horodatage → « 05/10/2026 à 14:32 ». */
@@ -91,6 +106,19 @@ export function premierDuMois(dateIso: string = aujourdhuiParis(), decalage = 0)
   const [a, m] = dateIso.split("-").map(Number);
   const d = new Date(Date.UTC(a, m - 1 + decalage, 1));
   return d.toISOString().slice(0, 10);
+}
+
+/** « Académie Delaveau » → « Delaveau » (pastilles, sélecteurs, colonnes étroites). */
+export function nomCourtAcademie(nom: string): string {
+  return nom.replace(/^Académie\s+/i, "");
+}
+
+/**
+ * Nom d'académie précédé de l'article élidé quand il commence par une voyelle ou un h :
+ * « Académie Espoir » → « l'Académie Espoir » ; un autre nom est cité entre guillemets.
+ */
+export function avecArticle(nom: string): string {
+  return /^[aeiouyhàâäéèêëîïôöùûüœ]/i.test(nom) ? `l'${nom}` : `«\u00a0${nom}\u00a0»`;
 }
 
 /** Nom affiché d'un client : raison sociale pour un professionnel, « Prénom Nom » sinon. */

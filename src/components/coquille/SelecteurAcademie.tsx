@@ -2,13 +2,9 @@
 
 import { useId, useOptimistic, useTransition } from "react";
 import { choisirAcademie } from "@/app/actions-academie";
+import { nomCourtAcademie } from "@/lib/format";
 
 type Option = { id: string | null; court: string; nom: string; couleur: string | null };
-
-/** « Académie Delaveau » → « Delaveau » (comme AcademieBadge). */
-function nomCourt(nom: string): string {
-  return nom.replace(/^Académie\s+/i, "");
-}
 
 /**
  * Filtre d'académie « Toutes / Delaveau / Espoir » : limite les listes et le tableau
@@ -30,7 +26,7 @@ export function SelecteurAcademie({
 
   const options: Option[] = [
     { id: null, court: "Toutes", nom: "Toutes les académies", couleur: null },
-    ...academies.map((a) => ({ id: a.id, court: nomCourt(a.nom), nom: a.nom, couleur: a.couleur })),
+    ...academies.map((a) => ({ id: a.id, court: nomCourtAcademie(a.nom), nom: a.nom, couleur: a.couleur })),
   ];
 
   function choisir(id: string | null) {

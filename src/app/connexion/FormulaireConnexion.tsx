@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState, useState } from "react";
-import { IconeOeil, IconeOeilBarre } from "@/components/coquille/Icones";
+import { IconeOeil, IconeOeilBarre } from "@/components/Icones";
 import type { ResultatAction } from "@/lib/types";
 import { seConnecter } from "./actions";
 

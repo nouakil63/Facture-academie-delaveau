@@ -2,14 +2,14 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { AcademieBadge } from "@/components/AcademieBadge";
 import { FiltresFactures } from "@/components/factures/FiltresFactures";
-import { IconeCalendrier, IconeFacture, IconePlus } from "@/components/factures/Icones";
+import { IconeCalendrier, IconeFacture, IconePlus } from "@/components/Icones";
 import { ListeFactures, type FactureListe } from "@/components/factures/ListeFactures";
 import { estFiltreStatut, FILTRES_STATUT, moisVersPeriode, pluriel } from "@/components/factures/outils";
 import { academieSelectionnee } from "@/lib/academie-selectionnee";
 import { exigerUtilisateur } from "@/lib/auth";
 import { emailConfigure } from "@/lib/email";
 import { chargerAcademies } from "@/lib/facturation/service";
-import { formatPeriode } from "@/lib/format";
+import { avecArticle, formatPeriode } from "@/lib/format";
 import type { Academie } from "@/lib/types";
 
 export const metadata: Metadata = { title: "Factures" };
@@ -204,10 +204,6 @@ export default async function PageFactures(props: PageProps<"/factures">) {
 }
 
 /** « Académie Espoir » → « l'Académie Espoir » ; autre nom → « « Nom » ». */
-function avecArticle(nom: string): string {
-  return /^académie\b/i.test(nom) ? `l'${nom}` : `« ${nom} »`;
-}
-
 function ErreurChargement({ message }: { message: string }) {
   return (
     <div className="space-y-6">

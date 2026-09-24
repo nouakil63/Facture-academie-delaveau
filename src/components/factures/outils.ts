@@ -49,11 +49,6 @@ export function periodeVersMois(periode: string | null | undefined): string {
 /** Valeur du paramètre d'URL `academie` pour « toutes les académies ». */
 export const ACADEMIE_TOUTES = "toutes";
 
-/** « Académie Delaveau » → « Delaveau » (comme AcademieBadge). */
-export function nomCourtAcademie(nom: string): string {
-  return nom.replace(/^Académie\s+/i, "");
-}
-
 // -----------------------------------------------------------------------------
 // Lignes
 // -----------------------------------------------------------------------------

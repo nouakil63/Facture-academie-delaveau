@@ -1,12 +1,12 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { AcademieBadge } from "@/components/AcademieBadge";
-import { IconeAlerte, IconePlus, IconeUtilisateurs } from "@/components/clients/Icones";
+import { IconeAlerte, IconePlus, IconeUtilisateurs } from "@/components/Icones";
 import { RechercheClients } from "@/components/clients/RechercheClients";
 import { academieSelectionnee } from "@/lib/academie-selectionnee";
 import { exigerUtilisateur } from "@/lib/auth";
 import { chargerAcademies } from "@/lib/facturation/service";
-import { formatEuros, formatPeriode, nomClient, premierDuMois } from "@/lib/format";
+import { avecArticle, formatEuros, formatPeriode, nomClient, premierDuMois } from "@/lib/format";
 import { CHAMPS_TARIF_POUR_CALCUL, mensuelEstime, type TarifPourCalcul } from "@/lib/tarifs";
 import type { Academie, Client } from "@/lib/types";
 
@@ -251,10 +251,6 @@ export default async function PageClients(props: PageProps<"/clients">) {
 }
 
 /** « Académie Espoir » → « l'Académie Espoir » ; un autre nom est cité entre guillemets. */
-function avecArticle(nom: string): string {
-  return /^académie\b/i.test(nom) ? `l'${nom}` : `« ${nom} »`;
-}
-
 function ErreurChargement({ message }: { message: string }) {
   return (
     <div className="space-y-6">

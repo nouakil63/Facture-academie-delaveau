@@ -3,13 +3,12 @@ import Link from "next/link";
 import { AcademieBadge } from "@/components/AcademieBadge";
 import { StatutBadge } from "@/components/StatutBadge";
 import { BoutonGenerer, EnvoiBrouillons } from "@/components/factures/ActionsMensuelles";
-import { IconeAlerte, IconeCalendrier, IconeReglages } from "@/components/factures/Icones";
+import { IconeAlerte, IconeCalendrier, IconeParametres } from "@/components/Icones";
 import {
   ACADEMIE_TOUTES,
   libelleNumero,
   moisVersPeriode,
   nomClientFacture,
-  nomCourtAcademie,
   periodeVersMois,
   pluriel,
 } from "@/components/factures/outils";
@@ -24,7 +23,7 @@ import {
   genererBrouillonsMensuels,
   periodeAFacturer,
 } from "@/lib/facturation/service";
-import { formatEuros, formatPeriode, nomClient, LIBELLES_STATUT } from "@/lib/format";
+import { avecArticle, formatEuros, formatPeriode, nomClient, nomCourtAcademie, LIBELLES_STATUT } from "@/lib/format";
 import type { Academie, Client, FactureVue, Parametres, ResultatGeneration, StatutFacture } from "@/lib/types";
 
 export const metadata: Metadata = { title: "Facturation mensuelle" };
@@ -200,7 +199,7 @@ export default async function PageFacturationMensuelle(props: PageProps<"/factur
         />
         <div className="flex flex-col gap-2 rounded-lg bg-page px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-start gap-2 text-muted">
-            <IconeReglages className="mt-0.5 size-4 shrink-0 text-brand" />
+            <IconeParametres className="mt-0.5 size-4 shrink-0 text-brand" />
             <p>
               <span className="font-medium text-ink">Automatisation</span> (toutes académies) :{" "}
               {parametres.generation_auto ? (
@@ -582,10 +581,6 @@ function EnTete() {
 }
 
 /** « Académie Espoir » → « l'Académie Espoir » ; autre nom → « « Nom » ». */
-function avecArticle(nom: string): string {
-  return /^académie\b/i.test(nom) ? `l'${nom}` : `« ${nom} »`;
-}
-
 function SansEmail() {
   return (
     <span className="mt-0.5 flex items-center gap-1 text-xs font-medium text-amber-700" title="Facture non envoyable par e-mail">

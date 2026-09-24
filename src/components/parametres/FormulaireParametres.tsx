@@ -3,9 +3,9 @@
 import Image from "next/image";
 import { startTransition, useActionState, useEffect, useRef, useState } from "react";
 import { enregistrerParametres } from "@/app/(app)/parametres/actions";
-import { formatDate, formatDateLongue, formatPeriode, premierDuMois } from "@/lib/format";
+import { formatDate, formatDateLongue, formatPeriode, nomCourtAcademie, premierDuMois } from "@/lib/format";
 import type { Academie, MoisFacture, Parametres, ResultatAction } from "@/lib/types";
-import { IconeAlerte, IconeCadenas, IconeCoche, IconeInfo } from "@/components/prestations/Icones";
+import { IconeAlerte, IconeCadenas, IconeCoche, IconeInfo } from "@/components/Icones";
 import { ChampCouleur, Champ, ChampControle, contrasteAvecBlanc, Obligatoire, Section, ZoneTexte } from "./Champs";
 import {
   bicValide,
@@ -681,10 +681,6 @@ function prochaineGeneration(aujourdhui: string, jour: number): string {
 }
 
 /** « 1 octobre 2026 » → « 1er octobre 2026 ». */
-function dateLongue(d: string): string {
-  return formatDateLongue(d).replace(/^1 /, "1er ");
-}
-
 function SectionMensuelle({ parametres, aujourdhui, smtpConfigure, nbClientsSansEmail }: Contexte) {
   const [objet, setObjet] = useState(parametres.objet_facture_mensuelle);
   const [jour, setJour] = useState(String(parametres.jour_generation));
@@ -849,7 +845,7 @@ function SectionMensuelle({ parametres, aujourdhui, smtpConfigure, nbClientsSans
           <p className="flex items-start gap-2 text-sm text-muted">
             <IconeInfo className="mt-0.5 size-4 shrink-0 text-brand" />
             <span>
-              Prochaine génération : <span className="font-medium text-ink">{dateLongue(dateGeneration)}</span>, pour{" "}
+              Prochaine génération : <span className="font-medium text-ink">{formatDateLongue(dateGeneration)}</span>, pour{" "}
               {formatPeriode(periode)}
               {envoiAuto ? ", avec envoi immédiat." : "."}
             </span>
@@ -996,7 +992,7 @@ function SectionEmails({ parametres, aujourdhui, prochainNumero, academies, onMo
                       : "border-line text-muted hover:bg-page hover:text-ink"
                   }`}
                 >
-                  {x.nom.replace(/^Académie\s+/i, "")}
+                  {nomCourtAcademie(x.nom)}
                 </button>
               ))}
             </div>

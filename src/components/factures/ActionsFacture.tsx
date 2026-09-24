@@ -20,12 +20,12 @@ import {
   IconeAnnuler,
   IconeCopie,
   IconeCorbeille,
-  IconeCroix,
+  IconeFermer,
   IconeEnvoi,
   IconeEuro,
   IconeFacture,
   IconeValide,
-} from "./Icones";
+} from "@/components/Icones";
 
 type ModaleOuverte =
   | "emettre-envoyer"
@@ -127,7 +127,7 @@ export function ActionsFacture({
             <span className="whitespace-pre-line">{message}</span>
           </span>
           <button type="button" onClick={() => setMessage(null)} aria-label="Masquer le message" className="text-emerald-700">
-            <IconeCroix className="size-4" />
+            <IconeFermer className="size-4" />
           </button>
         </div>
       )}

@@ -14,8 +14,8 @@ import {
   type TarifAvecPrestation,
 } from "@/lib/tarifs";
 import { FormulaireTarif } from "./FormulaireTarif";
-import { IconeCorbeille, IconeCrayon, IconeFlecheBas, IconeFlecheHaut, IconePlus } from "./Icones";
-import { Modale, ModaleConfirmation } from "./Modale";
+import { IconeCorbeille, IconeCrayon, IconeFlecheBas, IconeFlecheHaut, IconePlus } from "@/components/Icones";
+import { Modale, ModaleConfirmation } from "@/components/Modale";
 
 /** Section « Tarifs appliqués » de la fiche client. */
 export function TarifsClient({
@@ -267,7 +267,7 @@ export function TarifsClient({
         libelleConfirmer="Supprimer la ligne"
         danger
         onConfirmer={() => (aSupprimer ? supprimerTarif(aSupprimer.id) : Promise.resolve(undefined))}
-        onSucces={(texte) => texte && setMessage({ ok: true, texte })}
+        onSucces={(r) => r.message && setMessage({ ok: true, texte: r.message })}
       >
         <p>
           La ligne <strong>{aSupprimer ? decrireLigne(aSupprimer, periode).libelle : ""}</strong> ne sera plus
