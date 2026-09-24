@@ -3,23 +3,23 @@
 import Link from "next/link";
 import { startTransition, useActionState, useId, useState } from "react";
 import { creerFacture } from "@/app/(app)/factures/actions";
-import { EntiteBadge } from "@/components/EntiteBadge";
+import { AcademieBadge } from "@/components/AcademieBadge";
 import { centimesVersSaisie, formatEuros, parseEurosEnCentimes } from "@/lib/format";
+import { parseQuantite, quantiteVersSaisie, totalLigneCentimes } from "@/lib/tarifs";
 import type { ResultatAction } from "@/lib/types";
 import { IconeAlerte, IconeCorbeille, IconePlus } from "./Icones";
-import { parseQuantite, quantiteVersSaisie, totalLigneCentimes, type LigneSaisie } from "./outils";
+import type { LigneSaisie } from "./outils";
 
-export interface EntiteFormulaire {
+/** Académie de rattachement des clients proposés (regroupement et pastille). */
+export interface AcademieFormulaire {
   id: string;
   nom: string;
-  couleur_primaire: string;
-  taux_tva: number;
-  mention_tva: string | null;
+  couleur: string;
 }
 
 export interface ClientFormulaire {
   id: string;
-  entite_id: string;
+  academie_id: string;
   nom: string;
   cavaliers: string | null;
   aDesDestinataires: boolean;
@@ -71,19 +71,26 @@ function totalSaisie(l: LigneSaisie): number | null {
 /**
  * Création d'une facture brouillon : client, objet, période, notes, lignes
  * pré-remplies depuis les tarifs du client (modifiables, supprimables) +
- * ajout depuis le catalogue de l'entité ou ligne libre.
+ * ajout depuis le catalogue commun ou ligne libre. L'académie de la facture est
+ * celle du client (renseignée par la base) ; la TVA est celle des paramètres.
  */
 export function FormulaireNouvelleFacture({
-  entites,
+  academies,
   clients,
   lignesParClient,
-  prestationsParEntite,
+  catalogue,
+  tauxTva,
+  mentionTva,
   clientInitial,
 }: {
-  entites: EntiteFormulaire[];
+  academies: AcademieFormulaire[];
   clients: ClientFormulaire[];
   lignesParClient: Record<string, LigneInitiale[]>;
-  prestationsParEntite: Record<string, PrestationFormulaire[]>;
+  /** Prestations actives du catalogue (commun aux académies). */
+  catalogue: PrestationFormulaire[];
+  /** Taux de TVA des paramètres (aperçu ; la base applique le même). */
+  tauxTva: number;
+  mentionTva: string | null;
   clientInitial: string | null;
 }) {
   const [etat, envoyer, enCours] = useActionState<ResultatAction | null, FormData>(creerFacture, null);
@@ -101,14 +108,13 @@ export function FormulaireNouvelleFacture({
   const [tentative, setTentative] = useState(false);
 
   const client = clients.find((c) => c.id === clientId) ?? null;
-  const entite = client ? (entites.find((e) => e.id === client.entite_id) ?? null) : null;
-  const catalogue = client ? (prestationsParEntite[client.entite_id] ?? []) : [];
-  const plusieursEntites = new Set(clients.map((c) => c.entite_id)).size > 1;
+  const academie = client ? (academies.find((a) => a.id === client.academie_id) ?? null) : null;
+  const plusieursAcademies = new Set(clients.map((c) => c.academie_id)).size > 1;
 
   const totaux = lignes.map(totalSaisie);
   const lignesInvalides = lignes.filter((l, i) => l.libelle.trim() === "" || totaux[i] == null).length;
   const totalHt = totaux.reduce<number>((s, t) => s + (t ?? 0), 0);
-  const taux = entite ? Number(entite.taux_tva) : 0;
+  const taux = Number(tauxTva) || 0;
   const tva = Math.round((totalHt * taux) / 100);
 
   function choisirClient(nouveau: string) {
@@ -172,9 +178,9 @@ export function FormulaireNouvelleFacture({
     startTransition(() => envoyer(donnees));
   }
 
-  // Clients regroupés par entité pour la liste déroulante.
-  const groupes = entites
-    .map((e) => ({ entite: e, clients: clients.filter((c) => c.entite_id === e.id) }))
+  // Clients regroupés par académie pour la liste déroulante.
+  const groupes = academies
+    .map((a) => ({ academie: a, clients: clients.filter((c) => c.academie_id === a.id) }))
     .filter((g) => g.clients.length > 0);
 
   return (
@@ -200,9 +206,9 @@ export function FormulaireNouvelleFacture({
             <option value="" disabled>
               Choisir un client…
             </option>
-            {plusieursEntites
+            {plusieursAcademies
               ? groupes.map((g) => (
-                  <optgroup key={g.entite.id} label={g.entite.nom}>
+                  <optgroup key={g.academie.id} label={g.academie.nom}>
                     {g.clients.map((c) => (
                       <option key={c.id} value={c.id}>
                         {c.nom}
@@ -221,10 +227,10 @@ export function FormulaireNouvelleFacture({
                 ))}
           </select>
           {tentative && !client && <p className="mt-1 text-xs text-red-700">Choisissez le client à facturer.</p>}
-          {client && entite && (
+          {client && academie && (
             <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted">
-              <span>Facturé par</span>
-              <EntiteBadge nom={entite.nom} couleur={entite.couleur_primaire} />
+              <span>Académie</span>
+              <AcademieBadge nom={academie.nom} couleur={academie.couleur} />
               <Link href={`/clients/${client.id}`} className="btn-lien text-xs">
                 Voir la fiche client
               </Link>
@@ -442,7 +448,7 @@ export function FormulaireNouvelleFacture({
               </div>
             ) : (
               <p className="flex-1 text-xs text-muted">
-                Le catalogue de {entite?.nom ?? "cette entité"} est vide.{" "}
+                Le catalogue ne contient aucune prestation active.{" "}
                 <Link href="/prestations" className="btn-lien text-xs">
                   Gérer les prestations
                 </Link>
@@ -467,7 +473,7 @@ export function FormulaireNouvelleFacture({
                 <dd className="tabular-nums">{formatEuros(tva)}</dd>
               </div>
             ) : (
-              entite?.mention_tva && <p className="text-xs text-muted">{entite.mention_tva}</p>
+              mentionTva && <p className="text-xs text-muted">{mentionTva}</p>
             )}
             <div className="flex justify-between border-t border-line pt-2 text-base font-semibold">
               <dt>Total TTC</dt>

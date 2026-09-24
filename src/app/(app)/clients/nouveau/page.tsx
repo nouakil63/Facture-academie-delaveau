@@ -2,20 +2,26 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { FormulaireClient } from "@/components/clients/FormulaireClient";
 import { IconeRetour } from "@/components/clients/Icones";
+import { academieSelectionnee } from "@/lib/academie-selectionnee";
 import { exigerUtilisateur } from "@/lib/auth";
-import { entiteSelectionnee } from "@/lib/entite-selectionnee";
-import type { Entite } from "@/lib/types";
+import { chargerAcademies } from "@/lib/facturation/service";
+import type { Academie } from "@/lib/types";
 
 export const metadata: Metadata = { title: "Nouveau client" };
 
 export default async function PageNouveauClient() {
   const { supabase } = await exigerUtilisateur();
-  const [selection, resEntites] = await Promise.all([
-    entiteSelectionnee(),
-    supabase.from("entites").select("id, nom").eq("actif", true).order("ordre"),
-  ]);
-  const entites = (resEntites.data ?? []) as Pick<Entite, "id" | "nom">[];
-  const entiteParDefaut = entites.some((e) => e.id === selection) ? selection : (entites[0]?.id ?? null);
+
+  let academies: Academie[] = [];
+  let selection: string | null = null;
+  let erreur: string | null = null;
+  try {
+    [academies, selection] = await Promise.all([chargerAcademies(supabase, true), academieSelectionnee()]);
+  } catch (e) {
+    erreur = e instanceof Error ? e.message : String(e);
+  }
+  // Par défaut : l'académie affichée dans le filtre, sinon la première.
+  const academieParDefaut = academies.some((a) => a.id === selection) ? selection : (academies[0]?.id ?? null);
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
@@ -30,13 +36,13 @@ export default async function PageNouveauClient() {
         </p>
       </div>
 
-      {resEntites.error ? (
+      {erreur ? (
         <p role="alert" className="erreur">
-          Impossible de charger les entités : {resEntites.error.message}
+          Impossible de charger les académies : {erreur}
         </p>
-      ) : entites.length === 0 ? (
+      ) : academies.length === 0 ? (
         <p className="avertissement">
-          Aucune entité active : activez l&apos;Académie Delaveau ou l&apos;Académie Espoir dans{" "}
+          Aucune académie active : activez l&apos;Académie Delaveau ou l&apos;Académie Espoir dans{" "}
           <Link href="/parametres" className="font-medium underline">
             Paramètres
           </Link>{" "}
@@ -44,7 +50,7 @@ export default async function PageNouveauClient() {
         </p>
       ) : (
         <div className="carte carte-corps sm:p-6">
-          <FormulaireClient entites={entites} entiteParDefaut={entiteParDefaut} />
+          <FormulaireClient academies={academies} academieParDefaut={academieParDefaut} />
         </div>
       )}
     </div>

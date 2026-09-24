@@ -2,20 +2,20 @@
 
 import { useState, useTransition } from "react";
 import { envoyerBrouillonsMensuels, genererBrouillons } from "@/app/(app)/facturation-mensuelle/actions";
+import { ModaleConfirmation } from "@/components/Modale";
 import { formatEuros } from "@/lib/format";
 import { IconeAlerte, IconeEnvoi, IconePlus, IconeValide } from "./Icones";
-import { ModaleConfirmation } from "./Modale";
 import { pluriel, type ResultatEnvoiFacture } from "./outils";
 import { ResultatsEnvoi } from "./ResultatsEnvoi";
 
-/** Étape 1 : création des brouillons du mois. */
+/** Étape 1 : création des brouillons du mois (une académie, ou toutes si `academieId` est null). */
 export function BoutonGenerer({
-  entiteId,
+  academieId,
   mois,
   nombre,
   libelleMois,
 }: {
-  entiteId: string;
+  academieId: string | null;
   mois: string;
   nombre: number;
   libelleMois: string;
@@ -27,7 +27,7 @@ export function BoutonGenerer({
     setRetour(null);
     demarrer(async () => {
       try {
-        const r = await genererBrouillons(entiteId, mois);
+        const r = await genererBrouillons(academieId, mois);
         setRetour(r.ok ? { ok: true, texte: r.message ?? "Brouillons créés." } : { ok: false, texte: r.erreur });
       } catch {
         setRetour({ ok: false, texte: "La requête n'a pas abouti. Vérifiez la connexion puis réessayez." });
@@ -62,19 +62,19 @@ export function BoutonGenerer({
   );
 }
 
-/** Étape 2 : émission et envoi groupé des brouillons du mois. */
+/** Étape 2 : émission et envoi groupé des brouillons du mois (une académie, ou toutes). */
 export function EnvoiBrouillons({
-  entiteId,
+  academieId,
   mois,
   libelleMois,
   brouillons,
   nbSansEmail,
 }: {
-  entiteId: string;
+  academieId: string | null;
   mois: string;
   libelleMois: string;
   /** Brouillons envoyables (client avec au moins une adresse e-mail). */
-  brouillons: { id: string; client: string; totalTtc: number }[];
+  brouillons: { id: string; client: string; academie: string | null; totalTtc: number }[];
   nbSansEmail: number;
 }) {
   const [confirmation, setConfirmation] = useState(false);
@@ -129,7 +129,7 @@ export function EnvoiBrouillons({
         desactiver={n === 0}
         onConfirmer={() =>
           envoyerBrouillonsMensuels(
-            entiteId,
+            academieId,
             mois,
             brouillons.map((b) => b.id),
           )
@@ -146,7 +146,10 @@ export function EnvoiBrouillons({
         <ul className="max-h-48 divide-y divide-line overflow-y-auto rounded-lg border border-line">
           {brouillons.map((b) => (
             <li key={b.id} className="flex justify-between gap-3 px-3 py-1.5 text-xs">
-              <span className="truncate">{b.client}</span>
+              <span className="truncate">
+                {b.client}
+                {b.academie && <span className="text-muted"> · {b.academie}</span>}
+              </span>
               <span className="shrink-0 tabular-nums">{formatEuros(b.totalTtc)}</span>
             </li>
           ))}

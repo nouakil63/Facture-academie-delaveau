@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { AcademieBadge } from "@/components/AcademieBadge";
 import { StatutBadge } from "@/components/StatutBadge";
 import { formatDate, formatEuros, formatPeriode } from "@/lib/format";
 import type { FactureVue } from "@/lib/types";
@@ -16,10 +17,26 @@ export type FactureDuClient = Pick<
   | "total_ttc_centimes"
   | "en_retard"
   | "created_at"
+  | "academie_id"
+  | "academie_nom"
+  | "academie_couleur"
 >;
 
-/** Section « Factures » de la fiche client (composant serveur). */
-export function FacturesClient({ clientId, factures }: { clientId: string; factures: FactureDuClient[] }) {
+/**
+ * Section « Factures » de la fiche client (composant serveur).
+ * Une facture émise garde l'académie d'origine : si le client a changé d'académie depuis,
+ * l'académie de la facture est signalée par une pastille.
+ */
+export function FacturesClient({
+  clientId,
+  academieId,
+  factures,
+}: {
+  clientId: string;
+  /** Académie actuelle du client. */
+  academieId: string;
+  factures: FactureDuClient[];
+}) {
   const lienNouvelle = `/factures/nouvelle?client=${clientId}`;
 
   return (
@@ -76,6 +93,7 @@ export function FacturesClient({ clientId, factures }: { clientId: string; factu
                       <Link href={`/factures/${f.id}`} className="font-medium text-brand hover:underline">
                         {f.numero ?? <span className="italic">Brouillon</span>}
                       </Link>
+                      <AcademieDifferente facture={f} academieId={academieId} />
                     </td>
                     <td className="max-w-72">
                       <div className="truncate">{f.objet ?? "—"}</div>
@@ -113,7 +131,10 @@ export function FacturesClient({ clientId, factures }: { clientId: string; factu
               <li key={f.id}>
                 <Link href={`/factures/${f.id}`} className="flex items-start justify-between gap-3 px-5 py-3 hover:bg-page">
                   <div className="min-w-0">
-                    <div className="font-medium text-brand">{f.numero ?? <span className="italic">Brouillon</span>}</div>
+                    <div className="font-medium text-brand">
+                      {f.numero ?? <span className="italic">Brouillon</span>}
+                      <AcademieDifferente facture={f} academieId={academieId} />
+                    </div>
                     <div className="truncate text-sm text-muted">
                       {f.objet ?? "—"}
                       {f.date_emission ? ` · ${formatDate(f.date_emission)}` : ""}
@@ -130,5 +151,15 @@ export function FacturesClient({ clientId, factures }: { clientId: string; factu
         </>
       )}
     </section>
+  );
+}
+
+/** Pastille de l'académie de la facture, seulement si elle diffère de l'académie actuelle du client. */
+function AcademieDifferente({ facture, academieId }: { facture: FactureDuClient; academieId: string }) {
+  if (facture.academie_id === academieId) return null;
+  return (
+    <span className="ml-2 align-middle" title="Académie de la facture (le client a changé d'académie depuis)">
+      <AcademieBadge nom={facture.academie_nom} couleur={facture.academie_couleur} />
+    </span>
   );
 }

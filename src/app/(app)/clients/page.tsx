@@ -1,18 +1,18 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { EntiteBadge } from "@/components/EntiteBadge";
+import { AcademieBadge } from "@/components/AcademieBadge";
 import { IconeAlerte, IconePlus, IconeUtilisateurs } from "@/components/clients/Icones";
 import { RechercheClients } from "@/components/clients/RechercheClients";
-import { mensuelEstime, type TarifPourCalcul } from "@/components/clients/tarifs";
+import { academieSelectionnee } from "@/lib/academie-selectionnee";
 import { exigerUtilisateur } from "@/lib/auth";
-import { entiteSelectionnee } from "@/lib/entite-selectionnee";
+import { chargerAcademies } from "@/lib/facturation/service";
 import { formatEuros, formatPeriode, nomClient, premierDuMois } from "@/lib/format";
-import type { Client, Entite } from "@/lib/types";
+import { CHAMPS_TARIF_POUR_CALCUL, mensuelEstime, type TarifPourCalcul } from "@/lib/tarifs";
+import type { Academie, Client } from "@/lib/types";
 
 export const metadata: Metadata = { title: "Clients" };
 
 type ClientListe = Client & { tarifs: TarifPourCalcul[] };
-type EntiteListe = Pick<Entite, "id" | "nom" | "couleur_primaire">;
 
 /**
  * Filtre PostgREST `or=(…)` : recherche insensible à la casse sur plusieurs colonnes.
@@ -31,36 +31,27 @@ export default async function PageClients(props: PageProps<"/clients">) {
   const parametres = await props.searchParams;
   const q = (typeof parametres.q === "string" ? parametres.q : "").trim().slice(0, 100);
   const archives = parametres.archives === "1";
-  const entiteId = await entiteSelectionnee();
   const periode = premierDuMois();
 
-  let requete = supabase
-    .from("clients")
-    .select(
-      "*, tarifs:tarifs_clients(prix_unitaire_centimes, quantite, recurrent, actif, date_debut, date_fin, prestation:prestations(prix_unitaire_centimes))",
-    );
-  if (entiteId) requete = requete.eq("entite_id", entiteId);
+  let academies: Academie[];
+  let selection: string | null;
+  try {
+    [academies, selection] = await Promise.all([chargerAcademies(supabase), academieSelectionnee()]);
+  } catch (e) {
+    return <ErreurChargement message={e instanceof Error ? e.message : String(e)} />;
+  }
+  // Filtre de la coquille (cookie) : ignoré s'il désigne une académie inconnue ou désactivée.
+  const academieFiltree = academies.find((a) => a.id === selection && a.actif);
+  const academiesParId = new Map(academies.map((a) => [a.id, a]));
+
+  let requete = supabase.from("clients").select(`*, tarifs:tarifs_clients(${CHAMPS_TARIF_POUR_CALCUL})`);
+  if (academieFiltree) requete = requete.eq("academie_id", academieFiltree.id);
   if (!archives) requete = requete.eq("actif", true);
   if (q) requete = requete.or(filtreRecherche(q));
 
-  const [resClients, resEntites] = await Promise.all([
-    requete.order("nom").order("prenom"),
-    supabase.from("entites").select("id, nom, couleur_primaire").order("ordre"),
-  ]);
+  const resClients = await requete.order("nom").order("prenom");
+  if (resClients.error) return <ErreurChargement message={resClients.error.message} />;
 
-  if (resClients.error || resEntites.error) {
-    return (
-      <div className="space-y-6">
-        <h1 className="titre-page">Clients</h1>
-        <p role="alert" className="erreur">
-          Impossible de charger les clients : {(resClients.error ?? resEntites.error)?.message}
-        </p>
-      </div>
-    );
-  }
-
-  const entites = new Map((resEntites.data as EntiteListe[]).map((e) => [e.id, e]));
-  const entiteFiltree = entiteId ? entites.get(entiteId) : undefined;
   const clients = (resClients.data as ClientListe[])
     .map((c) => ({ ...c, nomAffiche: nomClient(c), mensuel: c.actif ? mensuelEstime(c.tarifs ?? [], periode) : null }))
     .sort((a, b) => a.nomAffiche.localeCompare(b.nomAffiche, "fr", { sensitivity: "base" }));
@@ -73,7 +64,7 @@ export default async function PageClients(props: PageProps<"/clients">) {
   const pluriel = (n: number) => (n > 1 ? "s" : "");
   const resume =
     [
-      entiteFiltree ? entiteFiltree.nom : "Toutes les entités",
+      academieFiltree ? academieFiltree.nom : "Toutes les académies",
       `${nbActifs} client${pluriel(nbActifs)} actif${pluriel(nbActifs)}` +
         (nbArchives > 0 ? `, ${nbArchives} archivé${pluriel(nbArchives)}` : ""),
     ].join(" · ") + (q ? ` correspondant à « ${q} »` : "");
@@ -114,7 +105,7 @@ export default async function PageClients(props: PageProps<"/clients">) {
               <p className="mt-4 font-medium text-ink">Aucun client ne correspond à « {q} »</p>
               <p className="mt-1 text-sm text-muted">
                 Vérifiez l&apos;orthographe ou cherchez par cavalier, e-mail ou raison sociale.
-                {entiteFiltree ? ` La recherche est limitée à ${entiteFiltree.nom}.` : ""}
+                {academieFiltree ? ` La recherche est limitée à ${avecArticle(academieFiltree.nom)}.` : ""}
               </p>
               <Link href={archives ? "/clients?archives=1" : "/clients"} className="btn-secondaire mt-5">
                 Effacer la recherche
@@ -123,7 +114,7 @@ export default async function PageClients(props: PageProps<"/clients">) {
           ) : (
             <>
               <p className="mt-4 font-medium text-ink">
-                {entiteFiltree ? `Aucun client pour ${entiteFiltree.nom}` : "Aucun client pour l'instant"}
+                {academieFiltree ? `Aucun client pour ${avecArticle(academieFiltree.nom)}` : "Aucun client pour l'instant"}
               </p>
               <p className="mt-1 max-w-md text-sm text-muted">
                 Créez la fiche de chaque payeur (parent, entreprise, sponsor), puis ajoutez-lui ses tarifs : la facture
@@ -145,7 +136,7 @@ export default async function PageClients(props: PageProps<"/clients">) {
                 <tr>
                   <th>Client</th>
                   <th>Cavalier(s)</th>
-                  <th>Entité</th>
+                  <th>Académie</th>
                   <th>E-mail</th>
                   <th className="text-right">
                     Mensuel estimé
@@ -156,7 +147,7 @@ export default async function PageClients(props: PageProps<"/clients">) {
               </thead>
               <tbody>
                 {clients.map((c) => {
-                  const entite = entites.get(c.entite_id);
+                  const academie = academiesParId.get(c.academie_id);
                   return (
                     <tr key={c.id} className={c.actif ? "" : "text-muted"}>
                       <td>
@@ -174,7 +165,7 @@ export default async function PageClients(props: PageProps<"/clients">) {
                       <td className="max-w-56">
                         <span className="line-clamp-2">{c.cavaliers ?? <span className="text-muted">—</span>}</span>
                       </td>
-                      <td>{entite && <EntiteBadge nom={entite.nom} couleur={entite.couleur_primaire} />}</td>
+                      <td>{academie && <AcademieBadge nom={academie.nom} couleur={academie.couleur} />}</td>
                       <td className="max-w-64">
                         {c.email ? (
                           <span className="block truncate" title={c.email}>
@@ -225,7 +216,7 @@ export default async function PageClients(props: PageProps<"/clients">) {
           {/* Mobile : liste */}
           <ul className="divide-y divide-line md:hidden">
             {clients.map((c) => {
-              const entite = entites.get(c.entite_id);
+              const academie = academiesParId.get(c.academie_id);
               return (
                 <li key={c.id}>
                   <Link href={`/clients/${c.id}`} className="block px-4 py-3 hover:bg-page">
@@ -240,7 +231,7 @@ export default async function PageClients(props: PageProps<"/clients">) {
                       </div>
                     </div>
                     <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
-                      {entite && <EntiteBadge nom={entite.nom} couleur={entite.couleur_primaire} />}
+                      {academie && <AcademieBadge nom={academie.nom} couleur={academie.couleur} />}
                       {!c.actif && <span className="badge bg-zinc-200 text-zinc-600">Archivé</span>}
                       {c.email ? <span className="truncate text-muted">{c.email}</span> : <SansEmail />}
                     </div>
@@ -255,6 +246,22 @@ export default async function PageClients(props: PageProps<"/clients">) {
           </ul>
         </div>
       )}
+    </div>
+  );
+}
+
+/** « Académie Espoir » → « l'Académie Espoir » ; un autre nom est cité entre guillemets. */
+function avecArticle(nom: string): string {
+  return /^académie\b/i.test(nom) ? `l'${nom}` : `« ${nom} »`;
+}
+
+function ErreurChargement({ message }: { message: string }) {
+  return (
+    <div className="space-y-6">
+      <h1 className="titre-page">Clients</h1>
+      <p role="alert" className="erreur">
+        Impossible de charger les clients : {message}
+      </p>
     </div>
   );
 }

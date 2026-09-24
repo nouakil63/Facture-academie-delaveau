@@ -5,7 +5,7 @@ import { IconeCoche } from "@/components/prestations/Icones";
 import { normaliserCouleur } from "./controles";
 
 /*
- * Briques du formulaire des paramètres d'une entité : sections, champs texte,
+ * Briques du formulaire des paramètres : sections, champs texte,
  * champs contrôlés (IBAN, SIREN…), sélecteur de couleur.
  */
 
@@ -135,9 +135,10 @@ export function ChampControle({
   classeConteneur,
   inputMode,
   messageValide,
+  classeChamp,
 }: {
   nom: string;
-  libelle: string;
+  libelle: React.ReactNode;
   defaut: string | null;
   /** Message d'erreur, ou null si la valeur est valide. */
   controle: (valeur: string) => string | null;
@@ -148,6 +149,8 @@ export function ChampControle({
   classeConteneur?: string;
   inputMode?: React.HTMLAttributes<HTMLInputElement>["inputMode"];
   messageValide?: string;
+  /** Classes supplémentaires du champ (ex. taille du texte). */
+  classeChamp?: string;
 }) {
   const [valeur, setValeur] = useState(defaut ?? "");
   const [verifie, setVerifie] = useState(false);
@@ -180,7 +183,9 @@ export function ChampControle({
           if (brute !== "" && !controle(brute)) setValeur(formater(brute));
           setVerifie(true);
         }}
-        className={`champ font-mono tracking-wide ${erreur ? "border-red-400 focus:border-red-500 focus:ring-red-500/20" : ""}`}
+        className={`champ font-mono tracking-wide ${classeChamp ?? ""} ${
+          erreur ? "border-red-400 focus:border-red-500 focus:ring-red-500/20" : ""
+        }`}
       />
       <p id={idAide} className="aide">
         {erreur ? (

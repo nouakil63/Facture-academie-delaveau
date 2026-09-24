@@ -37,13 +37,13 @@ const ERREUR_INATTENDUE: ResultatAction = {
   erreur: "L'opération n'a pas abouti. Vérifiez la connexion puis réessayez.",
 };
 
-type EtatFacture = Pick<Facture, "id" | "statut" | "numero" | "entite_id" | "client_id" | "envoyee_le">;
+type EtatFacture = Pick<Facture, "id" | "statut" | "numero" | "client_id" | "envoyee_le">;
 
 /** Statut actuel de la facture, ou un message d'erreur. */
 async function lireFacture(supabase: ClientSupabase, id: string): Promise<EtatFacture | string> {
   const { data, error } = await supabase
     .from("factures")
-    .select("id, statut, numero, entite_id, client_id, envoyee_le")
+    .select("id, statut, numero, client_id, envoyee_le")
     .eq("id", id)
     .maybeSingle();
   if (error) return traduireErreur(error);
@@ -150,15 +150,14 @@ export async function enregistrerLigne(_precedent: ResultatAction | null, formDa
     if (typeof facture === "string") return { ok: false, erreur: facture };
 
     if (ligne.prestation_id) {
-      const resPrestation = await supabase
-        .from("prestations")
-        .select("id")
-        .eq("id", ligne.prestation_id)
-        .eq("entite_id", facture.entite_id)
-        .maybeSingle();
+      // Catalogue commun : la prestation doit simplement exister encore.
+      const resPrestation = await supabase.from("prestations").select("id").eq("id", ligne.prestation_id).maybeSingle();
       if (resPrestation.error) return { ok: false, erreur: traduireErreur(resPrestation.error) };
       if (!resPrestation.data) {
-        return { ok: false, erreur: "Cette prestation n'appartient pas au catalogue de l'entité de la facture." };
+        return {
+          ok: false,
+          erreur: "Cette prestation a été supprimée du catalogue : choisissez-en une autre ou saisissez une ligne libre.",
+        };
       }
     }
 

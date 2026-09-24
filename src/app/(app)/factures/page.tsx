@@ -1,14 +1,16 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { AcademieBadge } from "@/components/AcademieBadge";
 import { FiltresFactures } from "@/components/factures/FiltresFactures";
 import { IconeCalendrier, IconeFacture, IconePlus } from "@/components/factures/Icones";
 import { ListeFactures, type FactureListe } from "@/components/factures/ListeFactures";
 import { estFiltreStatut, FILTRES_STATUT, moisVersPeriode, pluriel } from "@/components/factures/outils";
+import { academieSelectionnee } from "@/lib/academie-selectionnee";
 import { exigerUtilisateur } from "@/lib/auth";
 import { emailConfigure } from "@/lib/email";
-import { entiteSelectionnee } from "@/lib/entite-selectionnee";
+import { chargerAcademies } from "@/lib/facturation/service";
 import { formatPeriode } from "@/lib/format";
-import type { Entite } from "@/lib/types";
+import type { Academie } from "@/lib/types";
 
 export const metadata: Metadata = { title: "Factures" };
 
@@ -20,7 +22,7 @@ const LIMITE = 500;
 const COLONNES =
   "id, numero, statut, objet, periode, date_emission, date_echeance, total_ht_centimes, total_ttc_centimes, " +
   "en_retard, client_id, client_type, client_nom, client_prenom, client_raison_sociale, client_email, " +
-  "client_cavaliers, entite_nom, entite_couleur";
+  "client_cavaliers, academie_id, academie_nom, academie_couleur";
 
 const COLONNES_RECHERCHE = ["numero", "client_nom", "client_prenom", "client_raison_sociale", "client_cavaliers"];
 
@@ -48,16 +50,18 @@ export default async function PageFactures(props: PageProps<"/factures">) {
   const q = texte(parametres.q).slice(0, 100);
   const mots = q.split(/\s+/).filter(Boolean).slice(0, 5);
 
-  const [idCookie, resEntites] = await Promise.all([
-    entiteSelectionnee(),
-    supabase.from("entites").select("id, nom, actif").order("ordre").order("nom"),
-  ]);
-  if (resEntites.error) return <ErreurChargement message={resEntites.error.message} />;
-  const entites = resEntites.data as Pick<Entite, "id" | "nom" | "actif">[];
-  const entite = idCookie ? entites.find((e) => e.id === idCookie && e.actif) : undefined;
+  let academies: Academie[];
+  let idCookie: string | null;
+  try {
+    [academies, idCookie] = await Promise.all([chargerAcademies(supabase), academieSelectionnee()]);
+  } catch (e) {
+    return <ErreurChargement message={e instanceof Error ? e.message : String(e)} />;
+  }
+  // Filtre de la barre latérale (cookie) : ignoré s'il désigne une académie inconnue ou désactivée.
+  const academie = idCookie ? academies.find((a) => a.id === idCookie && a.actif) : undefined;
 
   let requete = supabase.from("factures_vue").select(COLONNES, { count: "exact" });
-  if (entite) requete = requete.eq("entite_id", entite.id);
+  if (academie) requete = requete.eq("academie_id", academie.id);
   if (statut === "en_retard") requete = requete.eq("en_retard", true);
   else if (statut) requete = requete.eq("statut", statut);
   if (periode) requete = requete.eq("periode", periode);
@@ -75,11 +79,12 @@ export default async function PageFactures(props: PageProps<"/factures">) {
   const total = resFactures.count ?? factures.length;
   const tronque = total > factures.length;
   const filtresActifs = Boolean(statut || mois || q);
-  const afficherEntite = !entite && entites.filter((e) => e.actif).length > 1;
+  // Colonne « Académie » utile seulement quand plusieurs académies sont mélangées.
+  const afficherAcademie = !academie && academies.length > 1;
 
   const libelleStatut = FILTRES_STATUT.find((f) => f.valeur === statut)?.libelle;
   const resume = [
-    entite ? entite.nom : "Toutes les entités",
+    academie ? null : "Toutes les académies",
     pluriel(total, "facture"),
     libelleStatut ? libelleStatut.toLowerCase() : null,
     periode ? formatPeriode(periode) : null,
@@ -101,7 +106,10 @@ export default async function PageFactures(props: PageProps<"/factures">) {
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="titre-page">Factures</h1>
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="titre-page">Factures</h1>
+            {academie && <AcademieBadge nom={academie.nom} couleur={academie.couleur} />}
+          </div>
           <p className="mt-1 text-sm text-muted">
             {resume}
             {q ? ` · « ${q} »` : ""}
@@ -158,8 +166,8 @@ export default async function PageFactures(props: PageProps<"/factures">) {
             <>
               <p className="mt-4 font-medium text-ink">Aucune facture ne correspond à ces filtres</p>
               <p className="mt-1 max-w-md text-sm text-muted">
-                {entite
-                  ? `La liste est limitée à ${entite.nom} : changez d'entité dans le menu pour voir les autres factures.`
+                {academie
+                  ? `La liste est limitée à ${avecArticle(academie.nom)} : choisissez « Toutes » dans le menu pour voir les factures des autres académies.`
                   : "Modifiez la recherche, le mois ou le statut."}
               </p>
               <Link href="/factures" className="btn-secondaire mt-5">
@@ -169,7 +177,7 @@ export default async function PageFactures(props: PageProps<"/factures">) {
           ) : (
             <>
               <p className="mt-4 font-medium text-ink">
-                {entite ? `Aucune facture pour ${entite.nom}` : "Aucune facture pour l'instant"}
+                {academie ? `Aucune facture pour ${avecArticle(academie.nom)}` : "Aucune facture pour l'instant"}
               </p>
               <p className="mt-1 max-w-md text-sm text-muted">
                 Générez les factures du mois à partir des tarifs de vos clients, ou créez une facture ponctuelle (stage,
@@ -189,10 +197,15 @@ export default async function PageFactures(props: PageProps<"/factures">) {
           )}
         </div>
       ) : (
-        <ListeFactures factures={factures} afficherEntite={afficherEntite} envoiPossible={emailConfigure()} />
+        <ListeFactures factures={factures} afficherAcademie={afficherAcademie} envoiPossible={emailConfigure()} />
       )}
     </div>
   );
+}
+
+/** « Académie Espoir » → « l'Académie Espoir » ; autre nom → « « Nom » ». */
+function avecArticle(nom: string): string {
+  return /^académie\b/i.test(nom) ? `l'${nom}` : `« ${nom} »`;
 }
 
 function ErreurChargement({ message }: { message: string }) {

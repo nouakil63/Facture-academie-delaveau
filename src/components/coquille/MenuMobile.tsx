@@ -7,9 +7,10 @@ import { IconeFermer, IconeMenu } from "./Icones";
 /**
  * Barre supérieure et menu repliable (écrans < lg).
  * Le menu se referme seul au changement de page : il n'est ouvert que pour le chemin
- * sur lequel on l'a ouvert.
+ * sur lequel on l'a ouvert. `indicateur` (facultatif) s'affiche à côté du bouton : le
+ * filtre d'académie actif, qui sinon ne serait visible qu'en ouvrant le menu.
  */
-export function MenuMobile({ logo, children }: { logo: ReactNode; children: ReactNode }) {
+export function MenuMobile({ logo, indicateur, children }: { logo: ReactNode; indicateur?: ReactNode; children: ReactNode }) {
   const chemin = usePathname();
   const [ouvertSur, setOuvertSur] = useState<string | null>(null);
   const ouvert = ouvertSur === chemin;
@@ -32,16 +33,19 @@ export function MenuMobile({ logo, children }: { logo: ReactNode; children: Reac
     <>
       <header className="sticky top-0 z-40 flex h-16 items-center justify-between border-b border-line bg-surface/95 px-4 backdrop-blur lg:hidden">
         {logo}
-        <button
-          type="button"
-          className="btn-secondaire px-2.5"
-          aria-expanded={ouvert}
-          aria-controls="menu-mobile"
-          onClick={() => setOuvertSur(ouvert ? null : chemin)}
-        >
-          {ouvert ? <IconeFermer /> : <IconeMenu />}
-          <span className="sr-only">{ouvert ? "Fermer le menu" : "Ouvrir le menu"}</span>
-        </button>
+        <div className="flex min-w-0 items-center gap-3">
+          {indicateur}
+          <button
+            type="button"
+            className="btn-secondaire px-2.5"
+            aria-expanded={ouvert}
+            aria-controls="menu-mobile"
+            onClick={() => setOuvertSur(ouvert ? null : chemin)}
+          >
+            {ouvert ? <IconeFermer /> : <IconeMenu />}
+            <span className="sr-only">{ouvert ? "Fermer le menu" : "Ouvrir le menu"}</span>
+          </button>
+        </div>
       </header>
 
       {ouvert && (

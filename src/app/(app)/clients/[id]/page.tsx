@@ -1,16 +1,17 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { EntiteBadge } from "@/components/EntiteBadge";
+import { AcademieBadge } from "@/components/AcademieBadge";
 import { ActionsClient } from "@/components/clients/ActionsClient";
 import { FacturesClient, type FactureDuClient } from "@/components/clients/FacturesClient";
 import { FormulaireClient } from "@/components/clients/FormulaireClient";
 import { IconeAlerte, IconeRetour } from "@/components/clients/Icones";
 import { TarifsClient } from "@/components/clients/TarifsClient";
-import { mensuelEstime, type PrestationDuTarif, type TarifAvecPrestation } from "@/components/clients/tarifs";
 import { exigerUtilisateur } from "@/lib/auth";
+import { chargerAcademies } from "@/lib/facturation/service";
 import { formatEuros, formatPeriode, nomClient, premierDuMois } from "@/lib/format";
-import type { Client, Entite } from "@/lib/types";
+import { mensuelEstime, type PrestationDuTarif, type TarifAvecPrestation } from "@/lib/tarifs";
+import type { Academie, Client } from "@/lib/types";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const CHAMPS_PRESTATION = "id, libelle, description, prix_unitaire_centimes, unite, recurrente, actif";
@@ -34,36 +35,41 @@ export default async function PageClient(props: PageProps<"/clients/[id]">) {
   if (!resClient.data) notFound();
   const client = resClient.data as Client;
 
-  const [resEntites, resTarifs, resPrestations, resFactures] = await Promise.all([
-    supabase.from("entites").select("id, nom, couleur_primaire, actif").order("ordre"),
+  const [resAcademies, resTarifs, resPrestations, resFactures] = await Promise.all([
+    chargerAcademies(supabase).then(
+      (data) => ({ data, error: null }),
+      (e: unknown) => ({ data: null, error: { message: e instanceof Error ? e.message : String(e) } }),
+    ),
     supabase
       .from("tarifs_clients")
       .select(`*, prestation:prestations(${CHAMPS_PRESTATION})`)
       .eq("client_id", id)
       .order("ordre")
       .order("created_at"),
+    // Catalogue commun aux deux académies : toutes les prestations actives.
     supabase
       .from("prestations")
       .select(CHAMPS_PRESTATION)
-      .eq("entite_id", client.entite_id)
       .eq("actif", true)
       .order("ordre")
       .order("libelle"),
     supabase
       .from("factures_vue")
-      .select("id, numero, statut, objet, periode, date_emission, date_echeance, total_ttc_centimes, en_retard, created_at")
+      .select(
+        "id, numero, statut, objet, periode, date_emission, date_echeance, total_ttc_centimes, en_retard, created_at, academie_id, academie_nom, academie_couleur",
+      )
       .eq("client_id", id)
       .order("created_at", { ascending: false }),
   ]);
-  const erreur = resEntites.error ?? resTarifs.error ?? resPrestations.error ?? resFactures.error;
+  const erreur = resAcademies.error ?? resTarifs.error ?? resPrestations.error ?? resFactures.error;
   if (erreur) return <ErreurChargement message={erreur.message} />;
 
-  const entites = resEntites.data as Pick<Entite, "id" | "nom" | "couleur_primaire" | "actif">[];
+  const academies = resAcademies.data as Academie[];
   const tarifs = (resTarifs.data as TarifAvecPrestation[]).map((t) => ({ ...t, quantite: Number(t.quantite) }));
   const prestations = resPrestations.data as PrestationDuTarif[];
   const factures = resFactures.data as FactureDuClient[];
 
-  const entite = entites.find((e) => e.id === client.entite_id);
+  const academie = academies.find((a) => a.id === client.academie_id);
   const nom = nomClient(client);
   const periode = premierDuMois();
   const mensuel = mensuelEstime(tarifs, periode);
@@ -71,10 +77,8 @@ export default async function PageClient(props: PageProps<"/clients/[id]">) {
     .filter((f) => f.statut === "emise" || f.statut === "envoyee")
     .reduce((s, f) => s + f.total_ttc_centimes, 0);
   const nbEnRetard = factures.filter((f) => f.en_retard).length;
-
-  // Changer d'entité casserait la numérotation des factures et le lien avec le catalogue.
-  const entiteVerrouillee = factures.length > 0 || tarifs.some((t) => t.prestation_id !== null);
-  const entitesProposees = entites.filter((e) => e.actif || e.id === client.entite_id);
+  // Académies proposées : les actives, plus l'actuelle du client si elle a été désactivée.
+  const academiesProposees = academies.filter((a) => a.actif || a.id === client.academie_id);
 
   return (
     <div className="space-y-6">
@@ -86,7 +90,7 @@ export default async function PageClient(props: PageProps<"/clients/[id]">) {
           </Link>
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <h1 className="titre-page break-words">{nom}</h1>
-            {entite && <EntiteBadge nom={entite.nom} couleur={entite.couleur_primaire} />}
+            {academie && <AcademieBadge nom={academie.nom} couleur={academie.couleur} />}
             {client.type === "professionnel" && <span className="badge bg-slate-100 text-slate-700">Professionnel</span>}
             {!client.actif && <span className="badge bg-zinc-200 text-zinc-600">Archivé</span>}
           </div>
@@ -145,7 +149,7 @@ export default async function PageClient(props: PageProps<"/clients/[id]">) {
         periode={periode}
       />
 
-      <FacturesClient clientId={client.id} factures={factures} />
+      <FacturesClient clientId={client.id} academieId={client.academie_id} factures={factures} />
 
       <section className="carte" aria-labelledby="titre-fiche" id="fiche">
         <div className="border-b border-line px-5 py-4">
@@ -157,7 +161,7 @@ export default async function PageClient(props: PageProps<"/clients/[id]">) {
           </p>
         </div>
         <div className="carte-corps sm:p-6">
-          <FormulaireClient client={client} entites={entitesProposees} entiteVerrouillee={entiteVerrouillee} />
+          <FormulaireClient client={client} academies={academiesProposees} />
         </div>
       </section>
     </div>

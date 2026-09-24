@@ -3,12 +3,12 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { envoyerSelection } from "@/app/(app)/factures/actions";
-import { EntiteBadge } from "@/components/EntiteBadge";
+import { AcademieBadge } from "@/components/AcademieBadge";
+import { ModaleConfirmation } from "@/components/Modale";
 import { StatutBadge } from "@/components/StatutBadge";
 import { formatDate, formatEuros, formatPeriode } from "@/lib/format";
 import type { FactureVue } from "@/lib/types";
 import { IconeAlerte, IconeEnvoi } from "./Icones";
-import { ModaleConfirmation } from "./Modale";
 import { libelleNumero, nomClientFacture, pluriel, type ResultatEnvoiFacture } from "./outils";
 import { ResultatsEnvoi } from "./ResultatsEnvoi";
 
@@ -31,8 +31,9 @@ export type FactureListe = Pick<
   | "client_raison_sociale"
   | "client_email"
   | "client_cavaliers"
-  | "entite_nom"
-  | "entite_couleur"
+  | "academie_id"
+  | "academie_nom"
+  | "academie_couleur"
 >;
 
 const MAX_LOT = 100;
@@ -43,11 +44,12 @@ const MAX_LOT = 100;
  */
 export function ListeFactures({
   factures,
-  afficherEntite,
+  afficherAcademie,
   envoiPossible,
 }: {
   factures: FactureListe[];
-  afficherEntite: boolean;
+  /** Colonne « Académie » (liste non filtrée, plusieurs académies). */
+  afficherAcademie: boolean;
   /** false si l'envoi d'e-mails (SMTP) n'est pas configuré. */
   envoiPossible: boolean;
 }) {
@@ -157,7 +159,7 @@ export function ListeFactures({
                 </th>
                 <th>N°</th>
                 <th>Client</th>
-                {afficherEntite && <th>Entité</th>}
+                {afficherAcademie && <th>Académie</th>}
                 <th>Objet / période</th>
                 <th>Émise le</th>
                 <th>Échéance</th>
@@ -196,9 +198,9 @@ export function ListeFactures({
                       </Link>
                       {f.client_cavaliers && <div className="truncate text-xs text-muted">{f.client_cavaliers}</div>}
                     </td>
-                    {afficherEntite && (
+                    {afficherAcademie && (
                       <td>
-                        <EntiteBadge nom={f.entite_nom} couleur={f.entite_couleur} />
+                        <AcademieBadge nom={f.academie_nom} couleur={f.academie_couleur} />
                       </td>
                     )}
                     <td className="max-w-64">
@@ -224,7 +226,7 @@ export function ListeFactures({
             <tfoot>
               <tr className="border-t border-line bg-page/60">
                 <td />
-                <td colSpan={afficherEntite ? 6 : 5} className="px-4 py-3 text-sm text-muted">
+                <td colSpan={afficherAcademie ? 6 : 5} className="px-4 py-3 text-sm text-muted">
                   {pluriel(factures.length, "facture")}
                   {nbAnnulees > 0 && ` · totaux hors ${pluriel(nbAnnulees, "annulée")}`}
                   <span className="ml-2 text-xs">(HT : {formatEuros(totalHt)})</span>
@@ -280,7 +282,7 @@ export function ListeFactures({
                   </div>
                   <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted">
                     <StatutBadge statut={f.statut} enRetard={f.en_retard} />
-                    {afficherEntite && <EntiteBadge nom={f.entite_nom} couleur={f.entite_couleur} />}
+                    {afficherAcademie && <AcademieBadge nom={f.academie_nom} couleur={f.academie_couleur} />}
                     {f.date_echeance && (
                       <span className={f.en_retard ? "font-medium text-red-700" : ""}>
                         Échéance {formatDate(f.date_echeance)}

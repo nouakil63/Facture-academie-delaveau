@@ -43,34 +43,23 @@ export function periodeVersMois(periode: string | null | undefined): string {
 }
 
 // -----------------------------------------------------------------------------
+// Académie (facturation mensuelle)
+// -----------------------------------------------------------------------------
+
+/** Valeur du paramètre d'URL `academie` pour « toutes les académies ». */
+export const ACADEMIE_TOUTES = "toutes";
+
+/** « Académie Delaveau » → « Delaveau » (comme AcademieBadge). */
+export function nomCourtAcademie(nom: string): string {
+  return nom.replace(/^Académie\s+/i, "");
+}
+
+// -----------------------------------------------------------------------------
 // Lignes
 // -----------------------------------------------------------------------------
 
-/** Saisie d'une quantité : « 1 », « 2,5 », « 0.75 » → nombre > 0 (2 décimales max), sinon null. */
-export function parseQuantite(saisie: string | null | undefined): number | null {
-  if (saisie == null) return null;
-  const nettoye = String(saisie).replace(/[\s  ]/g, "").replace(",", ".");
-  if (!/^\d+(\.\d{1,2})?$/.test(nettoye)) return null;
-  const q = Number(nettoye);
-  return q > 0 && q <= 99999 ? q : null;
-}
-
-/** 1 → « 1 », 2.5 → « 2,5 » (valeur d'un champ de saisie). */
-export function quantiteVersSaisie(q: number | string | null | undefined): string {
-  if (q == null || q === "") return "1";
-  return String(Number(q)).replace(".", ",");
-}
-
-/**
- * Total d'une ligne en centimes, identique à la colonne générée
- * `round(quantite * prix_unitaire_centimes)` de Postgres (arrondi au plus loin de zéro).
- * Calcul en entiers (quantité à 2 décimales) pour éviter les erreurs d'arrondi flottant.
- */
-export function totalLigneCentimes(quantite: number, prixCentimes: number): number {
-  const centiemes = Math.round(quantite * 100);
-  const produit = centiemes * prixCentimes; // en centièmes de centime (positif)
-  return Math.floor((produit + 50) / 100);
-}
+// Quantités, prix appliqués et totaux de ligne : voir @/lib/tarifs (parseQuantite,
+// quantiteVersSaisie, totalLigneCentimes, prixApplique), identiques à la base.
 
 /** Montant maximal d'une ligne (la colonne est un entier 32 bits). */
 export const MAX_TOTAL_LIGNE_CENTIMES = 2_000_000_000;

@@ -1,5 +1,5 @@
 /**
- * Variables des modèles d'e-mail d'une entité (objet et corps).
+ * Variables des modèles d'e-mail (objet et corps) définis dans les paramètres.
  * Le remplacement réel est fait à l'envoi par `remplirModele` (@/lib/email) ;
  * ce module sert à la légende, à la validation et à l'aperçu dans les paramètres.
  */
@@ -10,9 +10,12 @@ export const VARIABLES_EMAIL = [
   { nom: "montant", description: "Montant TTC", exemple: "450,00 €" },
   { nom: "echeance", description: "Date d'échéance", exemple: "24/10/2026" },
   { nom: "periode", description: "Mois facturé", exemple: "octobre 2026" },
-  { nom: "entite", description: "Nom de l'entité", exemple: "Académie Delaveau" },
+  { nom: "structure", description: "Raison sociale de l'association", exemple: "Académie Delaveau" },
+  { nom: "academie", description: "Académie du client", exemple: "Académie Espoir" },
   { nom: "objet", description: "Objet de la facture", exemple: "Formation et accompagnement – octobre 2026" },
 ] as const;
+
+export type NomVariableEmail = (typeof VARIABLES_EMAIL)[number]["nom"];
 
 const NOMS = new Set<string>(VARIABLES_EMAIL.map((v) => v.nom));
 
@@ -26,9 +29,10 @@ export function variablesInconnues(modele: string): string[] {
 }
 
 /** Aperçu d'un modèle avec des valeurs d'exemple (remplacements fournis prioritaires). */
-export function apercuModele(modele: string, remplacements: Partial<Record<string, string>> = {}): string {
+export function apercuModele(modele: string, remplacements: Partial<Record<NomVariableEmail, string>> = {}): string {
   return modele.replace(/\{([a-z]+)\}/g, (tout, nom: string) => {
-    if (remplacements[nom] != null) return remplacements[nom] as string;
+    const fourni = remplacements[nom as NomVariableEmail];
+    if (fourni != null) return fourni;
     const variable = VARIABLES_EMAIL.find((v) => v.nom === nom);
     return variable ? variable.exemple : tout;
   });

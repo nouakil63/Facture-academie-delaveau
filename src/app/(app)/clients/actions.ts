@@ -5,8 +5,8 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { exigerUtilisateur } from "@/lib/auth";
 import { parseEurosEnCentimes } from "@/lib/format";
+import { parseQuantite } from "@/lib/tarifs";
 import type { ResultatAction } from "@/lib/types";
-import { parseQuantite } from "@/components/clients/tarifs";
 
 /*
  * Server Actions du module Clients : fiche client, archivage, suppression,
@@ -51,8 +51,6 @@ function traduireErreur(erreur: ErreurSupabase, siCleEtrangere?: string): string
       return "Accès refusé : votre compte n'est pas autorisé à modifier ces données.";
     case "P0001":
       // Exceptions levées par les triggers : messages métier déjà rédigés en français.
-      if (texte.includes("n'appartient pas à l'entité du client"))
-        return "Cette prestation appartient au catalogue d'une autre entité que celle du client.";
       return erreur.message;
     case "PGRST301":
     case "PGRST303":
@@ -80,6 +78,8 @@ function revaliderClients() {
 
 const schemaId = z.uuid({ error: "Identifiant invalide." });
 
+const ACADEMIE_INTROUVABLE = "L'académie choisie n'existe pas (actualisez la page et réessayez).";
+
 /** Texte facultatif : espaces retirés, "" → null. */
 const texteFacultatif = (max: number, libelle: string) =>
   z
@@ -104,7 +104,7 @@ const dateFacultative = (libelle: string) =>
 
 const schemaClient = z
   .object({
-    entite_id: z.uuid({ error: "Choisissez l'entité (Académie Delaveau ou Académie Espoir)." }),
+    academie_id: z.uuid({ error: "Choisissez l'académie (Académie Delaveau ou Académie Espoir)." }),
     type: z.enum(["particulier", "professionnel"], { error: "Type de client invalide." }),
     civilite: texteFacultatif(30, "Civilité"),
     nom: z
@@ -173,7 +173,7 @@ const schemaClient = z
 
 function lireFormulaireClient(formData: FormData) {
   const noms = [
-    "entite_id", "type", "civilite", "nom", "prenom", "raison_sociale", "email", "emails_cc",
+    "academie_id", "type", "civilite", "nom", "prenom", "raison_sociale", "email", "emails_cc",
     "telephone", "adresse_ligne1", "adresse_ligne2", "code_postal", "ville", "pays", "siret",
     "numero_tva", "cavaliers", "notes",
   ];
@@ -190,7 +190,7 @@ export async function creerClient(_precedent: ResultatAction | null, formData: F
   let id: string;
   try {
     const { data, error } = await supabase.from("clients").insert(lecture.data).select("id").single();
-    if (error) return { ok: false, erreur: traduireErreur(error, "L'entité choisie n'existe pas.") };
+    if (error) return { ok: false, erreur: traduireErreur(error, ACADEMIE_INTROUVABLE) };
     id = (data as { id: string }).id;
   } catch {
     return ERREUR_RESEAU;
@@ -200,7 +200,11 @@ export async function creerClient(_precedent: ResultatAction | null, formData: F
   redirect(`/clients/${id}`);
 }
 
-/** Enregistrement de la fiche. L'entité n'est modifiable que sans facture ni tarif du catalogue. */
+/**
+ * Enregistrement de la fiche. L'académie reste modifiable à tout moment : les brouillons
+ * du client suivent la nouvelle académie, les factures émises gardent l'académie d'origine
+ * (figée à l'émission).
+ */
 export async function modifierClient(_precedent: ResultatAction | null, formData: FormData): Promise<ResultatAction> {
   const { supabase } = await exigerUtilisateur();
 
@@ -208,41 +212,43 @@ export async function modifierClient(_precedent: ResultatAction | null, formData
   if (!id.success) return { ok: false, erreur: "Client introuvable." };
   const lecture = schemaClient.safeParse(lireFormulaireClient(formData));
   if (!lecture.success) return { ok: false, erreur: messagesValidation(lecture.error) };
+  const academieId = lecture.data.academie_id;
 
+  let nbBrouillons = 0;
   try {
-    const actuel = await supabase.from("clients").select("id, entite_id").eq("id", id.data).maybeSingle();
-    if (actuel.error) return { ok: false, erreur: traduireErreur(actuel.error) };
-    if (!actuel.data) return { ok: false, erreur: "Client introuvable : il a peut-être été supprimé." };
-
-    if ((actuel.data as { entite_id: string }).entite_id !== lecture.data.entite_id) {
-      const [factures, tarifs] = await Promise.all([
-        supabase.from("factures").select("id", { count: "exact", head: true }).eq("client_id", id.data),
-        supabase
-          .from("tarifs_clients")
-          .select("id", { count: "exact", head: true })
-          .eq("client_id", id.data)
-          .not("prestation_id", "is", null),
-      ]);
-      if (factures.error) return { ok: false, erreur: traduireErreur(factures.error) };
-      if (tarifs.error) return { ok: false, erreur: traduireErreur(tarifs.error) };
-      if ((factures.count ?? 0) > 0 || (tarifs.count ?? 0) > 0) {
-        return {
-          ok: false,
-          erreur:
-            "L'entité ne peut plus être changée : ce client a déjà des factures ou des tarifs liés au catalogue de son entité.",
-        };
-      }
-    }
-
     const { data, error } = await supabase.from("clients").update(lecture.data).eq("id", id.data).select("id");
-    if (error) return { ok: false, erreur: traduireErreur(error, "L'entité choisie n'existe pas.") };
+    if (error) return { ok: false, erreur: traduireErreur(error, ACADEMIE_INTROUVABLE) };
     if (!data || data.length === 0) return { ok: false, erreur: "Client introuvable : il a peut-être été supprimé." };
+
+    // Le trigger de la base ne recopie l'académie du client dans un brouillon que lorsque
+    // ce brouillon est modifié : on met donc à jour ceux qui sont encore sur l'ancienne académie.
+    const brouillons = await supabase
+      .from("factures")
+      .update({ academie_id: academieId })
+      .eq("client_id", id.data)
+      .eq("statut", "brouillon")
+      .neq("academie_id", academieId)
+      .select("id");
+    if (brouillons.error) {
+      revaliderClients();
+      return {
+        ok: false,
+        erreur: `Fiche client enregistrée, mais ses brouillons n'ont pas pu être rattachés à la nouvelle académie : ${traduireErreur(brouillons.error)}`,
+      };
+    }
+    nbBrouillons = brouillons.data?.length ?? 0;
   } catch {
     return ERREUR_RESEAU;
   }
 
   revaliderClients();
-  return { ok: true, message: "Fiche client enregistrée." };
+  return {
+    ok: true,
+    message:
+      nbBrouillons === 0
+        ? "Fiche client enregistrée."
+        : `Fiche client enregistrée. ${nbBrouillons === 1 ? "1 brouillon a" : `${nbBrouillons} brouillons ont`} été rattaché${nbBrouillons > 1 ? "s" : ""} à la nouvelle académie.`,
+  };
 }
 
 /** Archive (exclut de la facturation mensuelle) ou réactive un client. */

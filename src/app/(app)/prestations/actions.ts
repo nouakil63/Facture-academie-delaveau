@@ -9,8 +9,8 @@ import type { ResultatAction } from "@/lib/types";
 import { estUnitePredefinie, LONGUEUR_MAX_UNITE, pluriel, UNITE_AUTRE } from "@/components/prestations/unites";
 
 /*
- * Server Actions du catalogue de prestations : création, modification,
- * archivage et suppression. Toutes valident leurs entrées (zod), vérifient la
+ * Server Actions du catalogue de prestations (commun aux deux académies) :
+ * création, modification, archivage et suppression. Toutes valident leurs entrées (zod), vérifient la
  * session et renvoient un ResultatAction (jamais d'exception vers le navigateur).
  */
 
@@ -95,7 +95,6 @@ const texteFacultatif = (max: number, libelle: string) =>
 const schemaPrestation = z
   .object({
     id: z.union([z.literal(""), z.uuid({ error: "Prestation introuvable." })]),
-    entite_id: z.uuid({ error: "Choisissez l'entité (Académie Delaveau ou Académie Espoir)." }),
     libelle: z.string().trim().max(200, { error: "Libellé : 200 caractères au maximum." }),
     description: texteFacultatif(1000, "Description"),
     prix: z.string().trim(),
@@ -140,7 +139,6 @@ const schemaPrestation = z
       id: p.id || null,
       ordre,
       ligne: {
-        entite_id: p.entite_id,
         libelle: p.libelle,
         description: p.description,
         prix_unitaire_centimes: prix,
@@ -164,7 +162,6 @@ export async function enregistrerPrestation(
 
   const lecture = schemaPrestation.safeParse({
     id: champ(formData, "id"),
-    entite_id: champ(formData, "entite_id"),
     libelle: champ(formData, "libelle"),
     description: champ(formData, "description"),
     prix: champ(formData, "prix"),
@@ -179,46 +176,29 @@ export async function enregistrerPrestation(
 
   try {
     if (id) {
-      const actuelle = await supabase.from("prestations").select("entite_id").eq("id", id).maybeSingle();
-      if (actuelle.error) return { ok: false, erreur: traduireErreur(actuelle.error) };
-      if (!actuelle.data) return { ok: false, erreur: "Prestation introuvable : elle a peut-être été supprimée." };
-
-      // Changer d'entité romprait le lien avec les clients (une prestation doit être de l'entité du client).
-      if ((actuelle.data as { entite_id: string }).entite_id !== ligne.entite_id) {
-        const u = await utilisations(supabase, id);
-        if (!u.ok) return u;
-        if (u.lignes > 0) {
-          return {
-            ok: false,
-            erreur: `L'entité ne peut plus être changée : cette prestation figure dans les tarifs de ${pluriel(u.clients, "client")}. Créez plutôt une nouvelle prestation dans l'autre entité.`,
-          };
-        }
-      }
-
       const { data, error } = await supabase
         .from("prestations")
         .update(ordre === null ? ligne : { ...ligne, ordre })
         .eq("id", id)
         .select("id");
-      if (error) return { ok: false, erreur: traduireErreur(error, "L'entité choisie n'existe pas.") };
+      if (error) return { ok: false, erreur: traduireErreur(error) };
       if (!data || data.length === 0) {
         return { ok: false, erreur: "Prestation introuvable : elle a peut-être été supprimée." };
       }
     } else {
       let position = ordre;
       if (position === null) {
-        // Nouvelle prestation placée en fin de catalogue de son entité.
+        // Nouvelle prestation placée en fin de catalogue.
         const dernier = await supabase
           .from("prestations")
           .select("ordre")
-          .eq("entite_id", ligne.entite_id)
           .order("ordre", { ascending: false })
           .limit(1);
         if (dernier.error) return { ok: false, erreur: traduireErreur(dernier.error) };
         position = Math.min(((dernier.data as { ordre: number }[])[0]?.ordre ?? 0) + 1, 9999);
       }
       const { error } = await supabase.from("prestations").insert({ ...ligne, ordre: position });
-      if (error) return { ok: false, erreur: traduireErreur(error, "L'entité choisie n'existe pas.") };
+      if (error) return { ok: false, erreur: traduireErreur(error) };
     }
   } catch {
     return ERREUR_RESEAU;

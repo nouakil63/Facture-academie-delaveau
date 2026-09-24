@@ -1,29 +1,36 @@
 "use client";
 
 import { useId, useOptimistic, useTransition } from "react";
-import { choisirEntite } from "@/app/actions-entite";
+import { choisirAcademie } from "@/app/actions-academie";
 
-type Option = { id: string | null; court: string; nom: string };
+type Option = { id: string | null; court: string; nom: string; couleur: string | null };
 
-/** « Académie Delaveau » → « Delaveau » (comme EntiteBadge). */
+/** « Académie Delaveau » → « Delaveau » (comme AcademieBadge). */
 function nomCourt(nom: string): string {
   return nom.replace(/^Académie\s+/i, "");
 }
 
 /**
- * Choix de l'entité affichée (mémorisé dans un cookie par la Server Action choisirEntite).
- * Contrôle segmenté jusqu'à 3 choix, liste déroulante au-delà.
+ * Filtre d'académie « Toutes / Delaveau / Espoir » : limite les listes et le tableau
+ * de bord aux élèves d'une académie. Mémorisé dans un cookie par la Server Action
+ * choisirAcademie. Contrôle segmenté jusqu'à 3 choix, liste déroulante au-delà.
  */
-export function SelecteurEntite({ entites, valeur }: { entites: { id: string; nom: string }[]; valeur: string | null }) {
+export function SelecteurAcademie({
+  academies,
+  valeur,
+}: {
+  academies: { id: string; nom: string; couleur: string }[];
+  valeur: string | null;
+}) {
   const idLibelle = useId();
   const [enCours, demarrer] = useTransition();
   const [affichee, setAffichee] = useOptimistic(valeur);
 
-  if (entites.length === 0) return null;
+  if (academies.length === 0) return null;
 
   const options: Option[] = [
-    { id: null, court: "Toutes", nom: "Toutes les entités" },
-    ...entites.map((e) => ({ id: e.id, court: nomCourt(e.nom), nom: e.nom })),
+    { id: null, court: "Toutes", nom: "Toutes les académies", couleur: null },
+    ...academies.map((a) => ({ id: a.id, court: nomCourt(a.nom), nom: a.nom, couleur: a.couleur })),
   ];
 
   function choisir(id: string | null) {
@@ -31,10 +38,10 @@ export function SelecteurEntite({ entites, valeur }: { entites: { id: string; no
     demarrer(async () => {
       setAffichee(id);
       try {
-        await choisirEntite(id);
+        await choisirAcademie(id);
       } catch (e) {
         // L'affichage optimiste revient seul à la valeur réelle à la fin de la transition.
-        console.error("Changement d'entité impossible :", e);
+        console.error("Changement d'académie impossible :", e);
       }
     });
   }
@@ -42,7 +49,7 @@ export function SelecteurEntite({ entites, valeur }: { entites: { id: string; no
   return (
     <div>
       <p id={idLibelle} className="mb-2 text-xs font-semibold tracking-wider text-muted uppercase">
-        Entité affichée
+        Académie affichée
       </p>
 
       {options.length <= 3 ? (
@@ -62,9 +69,16 @@ export function SelecteurEntite({ entites, valeur }: { entites: { id: string; no
                 aria-pressed={actif}
                 title={o.nom}
                 onClick={() => choisir(o.id)}
-                className={`cursor-pointer truncate rounded-md px-2 py-1.5 text-xs font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand ${
+                className={`cursor-pointer truncate rounded-md px-2 py-2 text-xs font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand lg:py-1.5 ${
                   actif ? "bg-surface text-brand shadow-sm ring-1 ring-line" : "text-muted hover:text-ink"
                 }`}
+                // Académie active : soulignée de sa couleur (le texte garde la couleur de la charte, lisible).
+                // Le style en ligne remplace l'ombre et l'anneau des classes : on les reprend ici.
+                style={
+                  actif && o.couleur
+                    ? { boxShadow: `inset 0 -2px 0 ${o.couleur}, 0 0 0 1px var(--color-line), 0 1px 2px rgb(0 0 0 / 0.05)` }
+                    : undefined
+                }
               >
                 {o.court}
               </button>

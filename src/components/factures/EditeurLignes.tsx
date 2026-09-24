@@ -3,29 +3,27 @@
 import Link from "next/link";
 import { startTransition, useActionState, useId, useState, useTransition } from "react";
 import { deplacerLigne, enregistrerLigne, supprimerLigne } from "@/app/(app)/factures/[id]/actions";
+import { Modale, ModaleConfirmation } from "@/components/Modale";
 import { centimesVersSaisie, formatEuros, formatQuantite, parseEurosEnCentimes } from "@/lib/format";
+import { parseQuantite, quantiteVersSaisie, totalLigneCentimes } from "@/lib/tarifs";
 import type { LigneFacture, ResultatAction } from "@/lib/types";
 import type { PrestationFormulaire } from "./FormulaireNouvelleFacture";
 import { IconeCorbeille, IconeCrayon, IconeFlecheBas, IconeFlecheHaut, IconePlus } from "./Icones";
 import { BlocTotaux, type Totaux } from "./LignesFacture";
-import { Modale, ModaleConfirmation } from "./Modale";
-import { parseQuantite, quantiteVersSaisie, totalLigneCentimes } from "./outils";
 
 type Edition = { ligne: LigneFacture | null } | null;
 
-/** Lignes d'un brouillon : ajout, modification, suppression, ordre. */
+/** Lignes d'un brouillon : ajout, modification, suppression, ordre. Catalogue commun aux académies. */
 export function EditeurLignes({
   factureId,
   lignes,
   catalogue,
   totaux,
-  nomEntite,
 }: {
   factureId: string;
   lignes: LigneFacture[];
   catalogue: PrestationFormulaire[];
   totaux: Totaux;
-  nomEntite: string;
 }) {
   const [edition, setEdition] = useState<Edition>(null);
   const [aSupprimer, setASupprimer] = useState<LigneFacture | null>(null);
@@ -158,7 +156,6 @@ export function EditeurLignes({
             factureId={factureId}
             ligne={edition.ligne}
             catalogue={catalogue}
-            nomEntite={nomEntite}
             onAnnuler={() => setEdition(null)}
             onTermine={(m) => {
               setEdition(null);
@@ -200,14 +197,12 @@ function FormulaireLigne({
   factureId,
   ligne,
   catalogue,
-  nomEntite,
   onAnnuler,
   onTermine,
 }: {
   factureId: string;
   ligne: LigneFacture | null;
   catalogue: PrestationFormulaire[];
-  nomEntite: string;
   onAnnuler: () => void;
   onTermine: (message?: string) => void;
 }) {
@@ -295,7 +290,7 @@ function FormulaireLigne({
       {mode === "catalogue" &&
         (options.length === 0 ? (
           <p className="avertissement">
-            Le catalogue de {nomEntite} ne contient aucune prestation active.{" "}
+            Le catalogue ne contient aucune prestation active.{" "}
             <Link href="/prestations" className="font-medium underline">
               Gérer les prestations
             </Link>{" "}

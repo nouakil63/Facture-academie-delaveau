@@ -1,25 +1,28 @@
 import Link from "next/link";
+import { AcademieBadge } from "@/components/AcademieBadge";
 import { BandeauAcces } from "@/components/coquille/BandeauAcces";
-import { chargerEntitesActives, entiteFiltree, verifierAcces } from "@/components/coquille/donnees";
+import { academieFiltree, chargerAcademiesActives, verifierAcces } from "@/components/coquille/donnees";
 import { Logo } from "@/components/coquille/Logo";
 import { MenuMobile } from "@/components/coquille/MenuMobile";
 import { PanneauNavigation } from "@/components/coquille/PanneauNavigation";
+import { academieSelectionnee } from "@/lib/academie-selectionnee";
 import { exigerUtilisateur } from "@/lib/auth";
-import { entiteSelectionnee } from "@/lib/entite-selectionnee";
 
-/** Coquille de l'application : barre latérale, sélecteur d'entité, compte connecté. */
+/** Coquille de l'application : barre latérale, filtre d'académie, compte connecté. */
 export default async function LayoutApplication({ children }: LayoutProps<"/">) {
   const { supabase, utilisateur } = await exigerUtilisateur();
 
-  const [entites, acces, idCookie] = await Promise.all([
-    chargerEntitesActives(supabase),
+  const [academies, acces, idCookie] = await Promise.all([
+    chargerAcademiesActives(supabase),
     verifierAcces(supabase),
-    entiteSelectionnee(),
+    academieSelectionnee(),
   ]);
-  const entiteCourante = entiteFiltree(idCookie, entites);
+  // Cookie d'une académie inexistante ou désactivée → « Toutes ».
+  const academieCourante = academieFiltree(idCookie, academies);
+  const academie = academies.find((a) => a.id === academieCourante);
   const email = utilisateur.email ?? "";
 
-  const panneau = <PanneauNavigation entites={entites} entiteCourante={entiteCourante} email={email} />;
+  const panneau = <PanneauNavigation academies={academies} academieCourante={academieCourante} email={email} />;
 
   return (
     <div className="min-h-screen">
@@ -43,6 +46,14 @@ export default async function LayoutApplication({ children }: LayoutProps<"/">) 
 
       {/* Mobile : barre supérieure + menu repliable */}
       <MenuMobile
+        indicateur={
+          academie && (
+            <span className="flex min-w-0 items-center gap-1.5 text-xs text-muted">
+              <span className="sr-only">Académie affichée :</span>
+              <AcademieBadge nom={academie.nom} couleur={academie.couleur} />
+            </span>
+          )
+        }
         logo={
           <Link href="/" className="inline-block rounded focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-brand">
             <Logo largeur={96} prioritaire />

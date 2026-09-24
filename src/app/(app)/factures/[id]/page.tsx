@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { EntiteBadge } from "@/components/EntiteBadge";
+import { AcademieBadge } from "@/components/AcademieBadge";
 import { StatutBadge } from "@/components/StatutBadge";
 import { ActionsFacture } from "@/components/factures/ActionsFacture";
 import { ApercuPdf } from "@/components/factures/ApercuPdf";
@@ -31,7 +31,7 @@ import {
   formatPeriode,
   nomClient,
 } from "@/lib/format";
-import type { EnvoiEmail, FactureComplete, FactureVue } from "@/lib/types";
+import type { Academie, Client, EnvoiEmail, FactureComplete, FactureVue, Parametres } from "@/lib/types";
 
 /** L'envoi d'une facture (PDF + SMTP) peut prendre quelques secondes. */
 export const maxDuration = 60;
@@ -67,7 +67,7 @@ export default async function PageFacture(props: PageProps<"/factures/[id]">) {
   // Facture supprimée (brouillon) ou inexistante : message dans la page plutôt qu'une 404 brute
   // (c'est aussi ce qui s'affiche un instant après la suppression d'un brouillon).
   if (!complete) return <FactureIntrouvable />;
-  const { facture, lignes, client, entite } = complete;
+  const { facture, lignes, client, emetteur, academie } = complete;
   const brouillon = facture.statut === "brouillon";
 
   const [resVue, resEnvois, resPrestations] = await Promise.all([
@@ -77,7 +77,6 @@ export default async function PageFacture(props: PageProps<"/factures/[id]">) {
       ? supabase
           .from("prestations")
           .select("id, libelle, description, prix_unitaire_centimes, unite")
-          .eq("entite_id", facture.entite_id)
           .eq("actif", true)
           .order("ordre")
           .order("libelle")
@@ -98,15 +97,10 @@ export default async function PageFacture(props: PageProps<"/factures/[id]">) {
     tva: facture.total_tva_centimes,
     ttc: facture.total_ttc_centimes,
     taux: Number(facture.taux_tva),
-    mentionTva: entite.mention_tva,
+    mentionTva: emetteur.mention_tva,
   };
   const urlPdf = `/api/factures/${facture.id}/pdf`;
-  const adresse = [
-    client.adresse_ligne1,
-    client.adresse_ligne2,
-    [client.code_postal, client.ville].filter(Boolean).join(" "),
-    client.pays && client.pays !== "France" ? client.pays : null,
-  ].filter((l): l is string => Boolean(l && l.trim()));
+  const adresse = lignesAdresse(client);
 
   return (
     <div className="space-y-6">
@@ -121,7 +115,7 @@ export default async function PageFacture(props: PageProps<"/factures/[id]">) {
             <div className="flex flex-wrap items-center gap-2">
               <h1 className={`titre-page ${brouillon ? "text-muted italic" : ""}`}>{libelleNumero(facture.numero)}</h1>
               <StatutBadge statut={facture.statut} enRetard={enRetard} />
-              <EntiteBadge nom={entite.nom} couleur={entite.couleur_primaire} />
+              <AcademieBadge nom={academie.nom} couleur={academie.couleur} />
             </div>
             <p className="mt-1 text-sm text-muted">
               <Link href={`/clients/${facture.client_id}`} className="font-medium text-ink hover:text-brand">
@@ -216,7 +210,7 @@ export default async function PageFacture(props: PageProps<"/factures/[id]">) {
             aujourdhui={aujourdhui}
             nomClient={nom}
             clientId={facture.client_id}
-            prefixe={entite.prefixe_facture}
+            prefixe={emetteur.prefixe_facture}
           />
 
           <section className="carte overflow-hidden" aria-labelledby="titre-lignes">
@@ -234,7 +228,6 @@ export default async function PageFacture(props: PageProps<"/factures/[id]">) {
                 lignes={lignes}
                 catalogue={catalogue}
                 totaux={totaux}
-                nomEntite={entite.nom}
               />
             ) : (
               <LignesLectureSeule lignes={lignes} totaux={totaux} />
@@ -326,6 +319,9 @@ export default async function PageFacture(props: PageProps<"/factures/[id]">) {
             </div>
           </section>
 
+          {/* Émetteur et académie */}
+          <BlocEmetteur emetteur={emetteur} academie={academie} brouillon={brouillon} />
+
           {/* Historique */}
           <section className="carte carte-corps" aria-labelledby="titre-historique">
             <h2 id="titre-historique" className="titre-section mb-3">
@@ -396,6 +392,95 @@ export default async function PageFacture(props: PageProps<"/factures/[id]">) {
         </aside>
       </div>
     </div>
+  );
+}
+
+/** Lignes d'adresse non vides ; le pays n'est affiché qu'hors de France. */
+function lignesAdresse(
+  a: Pick<Client, "adresse_ligne1" | "adresse_ligne2" | "code_postal" | "ville" | "pays">,
+): string[] {
+  return [
+    a.adresse_ligne1,
+    a.adresse_ligne2,
+    [a.code_postal, a.ville].filter(Boolean).join(" "),
+    a.pays && a.pays !== "France" ? a.pays : null,
+  ].filter((l): l is string => Boolean(l && l.trim()));
+}
+
+/** « FR7630001007941234567890185 » → « FR76 3000 1007 9412 3456 7890 185 ». */
+function formatIban(iban: string): string {
+  return iban.replace(/\s+/g, "").replace(/(.{4})(?=.)/g, "$1 ");
+}
+
+/**
+ * Structure émettrice et académie de l'élève, telles qu'imprimées sur la facture :
+ * paramètres actuels pour un brouillon, informations figées à l'émission sinon.
+ */
+function BlocEmetteur({
+  emetteur,
+  academie,
+  brouillon,
+}: {
+  emetteur: Parametres;
+  academie: Academie;
+  brouillon: boolean;
+}) {
+  const adresse = lignesAdresse(emetteur);
+  const identifiants = [
+    emetteur.siret ? `SIRET ${emetteur.siret}` : emetteur.siren ? `SIREN ${emetteur.siren}` : null,
+    emetteur.rna ? `RNA ${emetteur.rna}` : null,
+    emetteur.numero_tva ? `TVA ${emetteur.numero_tva}` : null,
+  ].filter((l): l is string => Boolean(l));
+
+  return (
+    <section className="carte carte-corps" aria-labelledby="titre-emetteur">
+      <div className="mb-3 flex items-baseline justify-between gap-2">
+        <h2 id="titre-emetteur" className="titre-section">
+          Émetteur
+        </h2>
+        {brouillon && (
+          <Link href="/parametres" className="btn-lien text-xs">
+            Paramètres
+          </Link>
+        )}
+      </div>
+      <div className="space-y-2 text-sm">
+        <p className="font-medium text-ink">
+          {emetteur.raison_sociale}
+          {emetteur.forme_juridique && <span className="font-normal text-muted"> · {emetteur.forme_juridique}</span>}
+        </p>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-muted">Académie</span>
+          <AcademieBadge nom={academie.nom} couleur={academie.couleur} />
+        </div>
+        {adresse.length > 0 && (
+          <address className="text-muted not-italic">
+            {adresse.map((l, i) => (
+              <span key={i} className="block">
+                {l}
+              </span>
+            ))}
+          </address>
+        )}
+        {identifiants.length > 0 && <p className="text-xs text-muted">{identifiants.join(" · ")}</p>}
+        {emetteur.iban ? (
+          <p className="text-xs text-muted">
+            IBAN <span className="font-medium break-all text-ink tabular-nums">{formatIban(emetteur.iban)}</span>
+            {emetteur.bic ? ` · BIC ${emetteur.bic}` : ""}
+          </p>
+        ) : (
+          <p className="flex items-center gap-1 text-xs font-medium text-amber-700">
+            <IconeAlerte className="size-3.5" />
+            Aucun IBAN renseigné
+          </p>
+        )}
+        <p className="aide">
+          {brouillon
+            ? "Informations actuelles des paramètres : elles seront figées à l'émission."
+            : "Informations figées à l'émission, telles qu'imprimées sur la facture."}
+        </p>
+      </div>
+    </section>
   );
 }
 

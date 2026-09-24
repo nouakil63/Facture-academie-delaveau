@@ -1,19 +1,22 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { chargerEntitesActives, entiteFiltree, verifierAcces } from "@/components/coquille/donnees";
-import { IconeBillet, IconeCrayon, IconeFleche, IconeHorloge, IconeValide } from "@/components/coquille/Icones";
+import { academieFiltree, chargerAcademiesActives, verifierAcces } from "@/components/coquille/donnees";
+import { IconeAlerte, IconeBillet, IconeCrayon, IconeFleche, IconeHorloge, IconeValide } from "@/components/coquille/Icones";
 import { chargerTableauDeBord } from "@/components/tableau-de-bord/donnees";
 import { Indicateur } from "@/components/tableau-de-bord/Indicateur";
 import { pluriel } from "@/components/tableau-de-bord/outils";
 import { PremiersPas } from "@/components/tableau-de-bord/PremiersPas";
+import { ProchaineFacturation } from "@/components/tableau-de-bord/ProchaineFacturation";
 import { Raccourcis } from "@/components/tableau-de-bord/Raccourcis";
-import { RepartitionEntites } from "@/components/tableau-de-bord/RepartitionEntites";
+import { RepartitionAcademies } from "@/components/tableau-de-bord/RepartitionAcademies";
 import { TableauFactures } from "@/components/tableau-de-bord/TableauFactures";
+import { academieSelectionnee } from "@/lib/academie-selectionnee";
 import { exigerUtilisateur } from "@/lib/auth";
-import { entiteSelectionnee } from "@/lib/entite-selectionnee";
 import { aujourdhuiParis, formatDateLongue, formatEuros, formatPeriode } from "@/lib/format";
 
 export const metadata: Metadata = { title: "Tableau de bord" };
+
+const FACTURES_EN_RETARD = "/factures?statut=en_retard";
 
 function EnTete({ perimetre, date }: { perimetre: string; date: string }) {
   return (
@@ -29,41 +32,68 @@ function EnTete({ perimetre, date }: { perimetre: string; date: string }) {
   );
 }
 
+/** Rappel affiché tant que l'IBAN de l'association n'est pas renseigné. */
+function RappelIban() {
+  return (
+    <div role="note" className="avertissement flex flex-col gap-3 sm:flex-row sm:items-center">
+      <IconeAlerte className="hidden h-5 w-5 shrink-0 sm:block" />
+      <p className="flex-1">
+        <strong className="font-semibold">IBAN non renseigné.</strong> Les factures n&apos;indiquent aucune coordonnée
+        bancaire pour le règlement par virement.
+      </p>
+      <Link href="/parametres" className="btn-secondaire btn-petit shrink-0">
+        Compléter l&apos;IBAN
+        <IconeFleche className="h-3.5 w-3.5" />
+      </Link>
+    </div>
+  );
+}
+
 export default async function PageTableauDeBord() {
   const { supabase } = await exigerUtilisateur();
 
-  const [entites, acces, idCookie] = await Promise.all([
-    chargerEntitesActives(supabase),
+  const [academies, acces, idCookie] = await Promise.all([
+    chargerAcademiesActives(supabase),
     verifierAcces(supabase),
-    entiteSelectionnee(),
+    academieSelectionnee(),
   ]);
-  const entiteId = entiteFiltree(idCookie, entites);
-  const entite = entites.find((e) => e.id === entiteId) ?? null;
-  const perimetre = entite ? entite.nom : "Toutes les entités";
+  // Cookie d'une académie inexistante ou désactivée → « Toutes ».
+  const academieId = academieFiltree(idCookie, academies);
+  const academie = academies.find((a) => a.id === academieId) ?? null;
+  const perimetre = academie ? academie.nom : "Toutes les académies";
 
-  // Compte non autorisé : la coquille affiche déjà le bandeau explicatif.
-  if (acces === "non_membre") {
+  // Compte non autorisé ou base injoignable : la coquille affiche déjà le bandeau explicatif.
+  if (acces !== "autorise") {
     return (
       <div className="space-y-6">
         <EnTete perimetre={perimetre} date={aujourdhuiParis()} />
         <div className="carte carte-corps py-12 text-center">
           <p className="font-medium text-ink">Aucune donnée accessible</p>
-          <p className="mt-1 text-sm text-muted">Le tableau de bord s&apos;affichera dès que votre compte sera autorisé.</p>
+          <p className="mt-1 text-sm text-muted">
+            {acces === "non_membre"
+              ? "Le tableau de bord s'affichera dès que votre compte sera autorisé."
+              : "Le tableau de bord s'affichera dès que la base de données répondra."}
+          </p>
         </div>
       </div>
     );
   }
 
-  const donnees = await chargerTableauDeBord(supabase, entiteId, entites);
-  const { indicateurs: ind, premiersPas } = donnees;
-  const afficherEntite = entiteId === null && entites.length > 1;
+  const donnees = await chargerTableauDeBord(supabase, academieId, academies);
+  const { indicateurs: ind, premiersPas, facturation } = donnees;
+  const afficherAcademie = academieId === null && academies.length > 1;
 
   // Premier démarrage : aucune facture dans le périmètre affiché.
   if (premiersPas.factures === 0) {
     return (
       <div className="space-y-6">
         <EnTete perimetre={perimetre} date={donnees.aujourdhui} />
-        <PremiersPas compteurs={premiersPas} nomEntite={entite?.nom ?? null} />
+        <PremiersPas
+          compteurs={premiersPas}
+          nomAcademie={academie?.nom ?? null}
+          ibanManquant={donnees.ibanManquant}
+          facturation={facturation}
+        />
       </div>
     );
   }
@@ -71,6 +101,8 @@ export default async function PageTableauDeBord() {
   return (
     <div className="space-y-8">
       <EnTete perimetre={perimetre} date={donnees.aujourdhui} />
+
+      {donnees.ibanManquant && <RappelIban />}
 
       <section aria-label="Indicateurs" className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <Indicateur
@@ -93,6 +125,8 @@ export default async function PageTableauDeBord() {
           }
           icone={<IconeHorloge className="h-5 w-5" />}
           ton={ind.enRetard.nombre > 0 ? "alerte" : "neutre"}
+          href={FACTURES_EN_RETARD}
+          action="Voir les retards"
         />
         <Indicateur
           libelle="Encaissé ce mois-ci"
@@ -112,7 +146,9 @@ export default async function PageTableauDeBord() {
         />
       </section>
 
-      {afficherEntite && <RepartitionEntites repartition={donnees.parEntite} />}
+      <ProchaineFacturation facturation={facturation} nomAcademie={academie?.nom ?? null} />
+
+      {afficherAcademie && <RepartitionAcademies repartition={donnees.parAcademie} />}
 
       <section className="carte overflow-hidden" aria-labelledby="titre-retards">
         <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-line px-5 py-4">
@@ -127,16 +163,18 @@ export default async function PageTableauDeBord() {
               </p>
             )}
           </div>
-          <Link href="/factures" className="btn-lien">
-            Toutes les factures
-            <IconeFleche className="h-3.5 w-3.5" />
-          </Link>
+          {ind.enRetard.nombre > 0 && (
+            <Link href={FACTURES_EN_RETARD} className="btn-lien">
+              Tous les retards
+              <IconeFleche className="h-3.5 w-3.5" />
+            </Link>
+          )}
         </div>
         {donnees.retards.length > 0 ? (
           <TableauFactures
             factures={donnees.retards}
             variante="retard"
-            afficherEntite={afficherEntite}
+            afficherAcademie={afficherAcademie}
             aujourdhui={donnees.aujourdhui}
           />
         ) : (
@@ -162,7 +200,7 @@ export default async function PageTableauDeBord() {
         <TableauFactures
           factures={donnees.dernieres}
           variante="recent"
-          afficherEntite={afficherEntite}
+          afficherAcademie={afficherAcademie}
           aujourdhui={donnees.aujourdhui}
         />
       </section>

@@ -3,18 +3,12 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { emailConfigure } from "@/lib/email";
 import { envoyerFactures } from "@/lib/facturation/envoi";
-import { destinatairesFacture } from "@/lib/facturation/service";
+import { chargerParametres, destinatairesFacture } from "@/lib/facturation/service";
 import { parseEurosEnCentimes } from "@/lib/format";
 import type { ClientSupabase } from "@/lib/supabase/server";
-import type { Client, Entite, FactureVue, ResultatAction } from "@/lib/types";
-import {
-  MAX_TOTAL_LIGNE_CENTIMES,
-  moisVersPeriode,
-  nomClientFacture,
-  parseQuantite,
-  totalLigneCentimes,
-  type ResultatEnvoiFacture,
-} from "./outils";
+import { parseQuantite, totalLigneCentimes } from "@/lib/tarifs";
+import type { Client, FactureVue, ResultatAction } from "@/lib/types";
+import { MAX_TOTAL_LIGNE_CENTIMES, moisVersPeriode, nomClientFacture, type ResultatEnvoiFacture } from "./outils";
 
 /*
  * Outils serveur du module Factures, partagés par les Server Actions de
@@ -188,8 +182,9 @@ export type LigneValidee = z.output<typeof schemaLigne>;
 
 /**
  * Crée un brouillon et ses lignes pour un client.
- * - entité = celle DU CLIENT, taux de TVA = celui de l'entité ;
- * - une prestation qui n'appartient pas au catalogue de cette entité est détachée
+ * - l'académie N'EST PAS envoyée : la base la reprend du client (trigger) ;
+ * - taux de TVA = celui des paramètres (structure émettrice unique) ;
+ * - catalogue commun : une prestation qui n'existe plus est détachée
  *   (la ligne garde son libellé et son prix) ;
  * - si l'insertion des lignes échoue, le brouillon créé est supprimé.
  */
@@ -203,45 +198,43 @@ export async function creerBrouillon(
     lignes: LigneValidee[];
   },
 ): Promise<ResultatAction<{ id: string }>> {
-  const resClient = await supabase.from("clients").select("id, entite_id").eq("id", saisie.clientId).maybeSingle();
+  const resClient = await supabase.from("clients").select("id").eq("id", saisie.clientId).maybeSingle();
   if (resClient.error) return { ok: false, erreur: traduireErreur(resClient.error) };
   if (!resClient.data) return { ok: false, erreur: "Client introuvable : il a peut-être été supprimé." };
-  const client = resClient.data as Pick<Client, "id" | "entite_id">;
+  const client = resClient.data as Pick<Client, "id">;
 
-  const resEntite = await supabase.from("entites").select("id, taux_tva").eq("id", client.entite_id).maybeSingle();
-  if (resEntite.error) return { ok: false, erreur: traduireErreur(resEntite.error) };
-  if (!resEntite.data) return { ok: false, erreur: "L'entité du client est introuvable." };
-  const entite = resEntite.data as Pick<Entite, "id" | "taux_tva">;
+  let tauxTva: number;
+  try {
+    tauxTva = Number((await chargerParametres(supabase)).taux_tva);
+  } catch (e) {
+    return { ok: false, erreur: messageException(e, "Paramètres de facturation illisibles") };
+  }
 
-  // Prestations référencées : uniquement celles du catalogue de l'entité du client.
+  // Prestations référencées : uniquement celles qui existent encore dans le catalogue.
   const idsPrestations = [...new Set(saisie.lignes.map((l) => l.prestation_id).filter((id): id is string => !!id))];
   let prestationsValides = new Set<string>();
   if (idsPrestations.length > 0) {
-    const resPrestations = await supabase
-      .from("prestations")
-      .select("id")
-      .eq("entite_id", client.entite_id)
-      .in("id", idsPrestations);
+    const resPrestations = await supabase.from("prestations").select("id").in("id", idsPrestations);
     if (resPrestations.error) return { ok: false, erreur: traduireErreur(resPrestations.error) };
     prestationsValides = new Set((resPrestations.data as { id: string }[]).map((p) => p.id));
   }
 
+  // Pas d'academie_id : renseigné par la base depuis le client.
   const resFacture = await supabase
     .from("factures")
     .insert({
-      entite_id: client.entite_id,
       client_id: client.id,
       statut: "brouillon",
       objet: saisie.objet,
       periode: saisie.periode,
       notes: saisie.notes,
-      taux_tva: Number(entite.taux_tva),
+      taux_tva: tauxTva,
       generation_auto: false,
     })
     .select("id")
     .single();
   if (resFacture.error) {
-    return { ok: false, erreur: traduireErreur(resFacture.error, "Le client ou l'entité n'existe plus.") };
+    return { ok: false, erreur: traduireErreur(resFacture.error, "Le client n'existe plus.") };
   }
   const factureId = (resFacture.data as { id: string }).id;
 
@@ -282,7 +275,7 @@ type FactureLot = Pick<
  * - factures annulées : ignorées ;
  * - brouillons sans aucune adresse e-mail sur la fiche client : ignorés (ils ne sont PAS émis,
  *   pour ne pas attribuer de numéro à une facture qui ne pourrait pas partir) ;
- * - `filtre` permet de restreindre le lot (ex. brouillons mensuels d'une entité et d'un mois).
+ * - `filtre` permet de restreindre le lot (ex. brouillons mensuels d'un mois, d'une académie).
  * Renvoie un résultat par facture demandée, avec le numéro final.
  */
 export async function envoyerLot(

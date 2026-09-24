@@ -1,38 +1,40 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { AcademieBadge } from "@/components/AcademieBadge";
 import { StatutBadge } from "@/components/StatutBadge";
 import { BoutonGenerer, EnvoiBrouillons } from "@/components/factures/ActionsMensuelles";
 import { IconeAlerte, IconeCalendrier, IconeReglages } from "@/components/factures/Icones";
-import { libelleNumero, moisVersPeriode, nomClientFacture, periodeVersMois, pluriel } from "@/components/factures/outils";
+import {
+  ACADEMIE_TOUTES,
+  libelleNumero,
+  moisVersPeriode,
+  nomClientFacture,
+  nomCourtAcademie,
+  periodeVersMois,
+  pluriel,
+} from "@/components/factures/outils";
 import { SelecteurMensuel } from "@/components/factures/SelecteurMensuel";
+import { academieSelectionnee } from "@/lib/academie-selectionnee";
 import { exigerUtilisateur } from "@/lib/auth";
 import { emailConfigure } from "@/lib/email";
-import { entiteSelectionnee } from "@/lib/entite-selectionnee";
-import { destinatairesFacture, genererBrouillonsMensuels, periodeAFacturer } from "@/lib/facturation/service";
+import {
+  chargerAcademies,
+  chargerParametres,
+  destinatairesFacture,
+  genererBrouillonsMensuels,
+  periodeAFacturer,
+} from "@/lib/facturation/service";
 import { formatEuros, formatPeriode, nomClient, LIBELLES_STATUT } from "@/lib/format";
-import type { Client, Entite, FactureVue, ResultatGeneration, StatutFacture } from "@/lib/types";
+import type { Academie, Client, FactureVue, Parametres, ResultatGeneration, StatutFacture } from "@/lib/types";
 
 export const metadata: Metadata = { title: "Facturation mensuelle" };
 
 /** L'envoi groupé (Server Action de cette page) peut prendre plusieurs minutes. */
 export const maxDuration = 300;
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-type EntiteMensuelle = Pick<
-  Entite,
-  | "id"
-  | "nom"
-  | "couleur_primaire"
-  | "mois_facture"
-  | "jour_generation"
-  | "generation_auto"
-  | "envoi_auto"
-  | "objet_facture_mensuelle"
->;
 type ClientMensuel = Pick<
   Client,
-  "id" | "type" | "nom" | "prenom" | "raison_sociale" | "email" | "emails_cc" | "cavaliers"
+  "id" | "academie_id" | "type" | "nom" | "prenom" | "raison_sociale" | "email" | "emails_cc" | "cavaliers"
 >;
 type FactureMensuelle = Pick<
   FactureVue,
@@ -48,73 +50,71 @@ type FactureMensuelle = Pick<
   | "client_prenom"
   | "client_raison_sociale"
   | "client_email"
+  | "academie_id"
+  | "academie_nom"
+  | "academie_couleur"
 >;
 
 const ORDRE_STATUT: Record<StatutFacture, number> = { brouillon: 0, emise: 1, envoyee: 2, payee: 3, annulee: 4 };
 
 export default async function PageFacturationMensuelle(props: PageProps<"/facturation-mensuelle">) {
   const { supabase } = await exigerUtilisateur();
-  const parametres = await props.searchParams;
-  const entiteDemandee = typeof parametres.entite === "string" && UUID.test(parametres.entite) ? parametres.entite : null;
-  const moisDemande = typeof parametres.mois === "string" ? parametres.mois : "";
+  const parametresUrl = await props.searchParams;
+  const academieDemandee = typeof parametresUrl.academie === "string" ? parametresUrl.academie : "";
+  const moisDemande = typeof parametresUrl.mois === "string" ? parametresUrl.mois : "";
 
-  const [idCookie, resEntites] = await Promise.all([
-    entiteSelectionnee(),
-    supabase
-      .from("entites")
-      .select("id, nom, couleur_primaire, mois_facture, jour_generation, generation_auto, envoi_auto, objet_facture_mensuelle")
-      .eq("actif", true)
-      .order("ordre")
-      .order("nom"),
-  ]);
-  if (resEntites.error) return <ErreurChargement message={resEntites.error.message} />;
-  const entites = resEntites.data as EntiteMensuelle[];
-
-  if (entites.length === 0) {
-    return (
-      <div className="space-y-6">
-        <EnTete />
-        <div className="carte flex flex-col items-center px-6 py-14 text-center">
-          <p className="font-medium text-ink">Aucune entité active</p>
-          <p className="mt-1 max-w-md text-sm text-muted">
-            Activez l&apos;Académie Delaveau ou l&apos;Académie Espoir dans les paramètres pour préparer la facturation.
-          </p>
-          <Link href="/parametres" className="btn-primaire mt-5">
-            Paramètres
-          </Link>
-        </div>
-      </div>
-    );
+  let parametres: Parametres;
+  let academies: Academie[];
+  let idCookie: string | null;
+  try {
+    [parametres, academies, idCookie] = await Promise.all([
+      chargerParametres(supabase),
+      chargerAcademies(supabase, true),
+      academieSelectionnee(),
+    ]);
+  } catch (e) {
+    return <ErreurChargement message={e instanceof Error ? e.message : String(e)} />;
   }
 
-  // Entité : celle de l'URL, sinon celle sélectionnée dans le menu, sinon la première active.
-  const entite =
-    entites.find((e) => e.id === entiteDemandee) ?? entites.find((e) => e.id === idCookie) ?? entites[0];
-  const periodeDefaut = periodeAFacturer(entite);
+  // Académie : celle de l'URL (« toutes » ou un identifiant), sinon celle du filtre de la
+  // barre latérale, sinon toutes. Une académie inconnue ou désactivée retombe sur « toutes ».
+  const idAcademie =
+    academieDemandee === ACADEMIE_TOUTES ? null : academieDemandee !== "" ? academieDemandee : idCookie;
+  const academie = academies.find((a) => a.id === idAcademie) ?? null;
+  const academieId = academie?.id ?? null;
+  const academiesParId = new Map(academies.map((a) => [a.id, a]));
+  const afficherAcademie = !academie && academies.length > 1;
+
+  const periodeDefaut = periodeAFacturer(parametres);
   const periode = moisVersPeriode(moisDemande) ?? periodeDefaut;
   const libelleMois = formatPeriode(periode);
+  const mois = periodeVersMois(periode);
+
+  let requeteClients = supabase
+    .from("clients")
+    .select("id, academie_id, type, nom, prenom, raison_sociale, email, emails_cc, cavaliers")
+    .eq("actif", true);
+  if (academieId) requeteClients = requeteClients.eq("academie_id", academieId);
+
+  let requeteFactures = supabase
+    .from("factures_vue")
+    .select(
+      "id, numero, statut, total_ht_centimes, total_ttc_centimes, en_retard, client_id, client_type, client_nom, client_prenom, client_raison_sociale, client_email, academie_id, academie_nom, academie_couleur",
+    )
+    .eq("periode", periode)
+    .eq("generation_auto", true);
+  if (academieId) requeteFactures = requeteFactures.eq("academie_id", academieId);
 
   const [apercu, resClients, resFactures] = await Promise.all([
-    genererBrouillonsMensuels(supabase, entite.id, periode, true).then(
+    genererBrouillonsMensuels(supabase, periode, { academieId, apercu: true }).then(
       (r): { ok: true; donnees: ResultatGeneration[] } => ({ ok: true, donnees: r }),
       (e: unknown): { ok: false; erreur: string } => ({
         ok: false,
         erreur: e instanceof Error ? e.message : "erreur inconnue",
       }),
     ),
-    supabase
-      .from("clients")
-      .select("id, type, nom, prenom, raison_sociale, email, emails_cc, cavaliers")
-      .eq("entite_id", entite.id)
-      .eq("actif", true),
-    supabase
-      .from("factures_vue")
-      .select(
-        "id, numero, statut, total_ht_centimes, total_ttc_centimes, en_retard, client_id, client_type, client_nom, client_prenom, client_raison_sociale, client_email",
-      )
-      .eq("entite_id", entite.id)
-      .eq("periode", periode)
-      .eq("generation_auto", true),
+    requeteClients,
+    requeteFactures,
   ]);
   if (resClients.error) return <ErreurChargement message={resClients.error.message} />;
   if (resFactures.error) return <ErreurChargement message={resFactures.error.message} />;
@@ -132,6 +132,7 @@ export default async function PageFacturationMensuelle(props: PageProps<"/factur
             ...r,
             nom: c ? nomClient(c) : "Client",
             cavaliers: c?.cavaliers ?? null,
+            academie: c ? (academiesParId.get(c.academie_id) ?? null) : null,
             sansEmail: c ? destinatairesFacture(c).length === 0 : false,
           };
         }),
@@ -141,11 +142,18 @@ export default async function PageFacturationMensuelle(props: PageProps<"/factur
   const aGenerer = lignesApercu.filter((l) => !l.deja_existante);
   const totalAGenerer = aGenerer.reduce((s, l) => s + (l.total_ht_centimes ?? 0), 0);
   const idsApercu = new Set(lignesApercu.map((l) => l.client_id));
+  // Clients actifs sans tarif récurrent valide sur le mois : ils ne seront pas facturés.
   const nonFactures = trierParNom(
     [...clients.values()].filter((c) => !idsApercu.has(c.id)),
     nomClient,
   );
   const sansEmail = lignesApercu.filter((l) => l.sansEmail);
+  // Répartition des brouillons à générer par académie (vue « Toutes »).
+  const repartition = afficherAcademie
+    ? academies
+        .map((a) => ({ academie: a, nombre: aGenerer.filter((l) => l.academie?.id === a.id).length }))
+        .filter((r) => r.nombre > 0)
+    : [];
 
   // Étape 2 : factures générées pour ce mois.
   const factures = (resFactures.data as FactureMensuelle[]).sort(
@@ -165,30 +173,40 @@ export default async function PageFacturationMensuelle(props: PageProps<"/factur
   }, {});
   const smtpOk = emailConfigure();
 
-  const moisFacture = entite.mois_facture === "precedent" ? "du mois précédent" : "du mois en cours";
+  const moisFacture = parametres.mois_facture === "precedent" ? "du mois précédent" : "du mois en cours";
+  // « octobre 2026 (Delaveau) » / « octobre 2026 (toutes académies) » dès qu'il y a plusieurs académies.
+  const libelleCible =
+    academies.length > 1
+      ? `${libelleMois} (${academie ? nomCourtAcademie(academie.nom) : "toutes académies"})`
+      : libelleMois;
+  const detailRepartition =
+    repartition.length > 1
+      ? `dont ${repartition.map((r) => `${nomCourtAcademie(r.academie.nom)} : ${r.nombre}`).join(" · ")}`
+      : null;
 
   return (
     <div className="space-y-6">
       <EnTete />
 
-      {/* Choix de l'entité et du mois */}
-      <section className="carte carte-corps space-y-4" aria-label="Entité et mois">
+      {/* Choix de l'académie et du mois */}
+      <section className="carte carte-corps space-y-4" aria-label="Académie et mois">
         <SelecteurMensuel
-          entites={entites.map((e) => ({ id: e.id, nom: e.nom, couleur_primaire: e.couleur_primaire }))}
-          entiteId={entite.id}
-          mois={periodeVersMois(periode)}
+          academies={academies.map((a) => ({ id: a.id, nom: a.nom, couleur: a.couleur }))}
+          academieId={academieId}
+          mois={mois}
           moisParDefaut={periodeVersMois(periodeDefaut)}
         />
         <div className="flex flex-col gap-2 rounded-lg bg-page px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-start gap-2 text-muted">
-            <IconeReglages className="mt-0.5 size-4 text-brand" />
+            <IconeReglages className="mt-0.5 size-4 shrink-0 text-brand" />
             <p>
-              <span className="font-medium text-ink">{entite.nom}</span> :{" "}
-              {entite.generation_auto ? (
+              <span className="font-medium text-ink">Automatisation</span> (toutes académies) :{" "}
+              {parametres.generation_auto ? (
                 <>
-                  brouillons générés automatiquement le <strong className="text-ink">{entite.jour_generation}</strong>{" "}
-                  de chaque mois (factures {moisFacture})
-                  {entite.envoi_auto ? (
+                  brouillons générés automatiquement le{" "}
+                  <strong className="text-ink">{parametres.jour_generation}</strong> de chaque mois (factures{" "}
+                  {moisFacture})
+                  {parametres.envoi_auto ? (
                     <>
                       , puis <strong className="text-ink">émis et envoyés automatiquement</strong>.
                     </>
@@ -201,7 +219,7 @@ export default async function PageFacturationMensuelle(props: PageProps<"/factur
               )}
             </p>
           </div>
-          <Link href={`/parametres/${entite.id}`} className="btn-lien shrink-0 text-xs">
+          <Link href="/parametres" className="btn-lien shrink-0 text-xs">
             Modifier l&apos;automatisation
           </Link>
         </div>
@@ -223,15 +241,22 @@ export default async function PageFacturationMensuelle(props: PageProps<"/factur
       {/* Étape 1 */}
       <section className="carte overflow-hidden" aria-labelledby="etape-1">
         <div className="border-b border-line px-5 py-4">
-          <h2 id="etape-1" className="titre-section">
-            <span className="mr-2 inline-flex size-6 items-center justify-center rounded-full bg-brand text-xs text-white">
-              1
-            </span>
-            Aperçu — {libelleMois}
-          </h2>
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 id="etape-1" className="titre-section">
+              <span className="mr-2 inline-flex size-6 items-center justify-center rounded-full bg-brand text-xs text-white">
+                1
+              </span>
+              Aperçu — {libelleMois}
+            </h2>
+            {academie ? (
+              <AcademieBadge nom={academie.nom} couleur={academie.couleur} />
+            ) : (
+              academies.length > 1 && <span className="badge bg-page text-muted">Toutes les académies</span>
+            )}
+          </div>
           <p className="mt-1 text-xs text-muted">
             Un brouillon par client actif ayant au moins un tarif mensuel valide sur le mois. Objet : «{" "}
-            {entite.objet_facture_mensuelle} – {libelleMois} ».
+            {parametres.objet_facture_mensuelle} – {libelleMois} ».
           </p>
         </div>
 
@@ -243,7 +268,8 @@ export default async function PageFacturationMensuelle(props: PageProps<"/factur
           <div className="px-5 py-10 text-center">
             <p className="font-medium text-ink">Aucun client à facturer pour {libelleMois}</p>
             <p className="mx-auto mt-1 max-w-md text-sm text-muted">
-              Ajoutez des tarifs mensuels (récurrents) sur les fiches des clients de {entite.nom} : ils apparaîtront ici.
+              Ajoutez des tarifs mensuels (récurrents) sur les fiches des clients
+              {academie ? ` de ${avecArticle(academie.nom)}` : ""} : ils apparaîtront ici.
             </p>
             <Link href="/clients" className="btn-secondaire mt-5">
               Voir les clients
@@ -256,6 +282,7 @@ export default async function PageFacturationMensuelle(props: PageProps<"/factur
                 <thead>
                   <tr>
                     <th>Client</th>
+                    {afficherAcademie && <th>Académie</th>}
                     <th>Cavalier(s)</th>
                     <th className="text-right">Lignes</th>
                     <th className="text-right">Total HT</th>
@@ -271,6 +298,9 @@ export default async function PageFacturationMensuelle(props: PageProps<"/factur
                         </Link>
                         {l.sansEmail && <SansEmail />}
                       </td>
+                      {afficherAcademie && (
+                        <td>{l.academie && <AcademieBadge nom={l.academie.nom} couleur={l.academie.couleur} />}</td>
+                      )}
                       <td className="max-w-56">
                         <span className="line-clamp-1">{l.cavaliers ?? <span className="text-muted">—</span>}</span>
                       </td>
@@ -292,8 +322,9 @@ export default async function PageFacturationMensuelle(props: PageProps<"/factur
                 </tbody>
                 <tfoot>
                   <tr className="border-t border-line bg-page/60">
-                    <td colSpan={3} className="px-4 py-3 text-sm text-muted">
+                    <td colSpan={afficherAcademie ? 4 : 3} className="px-4 py-3 text-sm text-muted">
                       {pluriel(aGenerer.length, "brouillon")} à générer sur {pluriel(lignesApercu.length, "client")}
+                      {detailRepartition && <span className="ml-2 text-xs">({detailRepartition})</span>}
                     </td>
                     <td className="px-4 py-3 text-right font-semibold whitespace-nowrap text-brand tabular-nums">
                       {formatEuros(totalAGenerer)}
@@ -314,6 +345,11 @@ export default async function PageFacturationMensuelle(props: PageProps<"/factur
                       {pluriel(l.nb_lignes, "ligne")}
                       {l.cavaliers ? ` · ${l.cavaliers}` : ""}
                     </div>
+                    {afficherAcademie && l.academie && (
+                      <div className="mt-1">
+                        <AcademieBadge nom={l.academie.nom} couleur={l.academie.couleur} />
+                      </div>
+                    )}
                     {l.sansEmail && <SansEmail />}
                   </div>
                   <div className="shrink-0 text-right">
@@ -328,9 +364,12 @@ export default async function PageFacturationMensuelle(props: PageProps<"/factur
                   </div>
                 </li>
               ))}
-              <li className="flex justify-between bg-page/60 px-5 py-3 text-sm">
-                <span className="text-muted">{pluriel(aGenerer.length, "brouillon")} à générer (HT)</span>
-                <span className="font-semibold text-brand tabular-nums">{formatEuros(totalAGenerer)}</span>
+              <li className="flex justify-between gap-3 bg-page/60 px-5 py-3 text-sm">
+                <span className="text-muted">
+                  {pluriel(aGenerer.length, "brouillon")} à générer (HT)
+                  {detailRepartition && <span className="block text-xs">{detailRepartition}</span>}
+                </span>
+                <span className="shrink-0 font-semibold text-brand tabular-nums">{formatEuros(totalAGenerer)}</span>
               </li>
             </ul>
           </>
@@ -346,13 +385,24 @@ export default async function PageFacturationMensuelle(props: PageProps<"/factur
                     : `${nonFactures.length} clients actifs ne seront pas facturés : aucun tarif mensuel valide sur ce mois.`}
                 </summary>
                 <ul className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
-                  {nonFactures.map((c) => (
-                    <li key={c.id}>
-                      <Link href={`/clients/${c.id}`} className="underline">
-                        {nomClient(c)}
-                      </Link>
-                    </li>
-                  ))}
+                  {nonFactures.map((c) => {
+                    const academieClient = afficherAcademie ? academiesParId.get(c.academie_id) : undefined;
+                    return (
+                      <li key={c.id} className="flex items-center gap-1.5">
+                        <Link href={`/clients/${c.id}`} className="underline">
+                          {nomClient(c)}
+                        </Link>
+                        {academieClient && (
+                          <span className="text-xs opacity-80">({nomCourtAcademie(academieClient.nom)})</span>
+                        )}
+                        {destinatairesFacture(c).length === 0 && (
+                          <span className="text-xs opacity-80" title="Aucune adresse e-mail sur la fiche">
+                            · sans e-mail
+                          </span>
+                        )}
+                      </li>
+                    );
+                  })}
                 </ul>
                 <p className="mt-2 text-xs">
                   Ajoutez-leur un tarif récurrent, ou créez une facture ponctuelle depuis leur fiche.
@@ -373,12 +423,7 @@ export default async function PageFacturationMensuelle(props: PageProps<"/factur
 
         {apercu.ok && lignesApercu.length > 0 && (
           <div className="border-t border-line bg-page/40 px-5 py-4">
-            <BoutonGenerer
-              entiteId={entite.id}
-              mois={periodeVersMois(periode)}
-              nombre={aGenerer.length}
-              libelleMois={libelleMois}
-            />
+            <BoutonGenerer academieId={academieId} mois={mois} nombre={aGenerer.length} libelleMois={libelleCible} />
           </div>
         )}
       </section>
@@ -386,12 +431,15 @@ export default async function PageFacturationMensuelle(props: PageProps<"/factur
       {/* Étape 2 */}
       <section className="carte overflow-hidden" aria-labelledby="etape-2">
         <div className="flex flex-col gap-1 border-b border-line px-5 py-4 sm:flex-row sm:items-baseline sm:justify-between">
-          <h2 id="etape-2" className="titre-section">
-            <span className="mr-2 inline-flex size-6 items-center justify-center rounded-full bg-brand text-xs text-white">
-              2
-            </span>
-            Relecture et envoi — {libelleMois}
-          </h2>
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 id="etape-2" className="titre-section">
+              <span className="mr-2 inline-flex size-6 items-center justify-center rounded-full bg-brand text-xs text-white">
+                2
+              </span>
+              Relecture et envoi — {libelleMois}
+            </h2>
+            {academie && <AcademieBadge nom={academie.nom} couleur={academie.couleur} />}
+          </div>
           {factures.length > 0 && (
             <p className="text-xs text-muted">
               {(Object.keys(ORDRE_STATUT) as StatutFacture[])
@@ -419,6 +467,7 @@ export default async function PageFacturationMensuelle(props: PageProps<"/factur
                 <thead>
                   <tr>
                     <th>Client</th>
+                    {afficherAcademie && <th>Académie</th>}
                     <th>N°</th>
                     <th className="text-right">Montant TTC</th>
                     <th>Statut</th>
@@ -434,6 +483,11 @@ export default async function PageFacturationMensuelle(props: PageProps<"/factur
                         <span className="font-medium">{nomClientFacture(f)}</span>
                         {f.statut === "brouillon" && !aDesDestinataires(f) && <SansEmail />}
                       </td>
+                      {afficherAcademie && (
+                        <td>
+                          <AcademieBadge nom={f.academie_nom} couleur={f.academie_couleur} />
+                        </td>
+                      )}
                       <td className={f.numero ? "" : "text-muted italic"}>{libelleNumero(f.numero)}</td>
                       <td
                         className={`text-right font-medium whitespace-nowrap tabular-nums ${
@@ -467,6 +521,11 @@ export default async function PageFacturationMensuelle(props: PageProps<"/factur
                         {nomClientFacture(f)}
                       </div>
                       <div className="text-xs text-muted">{libelleNumero(f.numero)}</div>
+                      {afficherAcademie && (
+                        <div className="mt-1">
+                          <AcademieBadge nom={f.academie_nom} couleur={f.academie_couleur} />
+                        </div>
+                      )}
                       {f.statut === "brouillon" && !aDesDestinataires(f) && <SansEmail />}
                     </div>
                     <div className="shrink-0 space-y-1 text-right">
@@ -484,12 +543,13 @@ export default async function PageFacturationMensuelle(props: PageProps<"/factur
           <div className="border-t border-line bg-page/40 px-5 py-4">
             {smtpOk ? (
               <EnvoiBrouillons
-                entiteId={entite.id}
-                mois={periodeVersMois(periode)}
-                libelleMois={libelleMois}
+                academieId={academieId}
+                mois={mois}
+                libelleMois={libelleCible}
                 brouillons={brouillonsEnvoyables.map((f) => ({
                   id: f.id,
                   client: nomClientFacture(f),
+                  academie: afficherAcademie ? nomCourtAcademie(f.academie_nom) : null,
                   totalTtc: f.total_ttc_centimes,
                 }))}
                 nbSansEmail={brouillons.length - brouillonsEnvoyables.length}
@@ -517,6 +577,11 @@ function EnTete() {
       </p>
     </div>
   );
+}
+
+/** « Académie Espoir » → « l'Académie Espoir » ; autre nom → « « Nom » ». */
+function avecArticle(nom: string): string {
+  return /^académie\b/i.test(nom) ? `l'${nom}` : `« ${nom} »`;
 }
 
 function SansEmail() {

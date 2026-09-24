@@ -1,23 +1,24 @@
 import "server-only";
+import { chargerAcademies } from "@/lib/facturation/service";
 import type { ClientSupabase } from "@/lib/supabase/server";
-import type { Entite } from "@/lib/types";
+import type { Academie } from "@/lib/types";
 
-/** Ce dont la coquille et le tableau de bord ont besoin pour une entité. */
-export type EntiteMenu = Pick<Entite, "id" | "nom" | "prefixe_facture" | "couleur_primaire">;
+/** Ce dont la coquille et le tableau de bord ont besoin pour une académie. */
+export type AcademieMenu = Pick<Academie, "id" | "nom" | "couleur">;
 
-/** Entités actives, dans l'ordre d'affichage. Liste vide en cas d'erreur (journalisée). */
-export async function chargerEntitesActives(supabase: ClientSupabase): Promise<EntiteMenu[]> {
-  const { data, error } = await supabase
-    .from("entites")
-    .select("id, nom, prefixe_facture, couleur_primaire")
-    .eq("actif", true)
-    .order("ordre")
-    .order("nom");
-  if (error) {
-    console.error("Chargement des entités impossible :", error.message);
+/**
+ * Académies actives (Académie Delaveau, Académie Espoir), dans l'ordre d'affichage.
+ * Liste vide en cas d'erreur (journalisée) : la coquille reste utilisable et le
+ * bandeau d'accès explique le problème.
+ */
+export async function chargerAcademiesActives(supabase: ClientSupabase): Promise<AcademieMenu[]> {
+  try {
+    const academies = await chargerAcademies(supabase, true);
+    return academies.map(({ id, nom, couleur }) => ({ id, nom, couleur }));
+  } catch (e) {
+    console.error("Chargement des académies impossible :", e instanceof Error ? e.message : e);
     return [];
   }
-  return (data ?? []) as EntiteMenu[];
 }
 
 /**
@@ -37,9 +38,10 @@ export async function verifierAcces(supabase: ClientSupabase): Promise<EtatAcces
 }
 
 /**
- * Entité réellement filtrée : l'identifiant mémorisé dans le cookie s'il correspond
- * à une entité active, sinon null (« Toutes »).
+ * Académie réellement filtrée : l'identifiant mémorisé dans le cookie s'il correspond
+ * à une académie active, sinon null (« Toutes »). Un cookie périmé (académie
+ * supprimée ou désactivée) retombe donc sur « Toutes ».
  */
-export function entiteFiltree(idCookie: string | null, entites: EntiteMenu[]): string | null {
-  return idCookie && entites.some((e) => e.id === idCookie) ? idCookie : null;
+export function academieFiltree(idCookie: string | null, academies: Pick<AcademieMenu, "id">[]): string | null {
+  return idCookie && academies.some((a) => a.id === idCookie) ? idCookie : null;
 }

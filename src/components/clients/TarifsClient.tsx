@@ -4,9 +4,6 @@ import Link from "next/link";
 import { useState, useTransition } from "react";
 import { deplacerTarif, supprimerTarif } from "@/app/(app)/clients/actions";
 import { formatDate, formatEuros, formatPeriode, formatQuantite } from "@/lib/format";
-import { FormulaireTarif } from "./FormulaireTarif";
-import { IconeCorbeille, IconeCrayon, IconeFlecheBas, IconeFlecheHaut, IconePlus } from "./Icones";
-import { Modale, ModaleConfirmation } from "./Modale";
 import {
   mensuelEstime,
   prixApplique,
@@ -15,7 +12,10 @@ import {
   totalLigneCentimes,
   type PrestationDuTarif,
   type TarifAvecPrestation,
-} from "./tarifs";
+} from "@/lib/tarifs";
+import { FormulaireTarif } from "./FormulaireTarif";
+import { IconeCorbeille, IconeCrayon, IconeFlecheBas, IconeFlecheHaut, IconePlus } from "./Icones";
+import { Modale, ModaleConfirmation } from "./Modale";
 
 /** Section « Tarifs appliqués » de la fiche client. */
 export function TarifsClient({
@@ -29,7 +29,7 @@ export function TarifsClient({
   clientActif: boolean;
   /** Tarifs du client, triés par ordre. */
   tarifs: TarifAvecPrestation[];
-  /** Prestations actives du catalogue de l'entité du client. */
+  /** Prestations actives du catalogue (commun aux deux académies). */
   prestations: PrestationDuTarif[];
   /** Premier jour du mois courant ("AAAA-MM-01"), calculé côté serveur (heure de Paris). */
   periode: string;
@@ -94,7 +94,7 @@ export function TarifsClient({
           </p>
           {prestations.length === 0 && (
             <p className="mx-auto mt-3 max-w-md text-xs text-muted">
-              Le catalogue de l&apos;entité est vide :{" "}
+              Le catalogue de prestations est vide :{" "}
               <Link href="/prestations" className="btn-lien text-xs">
                 créer des prestations
               </Link>{" "}

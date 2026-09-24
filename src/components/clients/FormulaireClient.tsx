@@ -3,11 +3,11 @@
 import Link from "next/link";
 import { startTransition, useActionState, useState } from "react";
 import { creerClient, modifierClient } from "@/app/(app)/clients/actions";
-import type { Client, Entite, ResultatAction, TypeClient } from "@/lib/types";
+import type { Academie, Client, ResultatAction, TypeClient } from "@/lib/types";
 
 const CIVILITES = ["Mme", "M.", "M. et Mme"];
 
-type EntiteOption = Pick<Entite, "id" | "nom">;
+type AcademieOption = Pick<Academie, "id" | "nom"> & Partial<Pick<Academie, "actif">>;
 
 /**
  * Formulaire de fiche client (création et modification).
@@ -16,16 +16,15 @@ type EntiteOption = Pick<Entite, "id" | "nom">;
  */
 export function FormulaireClient({
   client,
-  entites,
-  entiteParDefaut,
-  entiteVerrouillee = false,
+  academies,
+  academieParDefaut,
 }: {
   /** Absent → création. */
   client?: Client;
-  entites: EntiteOption[];
-  entiteParDefaut?: string | null;
-  /** L'entité n'est plus modifiable (factures ou tarifs du catalogue existants). */
-  entiteVerrouillee?: boolean;
+  /** Académies proposées : les actives (+ l'actuelle du client, même désactivée). */
+  academies: AcademieOption[];
+  /** Création : académie présélectionnée (celle du filtre), sinon la première. */
+  academieParDefaut?: string | null;
 }) {
   const creation = !client;
   const [etat, envoyer, enCours] = useActionState<ResultatAction | null, FormData>(
@@ -35,7 +34,7 @@ export function FormulaireClient({
   const [type, setType] = useState<TypeClient>(client?.type ?? "particulier");
   const professionnel = type === "professionnel";
 
-  const entiteInitiale = client?.entite_id ?? entiteParDefaut ?? entites[0]?.id ?? "";
+  const academieInitiale = client?.academie_id ?? academieParDefaut ?? academies[0]?.id ?? "";
   const civilites =
     client?.civilite && !CIVILITES.includes(client.civilite) ? [...CIVILITES, client.civilite] : CIVILITES;
 
@@ -55,28 +54,20 @@ export function FormulaireClient({
         <Section titre="Rattachement">
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
-              <label htmlFor="entite_id" className="label">
-                Entité <Obligatoire />
+              <label htmlFor="academie_id" className="label">
+                Académie <Obligatoire />
               </label>
-              {entiteVerrouillee && <input type="hidden" name="entite_id" value={entiteInitiale} />}
-              <select
-                id="entite_id"
-                name={entiteVerrouillee ? undefined : "entite_id"}
-                defaultValue={entiteInitiale}
-                disabled={entiteVerrouillee}
-                required
-                className="champ"
-              >
-                {entites.map((e) => (
-                  <option key={e.id} value={e.id}>
-                    {e.nom}
+              <select id="academie_id" name="academie_id" defaultValue={academieInitiale} required className="champ">
+                {academies.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.actif === false ? `${a.nom} (désactivée)` : a.nom}
                   </option>
                 ))}
               </select>
               <p className="aide">
-                {entiteVerrouillee
-                  ? "Non modifiable : ce client a déjà des factures ou des tarifs liés au catalogue de son entité."
-                  : "Détermine la numérotation (AD / AE), le catalogue de prestations et l'en-tête des factures."}
+                {creation
+                  ? "Groupe de l'élève, rappelé sur ses factures. Modifiable à tout moment."
+                  : "Modifiable à tout moment. Les factures déjà émises gardent l'académie d'origine."}
               </p>
             </div>
 

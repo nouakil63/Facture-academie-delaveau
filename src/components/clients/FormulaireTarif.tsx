@@ -4,14 +4,14 @@ import Link from "next/link";
 import { startTransition, useActionState, useState } from "react";
 import { enregistrerTarif } from "@/app/(app)/clients/actions";
 import { centimesVersSaisie, formatEuros, parseEurosEnCentimes } from "@/lib/format";
-import type { ResultatAction } from "@/lib/types";
 import {
   parseQuantite,
   quantiteVersSaisie,
   totalLigneCentimes,
   type PrestationDuTarif,
   type TarifAvecPrestation,
-} from "./tarifs";
+} from "@/lib/tarifs";
+import type { ResultatAction } from "@/lib/types";
 
 type Mode = "catalogue" | "libre";
 
@@ -29,7 +29,7 @@ export function FormulaireTarif({
   clientId: string;
   /** null → nouvelle ligne. */
   tarif: TarifAvecPrestation | null;
-  /** Catalogue de l'entité du client (prestations actives + celle du tarif édité). */
+  /** Catalogue commun (prestations actives + celle du tarif édité si elle a été retirée). */
   prestations: PrestationDuTarif[];
   onTermine: (message?: string) => void;
   onAnnuler: () => void;
@@ -98,7 +98,7 @@ export function FormulaireTarif({
       {mode === "catalogue" ? (
         prestations.length === 0 ? (
           <p className="avertissement">
-            Le catalogue de cette entité ne contient aucune prestation active. Créez-en dans{" "}
+            Le catalogue ne contient aucune prestation active. Créez-en dans{" "}
             <Link href="/prestations" className="font-medium underline">
               Prestations
             </Link>{" "}

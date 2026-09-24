@@ -3,31 +3,23 @@
 import { startTransition, useActionState, useState } from "react";
 import { enregistrerPrestation } from "@/app/(app)/prestations/actions";
 import { centimesVersSaisie, formatEuros, parseEurosEnCentimes } from "@/lib/format";
-import type { Entite, Prestation, ResultatAction } from "@/lib/types";
+import type { Prestation, ResultatAction } from "@/lib/types";
 import { estUnitePredefinie, LONGUEUR_MAX_UNITE, pluriel, suffixeUnite, UNITE_AUTRE, UNITES } from "./unites";
 
-type EntiteOption = Pick<Entite, "id" | "nom">;
-
 /**
- * Formulaire de création / modification d'une prestation (affiché dans une modale).
+ * Formulaire de création / modification d'une prestation du catalogue commun
+ * (affiché dans une modale).
  * Soumission via onSubmit + startTransition : les champs ne sont pas réinitialisés
  * si le serveur renvoie une erreur de validation.
  */
 export function FormulairePrestation({
   prestation,
-  entites,
-  entiteParDefaut,
-  entiteVerrouillee = false,
   nbClientsPrixCatalogue = 0,
   onSucces,
   onAnnuler,
 }: {
   /** Absente → création. */
   prestation?: Prestation;
-  entites: EntiteOption[];
-  entiteParDefaut?: string | null;
-  /** La prestation figure dans des tarifs clients : son entité ne peut plus changer. */
-  entiteVerrouillee?: boolean;
   /** Clients actifs qui paient le prix catalogue (sans prix personnalisé). */
   nbClientsPrixCatalogue?: number;
   onSucces: (message?: string) => void;
@@ -44,7 +36,6 @@ export function FormulairePrestation({
   const [uniteAutre, setUniteAutre] = useState(estUnitePredefinie(uniteInitiale) ? "" : uniteInitiale);
   const [prix, setPrix] = useState(prestation ? centimesVersSaisie(prestation.prix_unitaire_centimes) : "");
 
-  const entiteInitiale = prestation?.entite_id ?? entiteParDefaut ?? entites[0]?.id ?? "";
   const centimes = parseEurosEnCentimes(prix);
   const uniteAffichee = unite === UNITE_AUTRE ? uniteAutre.trim().toLowerCase() : unite;
   const prixModifie = prestation != null && centimes != null && centimes !== prestation.prix_unitaire_centimes;
@@ -58,30 +49,6 @@ export function FormulairePrestation({
   return (
     <form onSubmit={soumettre} className="space-y-5">
       <input type="hidden" name="id" value={prestation?.id ?? ""} />
-
-      <div>
-        <label htmlFor="prestation-entite" className="label">
-          Entité <Obligatoire />
-        </label>
-        {entiteVerrouillee && <input type="hidden" name="entite_id" value={entiteInitiale} />}
-        <select
-          id="prestation-entite"
-          name={entiteVerrouillee ? undefined : "entite_id"}
-          defaultValue={entiteInitiale}
-          disabled={entiteVerrouillee}
-          required
-          className="champ"
-        >
-          {entites.map((e) => (
-            <option key={e.id} value={e.id}>
-              {e.nom}
-            </option>
-          ))}
-        </select>
-        {entiteVerrouillee && (
-          <p className="aide">Non modifiable : cette prestation figure déjà dans les tarifs de clients de cette entité.</p>
-        )}
-      </div>
 
       <div>
         <label htmlFor="prestation-libelle" className="label">
@@ -189,8 +156,8 @@ export function FormulairePrestation({
       {prixModifie && nbClientsPrixCatalogue > 0 && (
         <p className="avertissement">
           Le nouveau prix s&apos;appliquera aux prochaines factures{" "}
-          {nbClientsPrixCatalogue > 1 ? "des" : "du"} {pluriel(nbClientsPrixCatalogue, "client")} au prix catalogue. Les
-          clients au prix personnalisé et les factures déjà créées ne changent pas.
+          {nbClientsPrixCatalogue > 1 ? "des" : "du"} {pluriel(nbClientsPrixCatalogue, "client")} au prix catalogue
+          (toutes académies confondues). Les clients au prix personnalisé et les factures déjà créées ne changent pas.
         </p>
       )}
 

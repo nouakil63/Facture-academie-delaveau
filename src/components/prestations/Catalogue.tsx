@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { changerArchivagePrestation, supprimerPrestation } from "@/app/(app)/prestations/actions";
 import { formatEuros } from "@/lib/format";
-import type { Entite, Prestation, ResultatAction } from "@/lib/types";
+import type { Prestation, ResultatAction } from "@/lib/types";
 import { FormulairePrestation } from "./FormulairePrestation";
 import {
   IconeArchive,
@@ -17,8 +17,6 @@ import {
 import { Modale } from "./Modale";
 import { pluriel, suffixeUnite } from "./unites";
 
-export type EntiteCatalogue = Pick<Entite, "id" | "nom" | "prefixe_facture" | "couleur_primaire" | "actif">;
-
 /** Prestation et son utilisation dans les tarifs clients. */
 export type PrestationCatalogue = Prestation & {
   /** Clients actifs ayant un tarif actif sur cette prestation. */
@@ -29,31 +27,24 @@ export type PrestationCatalogue = Prestation & {
   nbClientsReferences: number;
 };
 
-export type GroupeCatalogue = {
-  entite: EntiteCatalogue;
-  /** Prestations affichées (sans les archivées si elles sont masquées). */
-  prestations: PrestationCatalogue[];
-  /** Nombre de prestations archivées masquées. */
-  nbArchiveesMasquees: number;
-};
-
-type Edition = { prestation: PrestationCatalogue } | { entiteId: string | null } | null;
+type Edition = { prestation: PrestationCatalogue } | { nouvelle: true } | null;
 type Message = { ok: boolean; texte: string } | null;
 
-/** Catalogue des prestations, groupé par entité, avec création / modification / archivage / suppression. */
+/**
+ * Catalogue des prestations, commun à toutes les académies :
+ * création / modification / archivage / suppression.
+ */
 export function Catalogue({
   entete,
-  groupes,
-  entites,
-  entiteParDefaut,
+  prestations,
+  nbArchiveesMasquees,
 }: {
   /** Titre de la page (rendu côté serveur). */
   entete: React.ReactNode;
-  groupes: GroupeCatalogue[];
-  /** Entités proposées dans le formulaire (actives). */
-  entites: Pick<Entite, "id" | "nom">[];
-  /** Entité sélectionnée dans la barre latérale (préremplie à la création). */
-  entiteParDefaut: string | null;
+  /** Prestations affichées (actives d'abord ; sans les archivées si elles sont masquées). */
+  prestations: PrestationCatalogue[];
+  /** Nombre de prestations archivées masquées. */
+  nbArchiveesMasquees: number;
 }) {
   const [edition, setEdition] = useState<Edition>(null);
   const [aSupprimer, setASupprimer] = useState<PrestationCatalogue | null>(null);
@@ -74,25 +65,12 @@ export function Catalogue({
   }
 
   const prestationEditee = edition && "prestation" in edition ? edition.prestation : null;
-  // Une prestation d'une entité désactivée reste modifiable : on garde son entité dans la liste.
-  const entitesFormulaire =
-    prestationEditee && !entites.some((e) => e.id === prestationEditee.entite_id)
-      ? [
-          ...entites,
-          ...groupes.filter((g) => g.entite.id === prestationEditee.entite_id).map((g) => g.entite),
-        ]
-      : entites;
 
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
         {entete}
-        <button
-          type="button"
-          className="btn-primaire"
-          onClick={() => ouvrir({ entiteId: entiteParDefaut })}
-          disabled={entites.length === 0}
-        >
+        <button type="button" className="btn-primaire" onClick={() => ouvrir({ nouvelle: true })}>
           <IconePlus />
           Nouvelle prestation
         </button>
@@ -104,39 +82,30 @@ export function Catalogue({
         </p>
       )}
 
-      {groupes.length === 0 && (
-        <p className="carte carte-corps text-sm text-muted">Aucune entité active à afficher.</p>
-      )}
-
-      {groupes.map((g) => (
-        <GroupeEntite
-          key={g.entite.id}
-          groupe={g}
-          desactive={archivageEnCours}
-          onAjouter={() => ouvrir({ entiteId: g.entite.id })}
-          onModifier={(p) => ouvrir({ prestation: p })}
-          onArchiver={archiver}
-          onSupprimer={(p) => {
-            setMessage(null);
-            setASupprimer(p);
-          }}
-        />
-      ))}
+      <ListePrestations
+        prestations={prestations}
+        nbArchiveesMasquees={nbArchiveesMasquees}
+        desactive={archivageEnCours}
+        onAjouter={() => ouvrir({ nouvelle: true })}
+        onModifier={(p) => ouvrir({ prestation: p })}
+        onArchiver={archiver}
+        onSupprimer={(p) => {
+          setMessage(null);
+          setASupprimer(p);
+        }}
+      />
 
       <Modale
         ouverte={edition !== null}
         onFermer={() => setEdition(null)}
         titre={prestationEditee ? "Modifier la prestation" : "Nouvelle prestation"}
-        sousTitre={prestationEditee ? prestationEditee.libelle : "Ajout au catalogue de l'entité choisie"}
+        sousTitre={prestationEditee ? prestationEditee.libelle : "Ajout au catalogue commun aux académies"}
         largeur="max-w-xl"
       >
         {edition !== null && (
           <FormulairePrestation
             key={prestationEditee?.id ?? "nouvelle"}
             prestation={prestationEditee ?? undefined}
-            entites={entitesFormulaire}
-            entiteParDefaut={"entiteId" in edition ? edition.entiteId : null}
-            entiteVerrouillee={(prestationEditee?.nbClientsReferences ?? 0) > 0}
             nbClientsPrixCatalogue={prestationEditee ? prestationEditee.nbClients - prestationEditee.nbPrixPersonnalises : 0}
             onAnnuler={() => setEdition(null)}
             onSucces={(texte) => {
@@ -160,7 +129,7 @@ export function Catalogue({
 }
 
 // -----------------------------------------------------------------------------
-// Groupe d'une entité
+// Liste des prestations
 // -----------------------------------------------------------------------------
 
 type ActionsLigne = {
@@ -170,48 +139,34 @@ type ActionsLigne = {
   onSupprimer: (p: PrestationCatalogue) => void;
 };
 
-function GroupeEntite({
-  groupe,
+function ListePrestations({
+  prestations,
+  nbArchiveesMasquees,
   onAjouter,
   ...actions
-}: ActionsLigne & { groupe: GroupeCatalogue; onAjouter: () => void }) {
-  const { entite, prestations, nbArchiveesMasquees } = groupe;
+}: ActionsLigne & { prestations: PrestationCatalogue[]; nbArchiveesMasquees: number; onAjouter: () => void }) {
   const actives = prestations.filter((p) => p.actif);
   const mensuelles = actives.filter((p) => p.recurrente).length;
-  const idTitre = `catalogue-${entite.id}`;
 
   return (
-    <section className="carte overflow-hidden" aria-labelledby={idTitre}>
-      <div
-        className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-5 py-4"
-        style={{ boxShadow: `inset 4px 0 0 ${entite.couleur_primaire}` }}
-      >
+    <section className="carte overflow-hidden" aria-labelledby="catalogue-titre">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-5 py-4">
         <div className="min-w-0">
-          <h2 id={idTitre} className="titre-section flex flex-wrap items-center gap-2">
-            {entite.nom}
-            <span
-              className="badge border font-sans text-[11px] tracking-wider"
-              style={{ borderColor: entite.couleur_primaire, color: entite.couleur_primaire }}
-              title="Préfixe des numéros de facture"
-            >
-              {entite.prefixe_facture}
-            </span>
-            {!entite.actif && <span className="badge bg-zinc-200 font-sans text-zinc-600">Entité désactivée</span>}
+          <h2 id="catalogue-titre" className="titre-section">
+            Catalogue
           </h2>
           <p className="text-sm text-muted">
             {actives.length === 0
               ? "Aucune prestation active"
-              : `${pluriel(actives.length, "prestation active", "prestations actives")} · ${
-                  mensuelles > 1 ? `${mensuelles} facturées chaque mois` : `${mensuelles} facturée chaque mois`
-                }`}
+              : `${pluriel(mensuelles, "facturée chaque mois", "facturées chaque mois")} · ${pluriel(
+                  actives.length - mensuelles,
+                  "ponctuelle",
+                  "ponctuelles",
+                )}`}
             {nbArchiveesMasquees > 0 &&
               ` · ${pluriel(nbArchiveesMasquees, "archivée masquée", "archivées masquées")}`}
           </p>
         </div>
-        <button type="button" className="btn-secondaire btn-petit" onClick={onAjouter}>
-          <IconePlus className="size-3.5" />
-          Ajouter
-        </button>
       </div>
 
       {prestations.length === 0 ? (
@@ -219,10 +174,12 @@ function GroupeEntite({
           <span className="rounded-full bg-brand-light p-3 text-brand">
             <IconeCatalogue className="size-6" />
           </span>
-          <p className="mt-4 font-medium text-ink">Aucune prestation dans le catalogue de {entite.nom}</p>
+          <p className="mt-4 font-medium text-ink">
+            {nbArchiveesMasquees > 0 ? "Aucune prestation active" : "Le catalogue est vide"}
+          </p>
           <p className="mt-1 max-w-md text-sm text-muted">
             {nbArchiveesMasquees > 0
-              ? "Toutes ses prestations sont archivées. Affichez les archivées pour les réactiver, ou créez-en une nouvelle."
+              ? "Toutes les prestations sont archivées. Affichez les archivées pour les réactiver, ou créez-en une nouvelle."
               : "Ajoutez les prestations que vous facturez (pension, entraînement, scolarité, stage…) avec leur prix : vous les attribuerez ensuite à chaque client."}
           </p>
           <button type="button" className="btn-primaire mt-5" onClick={onAjouter}>

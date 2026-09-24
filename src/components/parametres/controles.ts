@@ -1,6 +1,6 @@
 /**
  * Contrôles et mises en forme des identifiants saisis dans les paramètres
- * d'une entité (IBAN, BIC, SIREN, SIRET, RNA, couleurs).
+ * (IBAN, BIC, SIREN, SIRET, RNA, couleurs des factures et des académies).
  * Fonctions pures : utilisables côté serveur (validation) comme côté client (aide à la saisie).
  */
 

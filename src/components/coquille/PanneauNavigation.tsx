@@ -1,23 +1,24 @@
 import { BoutonDeconnexion } from "./BoutonDeconnexion";
-import type { EntiteMenu } from "./donnees";
+import type { AcademieMenu } from "./donnees";
 import { NavigationPrincipale } from "./NavigationPrincipale";
-import { SelecteurEntite } from "./SelecteurEntite";
+import { SelecteurAcademie } from "./SelecteurAcademie";
 
 /** Contenu commun à la barre latérale (ordinateur) et au menu repliable (mobile). */
 export function PanneauNavigation({
-  entites,
-  entiteCourante,
+  academies,
+  academieCourante,
   email,
 }: {
-  entites: EntiteMenu[];
-  entiteCourante: string | null;
+  academies: AcademieMenu[];
+  /** Académie filtrée, ou null pour « Toutes ». */
+  academieCourante: string | null;
   email: string;
 }) {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      {entites.length > 0 && (
+      {academies.length > 0 && (
         <div className="px-4 pt-4 pb-2">
-          <SelecteurEntite entites={entites.map(({ id, nom }) => ({ id, nom }))} valeur={entiteCourante} />
+          <SelecteurAcademie academies={academies} valeur={academieCourante} />
         </div>
       )}
 

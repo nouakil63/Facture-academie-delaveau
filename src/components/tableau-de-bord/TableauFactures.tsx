@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { EntiteBadge } from "@/components/EntiteBadge";
+import { AcademieBadge } from "@/components/AcademieBadge";
 import { StatutBadge } from "@/components/StatutBadge";
 import { formatDate, formatEuros, nomClient } from "@/lib/format";
 import type { FactureResumee } from "./donnees";
@@ -26,17 +26,17 @@ function LienFacture({ facture }: { facture: FactureResumee }) {
  * Tableau compact de factures.
  * - « retard » : échéance et ancienneté du retard ;
  * - « recent » : date d'émission (ou de création pour un brouillon) et statut.
- * Sur mobile, le client passe sous le numéro et les colonnes secondaires sont masquées.
+ * Sur mobile, le client (et l'académie) passent sous le numéro ; les colonnes secondaires sont masquées.
  */
 export function TableauFactures({
   factures,
   variante,
-  afficherEntite,
+  afficherAcademie,
   aujourdhui,
 }: {
   factures: FactureResumee[];
   variante: "retard" | "recent";
-  afficherEntite: boolean;
+  afficherAcademie: boolean;
   aujourdhui: string;
 }) {
   return (
@@ -48,9 +48,9 @@ export function TableauFactures({
             <th scope="col" className="hidden sm:table-cell">
               Client
             </th>
-            {afficherEntite && (
+            {afficherAcademie && (
               <th scope="col" className="hidden md:table-cell">
-                Entité
+                Académie
               </th>
             )}
             <th scope="col" className={variante === "recent" ? "hidden sm:table-cell" : undefined}>
@@ -70,14 +70,19 @@ export function TableauFactures({
                 <td>
                   <LienFacture facture={f} />
                   <p className="mt-0.5 max-w-[12rem] truncate text-xs text-muted sm:hidden">{client(f)}</p>
+                  {afficherAcademie && (
+                    <p className="mt-1 md:hidden">
+                      <AcademieBadge nom={f.academie_nom} couleur={f.academie_couleur} />
+                    </p>
+                  )}
                 </td>
                 <td className="hidden sm:table-cell">
                   <p className="max-w-[16rem] truncate">{client(f)}</p>
                   {f.objet && <p className="max-w-[16rem] truncate text-xs text-muted">{f.objet}</p>}
                 </td>
-                {afficherEntite && (
+                {afficherAcademie && (
                   <td className="hidden md:table-cell">
-                    <EntiteBadge nom={f.entite_nom} couleur={f.entite_couleur} />
+                    <AcademieBadge nom={f.academie_nom} couleur={f.academie_couleur} />
                   </td>
                 )}
                 {variante === "retard" ? (

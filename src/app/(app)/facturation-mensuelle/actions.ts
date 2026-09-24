@@ -23,17 +23,29 @@ import type { ResultatAction } from "@/lib/types";
  * renvoient un ResultatAction (jamais d'exception vers le navigateur).
  */
 
-const schemaCible = z.object({ entiteId: schemaId, periode: schemaMoisObligatoire });
+/** Académie ciblée (null = toutes) et mois ("AAAA-MM"). */
+const schemaCible = z.object({
+  academieId: schemaId.nullable(),
+  periode: schemaMoisObligatoire,
+});
 
-/** Crée les brouillons mensuels manquants d'une entité pour un mois (idempotent). */
-export async function genererBrouillons(entiteId: string, mois: string): Promise<ResultatAction<{ crees: number }>> {
+/**
+ * Crée les brouillons mensuels manquants d'un mois, pour une académie ou pour toutes
+ * (`academieId` null). Idempotent : les clients déjà facturés ce mois-ci sont ignorés.
+ */
+export async function genererBrouillons(
+  academieId: string | null,
+  mois: string,
+): Promise<ResultatAction<{ crees: number }>> {
   const { supabase } = await exigerUtilisateur();
-  const cible = schemaCible.safeParse({ entiteId, periode: mois });
+  const cible = schemaCible.safeParse({ academieId, periode: mois });
   if (!cible.success) return { ok: false, erreur: messagesValidation(cible.error) };
 
   let crees: number;
   try {
-    const resultats = await genererBrouillonsMensuels(supabase, cible.data.entiteId, cible.data.periode, false);
+    const resultats = await genererBrouillonsMensuels(supabase, cible.data.periode, {
+      academieId: cible.data.academieId,
+    });
     crees = resultats.filter((r) => !r.deja_existante).length;
   } catch (e) {
     console.error("Génération mensuelle impossible :", e);
@@ -61,26 +73,28 @@ const schemaEnvoi = schemaCible.extend({
 
 /**
  * Émet et envoie les brouillons mensuels confirmés par l'utilisateur. Seuls les brouillons
- * générés automatiquement pour cette entité et ce mois sont traités (les autres sont ignorés).
+ * générés automatiquement pour ce mois (et cette académie si elle est précisée) sont
+ * traités : les autres sont ignorés.
  */
 export async function envoyerBrouillonsMensuels(
-  entiteId: string,
+  academieId: string | null,
   mois: string,
   ids: string[],
 ): Promise<ResultatAction<ResultatEnvoiFacture[]>> {
   const { supabase } = await exigerUtilisateur();
-  const saisie = schemaEnvoi.safeParse({ entiteId, periode: mois, ids });
+  const saisie = schemaEnvoi.safeParse({ academieId, periode: mois, ids });
   if (!saisie.success) return { ok: false, erreur: messagesValidation(saisie.error) };
-  const { entiteId: entite, periode, ids: demandes } = saisie.data;
+  const { academieId: academie, periode, ids: demandes } = saisie.data;
 
   try {
-    const resValides = await supabase
+    let requete = supabase
       .from("factures")
       .select("id")
       .in("id", demandes)
-      .eq("entite_id", entite)
       .eq("periode", periode)
       .eq("generation_auto", true);
+    if (academie) requete = requete.eq("academie_id", academie);
+    const resValides = await requete;
     if (resValides.error) return { ok: false, erreur: traduireErreur(resValides.error) };
     const valides = new Set((resValides.data as { id: string }[]).map((f) => f.id));
 

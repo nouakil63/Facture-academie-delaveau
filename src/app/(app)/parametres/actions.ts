@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { cookies } from "next/headers";
 import { z } from "zod";
 import {
   bicValide,
@@ -18,14 +19,19 @@ import {
   rnaValide,
 } from "@/components/parametres/controles";
 import { variablesInconnues, VARIABLES_EMAIL } from "@/components/parametres/modeles-email";
+import { COOKIE_ACADEMIE } from "@/lib/academie-selectionnee";
 import { exigerUtilisateur } from "@/lib/auth";
 import { emailConfigure, envoyerEmail } from "@/lib/email";
 import { formatDateHeure } from "@/lib/format";
+import type { ClientSupabase } from "@/lib/supabase/server";
 import type { ResultatAction } from "@/lib/types";
 
 /*
- * Server Actions des paramètres : enregistrement d'une entité (informations légales,
- * paiement, TVA, facturation mensuelle, modèles d'e-mail) et envoi d'un e-mail de test.
+ * Server Actions des paramètres :
+ *   - enregistrement des paramètres de l'association (ligne unique `parametres` :
+ *     informations légales, IBAN, TVA, facturation mensuelle, modèles d'e-mail) ;
+ *   - gestion des académies (ajout, modification, activation, suppression) ;
+ *   - envoi d'un e-mail de test.
  * Toutes valident leurs entrées (zod), vérifient la session et renvoient un
  * ResultatAction (jamais d'exception vers le navigateur).
  */
@@ -41,19 +47,25 @@ const ERREUR_RESEAU: ResultatAction = {
   erreur: "Impossible de joindre la base de données. Vérifiez la connexion et réessayez.",
 };
 
+/** Message de la base lorsque le préfixe est modifié après la première émission (trigger proteger_parametres). */
+const MESSAGE_PREFIXE_FIGE = "Le préfixe ne peut plus changer";
+
 /** Traduit une erreur Postgres / PostgREST en message compréhensible. */
-function traduireErreur(erreur: ErreurSupabase): string {
+function traduireErreur(erreur: ErreurSupabase, siCleEtrangere?: string): string {
   const texte = `${erreur.message} ${erreur.details ?? ""}`;
   switch (erreur.code) {
+    case "23503":
+      return siCleEtrangere ?? "Opération impossible : cet élément est lié à d'autres données.";
     case "23505":
-      if (texte.includes("prefixe_facture")) return "Ce préfixe de facture est déjà utilisé par une autre entité.";
-      return "Cette valeur est déjà utilisée par une autre entité.";
+      if (texte.includes("academies_nom")) return "Une académie porte déjà ce nom : choisissez-en un autre.";
+      return "Cette valeur est déjà utilisée.";
     case "23514":
       if (texte.includes("prefixe_facture")) return "Préfixe de facture invalide : 1 à 8 lettres majuscules ou chiffres.";
       if (texte.includes("couleur")) return "Couleur invalide : format #RRGGBB attendu.";
       if (texte.includes("delai_paiement")) return "Le délai de paiement doit être compris entre 0 et 90 jours.";
       if (texte.includes("taux_tva")) return "Le taux de TVA doit être compris entre 0 et 99,99 %.";
       if (texte.includes("jour_generation")) return "Le jour de génération doit être compris entre 1 et 28.";
+      if (texte.includes("nom")) return "Le nom est obligatoire.";
       return "Les données saisies ne respectent pas les règles de la base.";
     case "23502":
       return "Un champ obligatoire est manquant.";
@@ -64,6 +76,9 @@ function traduireErreur(erreur: ErreurSupabase): string {
     case "42501":
       return "Accès refusé : votre compte n'est pas autorisé à modifier les paramètres.";
     case "P0001":
+      if (erreur.message.includes(MESSAGE_PREFIXE_FIGE)) {
+        return "Le préfixe ne peut plus être modifié : des factures ont déjà été numérotées avec lui. La série de numérotation doit rester continue, sans trou ni doublon.";
+      }
       return erreur.message;
     case "PGRST301":
     case "PGRST303":
@@ -153,12 +168,9 @@ const modeleEmail = (max: number, libelle: string) =>
     }
   });
 
-const schemaId = z.uuid({ error: "Entité introuvable." });
-
-const schemaEntite = z
+const schemaParametres = z
   .object({
-    // Identité
-    nom: texteObligatoire(100, "Nom affiché", "Le nom affiché est obligatoire."),
+    // Identité et charte
     prefixe_facture: z
       .string()
       .transform((v) => v.trim().toUpperCase())
@@ -284,7 +296,7 @@ const schemaEntite = z
   });
 
 const CHAMPS_TEXTE = [
-  "nom", "prefixe_facture", "couleur_primaire", "couleur_secondaire", "logo_url",
+  "prefixe_facture", "couleur_primaire", "couleur_secondaire", "logo_url",
   "raison_sociale", "forme_juridique", "siren", "siret", "rna", "numero_tva", "objet_social",
   "adresse_ligne1", "adresse_ligne2", "code_postal", "ville", "pays", "email_contact", "telephone", "site_web",
   "titulaire_compte", "iban", "bic", "conditions_paiement", "delai_paiement_jours",
@@ -293,7 +305,7 @@ const CHAMPS_TEXTE = [
   "email_objet", "email_corps", "email_copie",
 ] as const;
 
-function lireFormulaireEntite(formData: FormData) {
+function lireFormulaireParametres(formData: FormData) {
   return {
     ...Object.fromEntries(CHAMPS_TEXTE.map((n) => [n, champ(formData, n)])),
     generation_auto: formData.get("generation_auto") === "on",
@@ -302,31 +314,38 @@ function lireFormulaireEntite(formData: FormData) {
 }
 
 // -----------------------------------------------------------------------------
-// Entité
+// Paramètres de l'association (ligne unique)
 // -----------------------------------------------------------------------------
 
+const PARAMETRES_INTROUVABLES: ResultatAction = {
+  ok: false,
+  erreur: "Paramètres introuvables, ou accès refusé : vérifiez que les migrations ont été appliquées.",
+};
+
 /**
- * Enregistre les paramètres d'une entité. Le préfixe de facture n'est modifiable
- * que tant qu'aucun numéro n'a été attribué (la série doit rester continue).
+ * Enregistre les paramètres de l'association (mise à jour de la ligne unique, jamais d'insertion).
+ * Le préfixe de facture n'est modifiable que tant qu'aucun numéro n'a été attribué
+ * (la série doit rester continue) : contrôlé ici et par un trigger en base.
  */
-export async function enregistrerEntite(_precedent: ResultatAction | null, formData: FormData): Promise<ResultatAction> {
+export async function enregistrerParametres(
+  _precedent: ResultatAction | null,
+  formData: FormData,
+): Promise<ResultatAction> {
   const { supabase } = await exigerUtilisateur();
 
-  const id = schemaId.safeParse(champ(formData, "id"));
-  if (!id.success) return { ok: false, erreur: "Entité introuvable." };
-  const lecture = schemaEntite.safeParse(lireFormulaireEntite(formData));
+  const lecture = schemaParametres.safeParse(lireFormulaireParametres(formData));
   if (!lecture.success) return { ok: false, erreur: messagesValidation(lecture.error) };
   const { prefixe_facture, ...champs } = lecture.data;
 
   try {
-    const [actuelle, compteurs] = await Promise.all([
-      supabase.from("entites").select("prefixe_facture").eq("id", id.data).maybeSingle(),
-      supabase.from("compteurs_factures").select("annee", { count: "exact", head: true }).eq("entite_id", id.data),
+    const [actuels, compteurs] = await Promise.all([
+      supabase.from("parametres").select("prefixe_facture").eq("id", true).maybeSingle(),
+      supabase.from("compteurs_factures").select("annee", { count: "exact", head: true }),
     ]);
-    if (actuelle.error) return { ok: false, erreur: traduireErreur(actuelle.error) };
+    if (actuels.error) return { ok: false, erreur: traduireErreur(actuels.error) };
     if (compteurs.error) return { ok: false, erreur: traduireErreur(compteurs.error) };
-    if (!actuelle.data) return { ok: false, erreur: "Entité introuvable, ou accès refusé." };
-    const prefixeActuel = (actuelle.data as { prefixe_facture: string }).prefixe_facture;
+    if (!actuels.data) return PARAMETRES_INTROUVABLES;
+    const prefixeActuel = (actuels.data as { prefixe_facture: string }).prefixe_facture;
 
     let modification: Record<string, unknown> = champs;
     if ((compteurs.count ?? 0) > 0) {
@@ -342,16 +361,204 @@ export async function enregistrerEntite(_precedent: ResultatAction | null, formD
       modification = { ...champs, prefixe_facture };
     }
 
-    const { data, error } = await supabase.from("entites").update(modification).eq("id", id.data).select("id");
+    const { data, error } = await supabase.from("parametres").update(modification).eq("id", true).select("id");
     if (error) return { ok: false, erreur: traduireErreur(error) };
-    if (!data || data.length === 0) return { ok: false, erreur: "Entité introuvable, ou accès refusé." };
+    if (!data || data.length === 0) return PARAMETRES_INTROUVABLES;
   } catch {
     return ERREUR_RESEAU;
   }
 
-  // Nom, couleurs et préfixe apparaissent dans la barre latérale et sur toutes les pages.
+  // Raison sociale, couleurs et préfixe apparaissent sur plusieurs pages (tableau de bord, factures…).
   revalidatePath("/", "layout");
   return { ok: true, message: "Paramètres enregistrés. Ils s'appliquent aux prochaines factures émises." };
+}
+
+// -----------------------------------------------------------------------------
+// Académies
+// -----------------------------------------------------------------------------
+
+const schemaIdAcademie = z.uuid({ error: "Académie introuvable." });
+
+const schemaAcademie = z.object({
+  id: z.union([z.literal(""), schemaIdAcademie]),
+  nom: z
+    .string()
+    .transform((v) => v.replace(/\s+/g, " ").trim())
+    .pipe(
+      z
+        .string()
+        .min(1, { error: "Le nom de l'académie est obligatoire (ex. Académie Espoir)." })
+        .max(80, { error: "Nom de l'académie : 80 caractères au maximum." }),
+    ),
+  couleur: couleur("Couleur de l'académie"),
+  actif: z.boolean(),
+});
+
+type AcademieLue = { id: string; nom: string; actif: boolean };
+
+/** Les académies actives autres que `sauf` : il doit toujours en rester une pour rattacher les nouveaux clients. */
+async function autresAcademiesActives(
+  supabase: ClientSupabase,
+  sauf: string,
+): Promise<{ ok: true; nombre: number } | { ok: false; erreur: string }> {
+  const { count, error } = await supabase
+    .from("academies")
+    .select("id", { count: "exact", head: true })
+    .eq("actif", true)
+    .neq("id", sauf);
+  if (error) return { ok: false, erreur: traduireErreur(error) };
+  return { ok: true, nombre: count ?? 0 };
+}
+
+const DERNIERE_ACTIVE =
+  "Au moins une académie doit rester active : les nouveaux clients doivent pouvoir y être rattachés. Activez ou ajoutez d'abord une autre académie.";
+
+/** Création (id vide) ou modification (nom, couleur, active) d'une académie. */
+export async function enregistrerAcademie(
+  _precedent: ResultatAction | null,
+  formData: FormData,
+): Promise<ResultatAction> {
+  const { supabase } = await exigerUtilisateur();
+
+  const lecture = schemaAcademie.safeParse({
+    id: champ(formData, "id"),
+    nom: champ(formData, "nom"),
+    couleur: champ(formData, "couleur"),
+    actif: formData.get("actif") === "on",
+  });
+  if (!lecture.success) return { ok: false, erreur: messagesValidation(lecture.error) };
+  const { id, nom, couleur: teinte, actif } = lecture.data;
+
+  try {
+    if (id) {
+      if (!actif) {
+        const autres = await autresAcademiesActives(supabase, id);
+        if (!autres.ok) return autres;
+        if (autres.nombre === 0) return { ok: false, erreur: DERNIERE_ACTIVE };
+      }
+      const { data, error } = await supabase
+        .from("academies")
+        .update({ nom, couleur: teinte, actif })
+        .eq("id", id)
+        .select("id");
+      if (error) return { ok: false, erreur: traduireErreur(error) };
+      if (!data || data.length === 0) return { ok: false, erreur: "Académie introuvable : elle a peut-être été supprimée." };
+    } else {
+      // Nouvelle académie : active, placée après les autres.
+      const derniere = await supabase.from("academies").select("ordre").order("ordre", { ascending: false }).limit(1);
+      if (derniere.error) return { ok: false, erreur: traduireErreur(derniere.error) };
+      const ordre = ((derniere.data as { ordre: number }[])[0]?.ordre ?? 0) + 1;
+      const { error } = await supabase.from("academies").insert({ nom, couleur: teinte, actif: true, ordre });
+      if (error) return { ok: false, erreur: traduireErreur(error) };
+    }
+  } catch {
+    return ERREUR_RESEAU;
+  }
+
+  // Le nom et la couleur apparaissent dans la barre latérale (filtre), les listes et les factures.
+  revalidatePath("/", "layout");
+  return {
+    ok: true,
+    message: id ? `Académie « ${nom} » enregistrée.` : `Académie « ${nom} » ajoutée : vous pouvez y rattacher des clients.`,
+  };
+}
+
+/** Active ou désactive une académie (elle n'est alors plus proposée pour les nouveaux clients ni dans le filtre). */
+export async function changerActivationAcademie(academieId: string, activer: boolean): Promise<ResultatAction> {
+  const { supabase } = await exigerUtilisateur();
+
+  const id = schemaIdAcademie.safeParse(academieId);
+  if (!id.success || typeof activer !== "boolean") return { ok: false, erreur: "Requête invalide." };
+
+  try {
+    if (!activer) {
+      const autres = await autresAcademiesActives(supabase, id.data);
+      if (!autres.ok) return autres;
+      if (autres.nombre === 0) return { ok: false, erreur: DERNIERE_ACTIVE };
+    }
+    const { data, error } = await supabase
+      .from("academies")
+      .update({ actif: activer })
+      .eq("id", id.data)
+      .select("id, nom, actif");
+    if (error) return { ok: false, erreur: traduireErreur(error) };
+    if (!data || data.length === 0) return { ok: false, erreur: "Académie introuvable." };
+    const { nom } = (data as AcademieLue[])[0];
+
+    revalidatePath("/", "layout");
+    return {
+      ok: true,
+      message: activer
+        ? `« ${nom} » est de nouveau active : elle est proposée pour les nouveaux clients et dans le filtre.`
+        : `« ${nom} » est désactivée. Ses clients restent rattachés et continuent d'être facturés s'ils sont actifs.`,
+    };
+  } catch {
+    return ERREUR_RESEAU;
+  }
+}
+
+/**
+ * Suppression définitive d'une académie — refusée si des clients ou des factures y sont rattachés
+ * (clé étrangère « on delete restrict » : on propose alors la désactivation).
+ */
+export async function supprimerAcademie(academieId: string): Promise<ResultatAction> {
+  const { supabase } = await exigerUtilisateur();
+
+  const id = schemaIdAcademie.safeParse(academieId);
+  if (!id.success) return { ok: false, erreur: "Académie introuvable." };
+
+  const refus =
+    "Cette académie ne peut pas être supprimée : des clients ou des factures y sont rattachés. Rattachez les clients à une autre académie depuis leur fiche, ou désactivez-la plutôt.";
+
+  try {
+    const [academie, clients, factures, autres] = await Promise.all([
+      supabase.from("academies").select("id, nom, actif").eq("id", id.data).maybeSingle(),
+      supabase.from("clients").select("id", { count: "exact", head: true }).eq("academie_id", id.data),
+      supabase.from("factures").select("id", { count: "exact", head: true }).eq("academie_id", id.data),
+      autresAcademiesActives(supabase, id.data),
+    ]);
+    if (academie.error) return { ok: false, erreur: traduireErreur(academie.error) };
+    if (clients.error) return { ok: false, erreur: traduireErreur(clients.error) };
+    if (factures.error) return { ok: false, erreur: traduireErreur(factures.error) };
+    if (!autres.ok) return autres;
+    if (!academie.data) return { ok: false, erreur: "Académie introuvable : elle a peut-être déjà été supprimée." };
+    const { nom } = academie.data as AcademieLue;
+
+    const nbClients = clients.count ?? 0;
+    const nbFactures = factures.count ?? 0;
+    if (nbClients > 0) {
+      return {
+        ok: false,
+        erreur: `« ${nom} » ne peut pas être supprimée : ${
+          nbClients > 1 ? `${nbClients} clients y sont rattachés` : "1 client y est rattaché"
+        } (clients archivés compris). Rattachez-les à une autre académie depuis leur fiche, ou désactivez plutôt l'académie.`,
+      };
+    }
+    if (nbFactures > 0) {
+      return {
+        ok: false,
+        erreur: `« ${nom} » ne peut pas être supprimée : ${
+          nbFactures > 1 ? `${nbFactures} factures y sont rattachées` : "1 facture y est rattachée"
+        } (historique de facturation). Désactivez-la plutôt.`,
+      };
+    }
+    if ((academie.data as AcademieLue).actif && autres.nombre === 0) return { ok: false, erreur: DERNIERE_ACTIVE };
+
+    const { data, error } = await supabase.from("academies").delete().eq("id", id.data).select("id");
+    if (error) return { ok: false, erreur: traduireErreur(error, refus) };
+    if (!data || data.length === 0) {
+      return { ok: false, erreur: "Académie introuvable : elle a peut-être déjà été supprimée." };
+    }
+
+    // L'académie supprimée ne doit plus servir de filtre.
+    const magasin = await cookies();
+    if (magasin.get(COOKIE_ACADEMIE)?.value === id.data) magasin.delete(COOKIE_ACADEMIE);
+
+    revalidatePath("/", "layout");
+    return { ok: true, message: `Académie « ${nom} » supprimée.` };
+  } catch {
+    return ERREUR_RESEAU;
+  }
 }
 
 // -----------------------------------------------------------------------------
@@ -363,14 +570,15 @@ function messageErreurEnvoi(e: unknown): string {
   const erreur = (e ?? {}) as { code?: string; responseCode?: number; message?: string };
   switch (erreur.code) {
     case "EAUTH":
-      return "Identifiants refusés par le serveur SMTP : vérifiez SMTP_USER et SMTP_PASSWORD (pour Gmail, utilisez un « mot de passe d'application »).";
+    case "ENOAUTH":
+      return "Identifiants refusés par le serveur SMTP : SMTP_USER doit être l'adresse complète de la boîte (ex. contact@academiedelaveau.com) et SMTP_PASSWORD le mot de passe de cette boîte.";
     case "ECONNECTION":
     case "ECONNREFUSED":
     case "ETIMEDOUT":
     case "ESOCKET":
     case "EDNS":
     case "ETLS":
-      return "Connexion au serveur SMTP impossible : vérifiez SMTP_HOST, SMTP_PORT et SMTP_SECURE (port 465 → true, port 587 → false).";
+      return "Connexion au serveur SMTP impossible : vérifiez SMTP_HOST (serveur indiqué dans l'espace client Amen), SMTP_PORT et SMTP_SECURE (port 465 → true, port 587 → false).";
     case "EENVELOPE":
       return "Adresse refusée par le serveur SMTP : vérifiez l'adresse de destination et l'expéditeur (EMAIL_FROM).";
     default:
@@ -391,7 +599,7 @@ export async function envoyerEmailTest(_precedent: ResultatAction | null, formDa
   if (!emailConfigure()) {
     return {
       ok: false,
-      erreur: "L'envoi d'e-mails n'est pas configuré : définissez les variables SMTP dans Vercel (voir le README), puis redéployez.",
+      erreur: "L'envoi d'e-mails n'est pas configuré : définissez les variables SMTP dans Vercel (voir l'aide ci-dessus), puis redéployez.",
     };
   }
 

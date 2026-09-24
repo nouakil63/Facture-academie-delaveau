@@ -12,6 +12,7 @@ import {
   marquerPayee,
   supprimerBrouillon,
 } from "@/app/(app)/factures/[id]/actions";
+import { Modale, ModaleConfirmation } from "@/components/Modale";
 import { formatDate, formatEuros, LIBELLES_STATUT, MODES_PAIEMENT } from "@/lib/format";
 import type { ResultatAction, StatutFacture } from "@/lib/types";
 import {
@@ -25,7 +26,6 @@ import {
   IconeFacture,
   IconeValide,
 } from "./Icones";
-import { Modale, ModaleConfirmation } from "./Modale";
 
 type ModaleOuverte =
   | "emettre-envoyer"
