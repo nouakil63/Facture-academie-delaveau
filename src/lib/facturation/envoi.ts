@@ -1,16 +1,25 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { construireHtmlEmail, emailConfigure, envoyerEmail, messageErreurEmail, remplirModele } from "@/lib/email";
-import { chargerFactureComplete, destinatairesFacture, emettreFacture } from "@/lib/facturation/service";
+import {
+  chargerFactureComplete,
+  chargerParametres,
+  destinatairesFacture,
+  emettreFacture,
+} from "@/lib/facturation/service";
 import { nomClient } from "@/lib/format";
 import { genererPdfFacture, nomFichierFacture } from "@/lib/pdf";
-import type { Entite, FactureComplete } from "@/lib/types";
+import type { FactureComplete, Parametres } from "@/lib/types";
 
 /*
  * Envoi d'une facture par e-mail : émission du brouillon si besoin, PDF en pièce jointe,
  * journal des envois (succès ET échecs) et mise à jour du statut.
  * Partagé par les Server Actions (client Supabase de l'utilisateur) et la tâche planifiée
  * (client admin). Ne lève jamais d'exception : retourne { ok: false, erreur }.
+ *
+ * Le PDF imprime l'émetteur figé à l'émission (FactureComplete.emetteur) ; l'e-mail, lui,
+ * utilise les paramètres actuels : modèles d'objet et de corps, copie cachée d'archivage,
+ * couleurs et coordonnées du pied (un duplicata part avec les réglages du jour).
  */
 
 export type ResultatEnvoi = { ok: true; destinataires: string[] } | { ok: false; erreur: string };
@@ -22,7 +31,7 @@ function messageDe(e: unknown): string {
   return "erreur inconnue";
 }
 
-/** Adresse(s) en copie cachée de l'émetteur (archivage) : « a@x.fr » ou « a@x.fr, b@y.fr ». */
+/** Adresse(s) en copie cachée (paramètres, archivage) : « a@x.fr » ou « a@x.fr, b@y.fr ». */
 function adressesCopie(emailCopie: string | null): string[] {
   return (emailCopie ?? "")
     .split(/[,;\s]+/)
@@ -30,12 +39,12 @@ function adressesCopie(emailCopie: string | null): string[] {
     .filter((a) => a.includes("@"));
 }
 
-/** Ligne de pied de l'e-mail : coordonnées de l'émetteur. */
-function piedEmail(entite: Entite, nomFichier: string): string {
-  const adresse = [entite.adresse_ligne1, [entite.code_postal, entite.ville].filter(Boolean).join(" ")]
+/** Ligne de pied de l'e-mail : coordonnées de l'association. */
+function piedEmail(parametres: Parametres, nomFichier: string): string {
+  const adresse = [parametres.adresse_ligne1, [parametres.code_postal, parametres.ville].filter(Boolean).join(" ")]
     .filter(Boolean)
     .join(", ");
-  const coordonnees = [entite.raison_sociale, adresse, entite.email_contact, entite.telephone]
+  const coordonnees = [parametres.raison_sociale, adresse, parametres.email_contact, parametres.telephone]
     .filter(Boolean)
     .join(" · ");
   return `${coordonnees}\nPièce jointe : ${nomFichier}`;
@@ -92,6 +101,14 @@ export async function envoyerFacture(supabase: SupabaseClient, factureId: string
     };
   }
 
+  // Modèles d'e-mail et copie cachée : paramètres actuels (lus avant toute émission).
+  let parametres: Parametres;
+  try {
+    parametres = await chargerParametres(supabase);
+  } catch (e) {
+    return { ok: false, erreur: `Lecture des paramètres impossible : ${messageDe(e)}` };
+  }
+
   if (statutInitial === "brouillon") {
     if (donnees.lignes.length === 0) {
       return {
@@ -108,15 +125,15 @@ export async function envoyerFacture(supabase: SupabaseClient, factureId: string
     if (!donnees) return { ok: false, erreur: "Facture introuvable après son émission." };
   }
 
-  const { facture, entite } = donnees;
+  const { facture, academie } = donnees;
   // Facture émise : coordonnées figées à l'émission (les mêmes que celles imprimées sur le PDF).
   const destinataires = destinatairesFacture(donnees.client);
   if (destinataires.length === 0) {
     return { ok: false, erreur: `Aucune adresse e-mail pour ${nomClient(donnees.client)}.` };
   }
 
-  const objet = remplirModele(entite.email_objet, donnees).trim() || `Facture ${facture.numero ?? ""}`.trim();
-  const texte = remplirModele(entite.email_corps, donnees);
+  const objet = remplirModele(parametres.email_objet, donnees).trim() || `Facture ${facture.numero ?? ""}`.trim();
+  const texte = remplirModele(parametres.email_corps, donnees);
   const nomFichier = nomFichierFacture(facture);
 
   let pdf: Buffer;
@@ -144,11 +161,13 @@ export async function envoyerFacture(supabase: SupabaseClient, factureId: string
       texte,
       html: construireHtmlEmail({
         texte,
-        titre: entite.nom,
-        couleur: entite.couleur_primaire,
-        pied: piedEmail(entite, nomFichier),
+        titre: parametres.raison_sociale,
+        sousTitre: academie.nom,
+        couleur: parametres.couleur_primaire,
+        couleurSecondaire: parametres.couleur_secondaire,
+        pied: piedEmail(parametres, nomFichier),
       }),
-      cci: adressesCopie(entite.email_copie),
+      cci: adressesCopie(parametres.email_copie),
       pieceJointe: { nom: nomFichier, contenu: pdf },
     }));
   } catch (e) {

@@ -197,23 +197,25 @@ export function messageErreurEmail(erreur: unknown): string {
 // -----------------------------------------------------------------------------
 
 /**
- * Remplace les variables d'un modèle d'e-mail de l'émetteur :
- * {client} {numero} {montant} {echeance} {periode} {entite} {objet}
- * (+ {structure} = raison sociale et {academie} = nom de l'académie).
+ * Remplace les variables d'un modèle d'e-mail (objet ou corps, définis dans les paramètres) :
+ *   {client}    nom du client          {numero}   numéro de la facture (« brouillon » avant émission)
+ *   {montant}   montant TTC            {echeance} date d'échéance
+ *   {periode}   mois facturé           {objet}    objet de la facture
+ *   {structure} raison sociale de l'association (émetteur)
+ *   {academie}  académie du client (Académie Delaveau / Académie Espoir)
  * Les accolades inconnues sont laissées telles quelles.
  */
 export function remplirModele(modele: string, donnees: FactureComplete): string {
-  const { facture, client, entite } = donnees;
+  const { facture, client, emetteur, academie } = donnees;
   const valeurs: Record<string, string> = {
     client: nomClient(client),
     numero: facture.numero ?? "brouillon",
     montant: formatEuros(facture.total_ttc_centimes),
     echeance: formatDate(facture.date_echeance),
     periode: facture.periode ? formatPeriode(facture.periode) : "",
-    entite: entite.nom,
+    structure: emetteur.raison_sociale,
+    academie: academie.nom,
     objet: facture.objet ?? "",
-    structure: entite.raison_sociale,
-    academie: entite.nom,
   };
   return modele.replace(/\{([a-z]+)\}/g, (tout, nom: string) =>
     Object.prototype.hasOwnProperty.call(valeurs, nom) ? valeurs[nom] : tout,
@@ -242,17 +244,33 @@ export function texteVersHtml(texte: string): string {
 export interface OptionsHtmlEmail {
   /** Corps du message en texte brut (sera échappé). */
   texte: string;
-  /** Nom affiché dans le bandeau (ex. « Académie Delaveau »). */
+  /** Nom affiché dans le bandeau (raison sociale de l'émetteur, ex. « Académie Delaveau »). */
   titre: string;
-  /** Couleur du bandeau (#RRGGBB), défaut bleu Delaveau. */
+  /** Mention discrète sous le titre (ex. l'académie du client « Académie Espoir ») ; ignorée si identique au titre. */
+  sousTitre?: string | null;
+  /** Couleur du bandeau (#RRGGBB) : couleur primaire des paramètres, défaut bleu Delaveau. */
   couleur?: string | null;
+  /** Couleur du filet sous le bandeau (#RRGGBB) : couleur secondaire des paramètres, défaut gris Delaveau. */
+  couleurSecondaire?: string | null;
   /** Ligne de pied discrète (coordonnées de l'émetteur), en texte brut. */
   pied?: string | null;
 }
 
-/** Gabarit HTML sobre (tableaux et styles en ligne, compatible avec les messageries). */
-export function construireHtmlEmail({ texte, titre, couleur, pied }: OptionsHtmlEmail): string {
-  const bandeau = couleur && /^#[0-9A-Fa-f]{6}$/.test(couleur) ? couleur : "#0050A0";
+const COULEUR_HEX = /^#[0-9A-Fa-f]{6}$/;
+
+/** Gabarit HTML sobre (tableaux et styles en ligne, compatible avec les messageries), aux couleurs de l'émetteur. */
+export function construireHtmlEmail({
+  texte,
+  titre,
+  sousTitre,
+  couleur,
+  couleurSecondaire,
+  pied,
+}: OptionsHtmlEmail): string {
+  const bandeau = couleur && COULEUR_HEX.test(couleur) ? couleur : "#0050A0";
+  const filet = couleurSecondaire && COULEUR_HEX.test(couleurSecondaire) ? couleurSecondaire : "#DADADA";
+  const mention = (sousTitre ?? "").trim();
+  const afficherMention = mention !== "" && mention.toLowerCase() !== titre.trim().toLowerCase();
   const police = "Helvetica, Arial, sans-serif";
   return `<!DOCTYPE html>
 <html lang="fr">
@@ -265,7 +283,11 @@ export function construireHtmlEmail({ texte, titre, couleur, pied }: OptionsHtml
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f5f7fa;">
 <tr><td align="center" style="padding:24px 12px;">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:600px;background-color:#ffffff;border:1px solid #e3e7ed;border-radius:8px;">
-<tr><td style="background-color:${bandeau};padding:18px 28px;border-radius:8px 8px 0 0;font-family:${police};font-size:18px;font-weight:bold;letter-spacing:0.5px;color:#ffffff;">${echapperHtml(titre)}</td></tr>
+<tr><td style="background-color:${bandeau};padding:18px 28px;border-radius:8px 8px 0 0;border-bottom:3px solid ${filet};font-family:${police};font-size:18px;font-weight:bold;letter-spacing:0.5px;color:#ffffff;">${echapperHtml(titre)}${
+    afficherMention
+      ? `<div style="margin-top:2px;font-size:13px;font-weight:normal;letter-spacing:0.3px;color:#ffffff;opacity:0.85;">${echapperHtml(mention)}</div>`
+      : ""
+  }</td></tr>
 <tr><td style="padding:28px;font-family:${police};font-size:15px;line-height:1.6;color:#1c2430;">
 ${texteVersHtml(texte)}
 </td></tr>${

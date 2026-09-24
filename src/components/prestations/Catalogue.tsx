@@ -14,7 +14,7 @@ import {
   IconeRepeter,
   IconeRestaurer,
 } from "./Icones";
-import { Modale } from "./Modale";
+import { Modale } from "@/components/Modale";
 import { pluriel, suffixeUnite } from "./unites";
 
 /** Prestation et son utilisation dans les tarifs clients. */

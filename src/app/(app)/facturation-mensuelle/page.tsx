@@ -69,7 +69,7 @@ export default async function PageFacturationMensuelle(props: PageProps<"/factur
   try {
     [parametres, academies, idCookie] = await Promise.all([
       chargerParametres(supabase),
-      chargerAcademies(supabase, true),
+      chargerAcademies(supabase),
       academieSelectionnee(),
     ]);
   } catch (e) {
@@ -78,10 +78,12 @@ export default async function PageFacturationMensuelle(props: PageProps<"/factur
 
   // Académie : celle de l'URL (« toutes » ou un identifiant), sinon celle du filtre de la
   // barre latérale, sinon toutes. Une académie inconnue ou désactivée retombe sur « toutes ».
+  const actives = academies.filter((a) => a.actif);
   const idAcademie =
     academieDemandee === ACADEMIE_TOUTES ? null : academieDemandee !== "" ? academieDemandee : idCookie;
-  const academie = academies.find((a) => a.id === idAcademie) ?? null;
+  const academie = actives.find((a) => a.id === idAcademie) ?? null;
   const academieId = academie?.id ?? null;
+  // Toutes les académies (même désactivées) pour les pastilles des clients.
   const academiesParId = new Map(academies.map((a) => [a.id, a]));
   const afficherAcademie = !academie && academies.length > 1;
 
@@ -191,7 +193,7 @@ export default async function PageFacturationMensuelle(props: PageProps<"/factur
       {/* Choix de l'académie et du mois */}
       <section className="carte carte-corps space-y-4" aria-label="Académie et mois">
         <SelecteurMensuel
-          academies={academies.map((a) => ({ id: a.id, nom: a.nom, couleur: a.couleur }))}
+          academies={actives.map((a) => ({ id: a.id, nom: a.nom, couleur: a.couleur }))}
           academieId={academieId}
           mois={mois}
           moisParDefaut={periodeVersMois(periodeDefaut)}
@@ -219,7 +221,7 @@ export default async function PageFacturationMensuelle(props: PageProps<"/factur
               )}
             </p>
           </div>
-          <Link href="/parametres" className="btn-lien shrink-0 text-xs">
+          <Link href="/parametres#mensuelle" className="btn-lien shrink-0 text-xs">
             Modifier l&apos;automatisation
           </Link>
         </div>
@@ -231,7 +233,7 @@ export default async function PageFacturationMensuelle(props: PageProps<"/factur
           <span>
             L&apos;envoi d&apos;e-mails n&apos;est pas configuré (serveur SMTP) : les factures pourront être générées mais
             pas envoyées.{" "}
-            <Link href="/parametres" className="font-medium underline">
+            <Link href="/parametres#envoi-emails" className="font-medium underline">
               Paramètres
             </Link>
           </span>

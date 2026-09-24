@@ -3,7 +3,7 @@
  * Module neutre : utilisé par la navigation (serveur) et le formulaire (client).
  */
 export const SECTIONS_PARAMETRES = [
-  { id: "identite", titre: "Identité & charte" },
+  { id: "charte", titre: "Identité & charte" },
   { id: "legal", titre: "Informations légales" },
   { id: "coordonnees", titre: "Coordonnées" },
   { id: "paiement", titre: "Paiement" },

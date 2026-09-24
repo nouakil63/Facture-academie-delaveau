@@ -1,9 +1,9 @@
 import { aujourdhuiParis, formatPeriode, premierDuMois } from "@/lib/format";
-import type { Client, Entite, Facture, FactureComplete, LigneFacture, StatutFacture } from "@/lib/types";
+import type { Academie, Client, Facture, FactureComplete, LigneFacture, Parametres, StatutFacture } from "@/lib/types";
 
 /*
- * Facture fictive, pour prévisualiser la charte d'un émetteur (Paramètres) et pour les tests.
- * Rien n'est enregistré en base.
+ * Facture fictive, pour prévisualiser la charte (Paramètres → « Aperçu d'une facture type »)
+ * et pour les tests. Rien n'est enregistré en base.
  */
 
 export interface LigneExemple {
@@ -24,12 +24,12 @@ export const LIGNES_EXEMPLE: LigneExemple[] = [
 ];
 
 const ID_EXEMPLE = "00000000-0000-4000-8000-000000000000";
+const DATE_EXEMPLE = "2026-09-24T08:00:00Z";
 
-/** Émetteur fictif (tests) : informations de l'association Académie Delaveau. */
-export function entiteExemple(modifications: Partial<Entite> = {}): Entite {
+/** Paramètres fictifs (tests) : informations de l'association Académie Delaveau, modèles d'e-mail par défaut. */
+export function parametresExemple(modifications: Partial<Parametres> = {}): Parametres {
   return {
-    id: "11111111-1111-4111-8111-111111111111",
-    nom: "Académie Delaveau",
+    id: true,
     prefixe_facture: "AD",
     couleur_primaire: "#0050A0",
     couleur_secondaire: "#DADADA",
@@ -64,14 +64,26 @@ export function entiteExemple(modifications: Partial<Entite> = {}): Entite {
     mois_facture: "courant",
     generation_auto: false,
     envoi_auto: false,
-    email_objet: "Facture {numero} – {entite}",
+    email_objet: "Facture {numero} – {structure}",
     email_corps:
-      "Bonjour {client},\n\nVeuillez trouver ci-joint la facture {numero} d'un montant de {montant}, à régler avant le {echeance}.\n\nCordialement,\n{entite}",
+      "Bonjour {client},\n\nVeuillez trouver ci-joint la facture {numero} d'un montant de {montant}, à régler avant le {echeance}.\n\nNous restons à votre disposition pour toute question.\n\nCordialement,\n{structure}",
     email_copie: null,
+    created_at: DATE_EXEMPLE,
+    updated_at: DATE_EXEMPLE,
+    ...modifications,
+  };
+}
+
+/** Académie fictive (tests, ou aperçu quand aucune académie n'est active). */
+export function academieExemple(modifications: Partial<Academie> = {}): Academie {
+  return {
+    id: "11111111-1111-4111-8111-111111111111",
+    nom: "Académie Delaveau",
+    couleur: "#0050A0",
     actif: true,
     ordre: 1,
-    created_at: "2026-09-24T08:00:00Z",
-    updated_at: "2026-09-24T08:00:00Z",
+    created_at: DATE_EXEMPLE,
+    updated_at: DATE_EXEMPLE,
     ...modifications,
   };
 }
@@ -81,13 +93,16 @@ export interface OptionsExemple {
   lignes?: LigneExemple[];
   client?: Partial<Client>;
   facture?: Partial<Facture>;
+  /** Académie du client (complétée par academieExemple). */
+  academie?: Partial<Academie>;
 }
 
-/** Construit une facture complète fictive pour l'émetteur donné (totaux calculés comme en base). */
-export function donneesExemple(entite: Entite, options: OptionsExemple = {}): FactureComplete {
+/** Construit une facture complète fictive avec les paramètres donnés (totaux calculés comme en base). */
+export function donneesExemple(emetteur: Parametres, options: OptionsExemple = {}): FactureComplete {
   const maintenant = new Date().toISOString();
   const periode = premierDuMois(aujourdhuiParis());
-  const tauxTva = Number(entite.taux_tva) || 0;
+  const tauxTva = Number(emetteur.taux_tva) || 0;
+  const academie = academieExemple(options.academie);
 
   const lignes: LigneFacture[] = (options.lignes ?? LIGNES_EXEMPLE).map((l, i) => {
     const quantite = l.quantite ?? 1;
@@ -110,7 +125,7 @@ export function donneesExemple(entite: Entite, options: OptionsExemple = {}): Fa
 
   const client: Client = {
     id: "00000000-0000-4000-8000-00000000c11e",
-    entite_id: entite.id,
+    academie_id: academie.id,
     type: "particulier",
     civilite: null,
     nom: "Exemple",
@@ -136,13 +151,13 @@ export function donneesExemple(entite: Entite, options: OptionsExemple = {}): Fa
 
   const facture: Facture = {
     id: ID_EXEMPLE,
-    entite_id: entite.id,
     client_id: client.id,
+    academie_id: academie.id,
     numero: null,
     annee: null,
     sequence: null,
     statut: "brouillon",
-    objet: `${entite.objet_facture_mensuelle} – ${formatPeriode(periode)}`,
+    objet: `${emetteur.objet_facture_mensuelle} – ${formatPeriode(periode)}`,
     periode,
     date_emission: null,
     date_echeance: null,
@@ -153,7 +168,8 @@ export function donneesExemple(entite: Entite, options: OptionsExemple = {}): Fa
     notes: null,
     notes_internes: null,
     client_snapshot: null,
-    entite_snapshot: null,
+    emetteur_snapshot: null,
+    academie_snapshot: null,
     envoyee_le: null,
     payee_le: null,
     mode_paiement: null,
@@ -168,5 +184,5 @@ export function donneesExemple(entite: Entite, options: OptionsExemple = {}): Fa
     ...(options.statut ? { statut: options.statut } : {}),
   };
 
-  return { facture, lignes, client, entite };
+  return { facture, lignes, client, emetteur, academie };
 }

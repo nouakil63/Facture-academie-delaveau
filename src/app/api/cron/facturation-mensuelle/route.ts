@@ -1,18 +1,25 @@
 import { createHash, timingSafeEqual } from "node:crypto";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import type { NextRequest } from "next/server";
 import { envoyerFactures } from "@/lib/facturation/envoi";
-import { genererBrouillonsMensuels, periodeAFacturer } from "@/lib/facturation/service";
+import {
+  chargerAcademies,
+  chargerParametres,
+  genererBrouillonsMensuels,
+  periodeAFacturer,
+} from "@/lib/facturation/service";
 import { aujourdhuiParis } from "@/lib/format";
 import { creerClientAdmin } from "@/lib/supabase/admin";
-import type { Entite } from "@/lib/types";
+import type { Parametres, ResultatGeneration } from "@/lib/types";
 
 /*
  * GET /api/cron/facturation-mensuelle — tâche planifiée (Vercel Cron, chaque jour à 6 h UTC).
  *
  * Authentification : en-tête `Authorization: Bearer $CRON_SECRET` (envoyé par Vercel).
- * Pour chaque entité active avec la génération automatique et dont le jour de génération
- * est le jour du mois (heure de Paris) : crée les brouillons du mois à facturer ; si l'envoi
- * automatique est activé, émet et envoie les brouillons NOUVELLEMENT créés.
+ * Si la génération automatique est activée dans les paramètres et que le jour de génération
+ * est le jour du mois (heure de Paris) : crée les brouillons du mois à facturer pour toutes
+ * les académies ; si l'envoi automatique est activé, émet et envoie les brouillons
+ * NOUVELLEMENT créés (jamais ceux qui existaient déjà).
  *
  * Paramètres de test :
  *   ?date=AAAA-MM-JJ  simule l'exécution à cette date (jour du mois et période)
@@ -24,21 +31,16 @@ export const dynamic = "force-dynamic";
 // Envoi séquentiel des e-mails : laisser le temps de traiter tout un mois.
 export const maxDuration = 300;
 
-type EntiteCron = Pick<
-  Entite,
-  "id" | "nom" | "actif" | "generation_auto" | "envoi_auto" | "jour_generation" | "mois_facture"
->;
-
-interface BilanEntite {
-  id: string;
+interface BilanAcademie {
+  id: string | null;
   nom: string;
-  periode: string | null;
   brouillons_crees: number;
   deja_existantes: number;
-  envoi_auto: boolean;
-  envoyees: number;
-  echecs_envoi: { facture_id: string; erreur: string }[];
-  erreur?: string;
+}
+
+interface EchecEnvoi {
+  facture_id: string;
+  erreur: string;
 }
 
 function json(statut: number, corps: unknown): Response {
@@ -68,6 +70,51 @@ function dateValide(valeur: string): boolean {
   return d.getUTCFullYear() === a && d.getUTCMonth() === m - 1 && d.getUTCDate() === j;
 }
 
+/**
+ * Répartition des brouillons par académie (pour suivre Delaveau et Espoir dans le bilan).
+ * Informative : en cas d'échec de lecture, le bilan est simplement omis.
+ */
+async function repartitionParAcademie(
+  admin: SupabaseClient,
+  resultats: ResultatGeneration[],
+): Promise<BilanAcademie[] | null> {
+  if (resultats.length === 0) return [];
+  try {
+    const [academies, clients] = await Promise.all([
+      chargerAcademies(admin),
+      admin
+        .from("clients")
+        .select("id, academie_id")
+        .in(
+          "id",
+          resultats.map((r) => r.client_id),
+        ),
+    ]);
+    if (clients.error) throw new Error(clients.error.message);
+    const academieDuClient = new Map(
+      ((clients.data ?? []) as { id: string; academie_id: string }[]).map((c) => [c.id, c.academie_id]),
+    );
+
+    const bilans = new Map<string | null, BilanAcademie>(
+      academies.map((a) => [a.id, { id: a.id, nom: a.nom, brouillons_crees: 0, deja_existantes: 0 }]),
+    );
+    for (const r of resultats) {
+      const id = academieDuClient.get(r.client_id) ?? null;
+      let bilan = bilans.get(id);
+      if (!bilan) {
+        bilan = { id, nom: "Académie inconnue", brouillons_crees: 0, deja_existantes: 0 };
+        bilans.set(id, bilan);
+      }
+      if (r.deja_existante) bilan.deja_existantes += 1;
+      else bilan.brouillons_crees += 1;
+    }
+    return [...bilans.values()].filter((b) => b.brouillons_crees + b.deja_existantes > 0);
+  } catch (e) {
+    console.error("Cron facturation mensuelle : répartition par académie impossible :", e);
+    return null;
+  }
+}
+
 export async function GET(request: NextRequest) {
   const acces = autorisation(request);
   if (acces === "secret-absent") {
@@ -76,88 +123,102 @@ export async function GET(request: NextRequest) {
   }
   if (acces === "refusee") return json(401, { ok: false, erreur: "Non autorisé." });
 
-  const parametres = request.nextUrl.searchParams;
-  const dateParam = parametres.get("date");
+  const recherche = request.nextUrl.searchParams;
+  const dateParam = recherche.get("date");
   if (dateParam !== null && !dateValide(dateParam)) {
     return json(400, { ok: false, erreur: "Paramètre date invalide : format attendu AAAA-MM-JJ." });
   }
   const date = dateParam ?? aujourdhuiParis();
   const jour = Number(date.slice(8, 10));
-  const apercu = parametres.get("apercu") === "1";
+  const apercu = recherche.get("apercu") === "1";
 
-  let admin: ReturnType<typeof creerClientAdmin>;
-  let entites: EntiteCron[];
+  let admin: SupabaseClient;
+  let parametres: Parametres;
   try {
     admin = creerClientAdmin();
-    const { data, error } = await admin
-      .from("entites")
-      .select("id, nom, actif, generation_auto, envoi_auto, jour_generation, mois_facture")
-      .eq("actif", true)
-      .order("ordre");
-    if (error) throw new Error(error.message);
-    entites = (data ?? []) as EntiteCron[];
+    parametres = await chargerParametres(admin);
   } catch (e) {
-    console.error("Cron facturation mensuelle : lecture des entités impossible :", e);
-    return json(500, { ok: false, date, erreur: `Lecture des entités impossible : ${messageDe(e)}` });
+    console.error("Cron facturation mensuelle : lecture des paramètres impossible :", e);
+    return json(500, { ok: false, date, erreur: `Lecture des paramètres impossible : ${messageDe(e)}` });
   }
 
-  const concernees = entites.filter((e) => e.generation_auto && Number(e.jour_generation) === jour);
-  const bilans: BilanEntite[] = [];
+  const reglages = {
+    generation_auto: parametres.generation_auto,
+    jour_generation: Number(parametres.jour_generation),
+    mois_facture: parametres.mois_facture,
+    envoi_auto: parametres.envoi_auto,
+  };
 
-  for (const entite of concernees) {
-    const bilan: BilanEntite = {
-      id: entite.id,
-      nom: entite.nom,
-      periode: null,
-      brouillons_crees: 0,
-      deja_existantes: 0,
-      envoi_auto: entite.envoi_auto,
-      envoyees: 0,
-      echecs_envoi: [],
-    };
-    bilans.push(bilan);
+  if (!parametres.generation_auto || reglages.jour_generation !== jour) {
+    return json(200, {
+      ok: true,
+      date,
+      jour,
+      apercu,
+      execute: false,
+      raison: parametres.generation_auto
+        ? `génération prévue le ${reglages.jour_generation} du mois`
+        : "génération automatique désactivée",
+      reglages,
+    });
+  }
 
+  const periode = periodeAFacturer(parametres, date);
+  let resultats: ResultatGeneration[];
+  try {
+    resultats = await genererBrouillonsMensuels(admin, periode, { apercu });
+  } catch (e) {
+    console.error(`Cron facturation mensuelle : génération des brouillons (${periode}) impossible :`, e);
+    return json(500, {
+      ok: false,
+      date,
+      jour,
+      apercu,
+      execute: true,
+      periode,
+      reglages,
+      erreur: `Génération des brouillons impossible : ${messageDe(e)}`,
+    });
+  }
+
+  const nouveaux = resultats.filter((r) => !r.deja_existante);
+  const idsAEnvoyer = nouveaux.map((r) => r.facture_id).filter((id): id is string => Boolean(id));
+
+  let envoyees = 0;
+  let echecsEnvoi: EchecEnvoi[] = [];
+  let erreurEnvoi: string | undefined;
+  if (parametres.envoi_auto && !apercu && idsAEnvoyer.length > 0) {
     try {
-      bilan.periode = periodeAFacturer(entite, date);
-      const resultats = await genererBrouillonsMensuels(admin, entite.id, bilan.periode, apercu);
-      const nouveaux = resultats.filter((r) => !r.deja_existante);
-      bilan.brouillons_crees = nouveaux.length;
-      bilan.deja_existantes = resultats.length - nouveaux.length;
-
-      const idsAEnvoyer = nouveaux.map((r) => r.facture_id).filter((id): id is string => Boolean(id));
-      if (entite.envoi_auto && !apercu && idsAEnvoyer.length > 0) {
-        const envois = await envoyerFactures(admin, idsAEnvoyer);
-        bilan.envoyees = envois.filter((r) => r.ok).length;
-        bilan.echecs_envoi = envois
-          .filter((r) => !r.ok)
-          .map((r) => ({ facture_id: r.id, erreur: r.erreur ?? "Échec de l'envoi." }));
-        for (const echec of bilan.echecs_envoi) {
-          console.error(
-            `Cron facturation mensuelle : ${entite.nom}, facture ${echec.facture_id} non envoyée : ${echec.erreur}`,
-          );
-        }
+      const envois = await envoyerFactures(admin, idsAEnvoyer);
+      envoyees = envois.filter((r) => r.ok).length;
+      echecsEnvoi = envois
+        .filter((r) => !r.ok)
+        .map((r) => ({ facture_id: r.id, erreur: r.erreur ?? "Échec de l'envoi." }));
+      for (const echec of echecsEnvoi) {
+        console.error(`Cron facturation mensuelle : facture ${echec.facture_id} non envoyée : ${echec.erreur}`);
       }
     } catch (e) {
-      bilan.erreur = messageDe(e);
-      console.error(`Cron facturation mensuelle : ${entite.nom} (${entite.id}) :`, e);
+      erreurEnvoi = `Envoi automatique interrompu : ${messageDe(e)}`;
+      console.error("Cron facturation mensuelle : envoi automatique interrompu :", e);
     }
   }
 
-  const enErreur = bilans.some((b) => b.erreur);
-  return json(enErreur ? 500 : 200, {
-    ok: !enErreur,
+  const parAcademie = await repartitionParAcademie(admin, resultats);
+
+  return json(erreurEnvoi ? 500 : 200, {
+    ok: !erreurEnvoi,
     date,
     jour,
     apercu,
-    entites_traitees: bilans,
-    entites_non_concernees: entites
-      .filter((e) => !concernees.includes(e))
-      .map((e) => ({
-        id: e.id,
-        nom: e.nom,
-        raison: e.generation_auto
-          ? `génération prévue le ${e.jour_generation} du mois`
-          : "génération automatique désactivée",
-      })),
+    execute: true,
+    periode,
+    reglages,
+    brouillons_crees: nouveaux.length,
+    deja_existantes: resultats.length - nouveaux.length,
+    ...(parAcademie ? { par_academie: parAcademie } : {}),
+    envoi_auto: parametres.envoi_auto,
+    envoyees,
+    echecs_envoi: echecsEnvoi,
+    ...(erreurEnvoi ? { erreur: erreurEnvoi } : {}),
   });
 }

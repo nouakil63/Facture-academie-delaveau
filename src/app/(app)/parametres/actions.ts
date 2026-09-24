@@ -170,7 +170,7 @@ const modeleEmail = (max: number, libelle: string) =>
 
 const schemaParametres = z
   .object({
-    // Identité et charte
+    // Charte et numérotation
     prefixe_facture: z
       .string()
       .transform((v) => v.trim().toUpperCase())

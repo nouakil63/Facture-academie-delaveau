@@ -1,10 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { MessageEmail } from "@/lib/email";
-import type { Client, Entite, Facture, FactureComplete, LigneFacture } from "@/lib/types";
-
-// `server-only` refuse d'être chargé hors de Next.js : neutralisé pour les tests.
-vi.mock("server-only", () => ({}));
+import type { Academie, Facture, FactureComplete, Parametres } from "@/lib/types";
 
 // E-mail : configuration et envoi simulés (les modèles et le HTML restent les vrais).
 const emailConfigure = vi.fn(() => true);
@@ -23,7 +20,7 @@ vi.mock("@/lib/pdf", () => ({
 }));
 
 const { envoyerFacture, envoyerFactures } = await import("@/lib/facturation/envoi");
-const { donneesExemple, entiteExemple } = await import("@/lib/pdf/exemple");
+const { donneesExemple, parametresExemple } = await import("@/lib/pdf/exemple");
 
 // -----------------------------------------------------------------------------
 // Client Supabase factice (base en mémoire, sous-ensemble du query builder)
@@ -102,12 +99,13 @@ class FauxSupabase {
   appelsRpc: { nom: string; args: Record<string, unknown> }[] = [];
   misesAJour: { table: string; valeurs: Ligne }[] = [];
 
-  constructor(donnees: { facture: Facture; lignes: LigneFacture[]; client: Client; entite: Entite }) {
+  constructor(donnees: FactureComplete) {
     this.tables = {
       factures: [structuredClone(donnees.facture) as unknown as Ligne],
       lignes_facture: donnees.lignes.map((l) => structuredClone(l) as unknown as Ligne),
       clients: [structuredClone(donnees.client) as unknown as Ligne],
-      entites: [structuredClone(donnees.entite) as unknown as Ligne],
+      academies: [structuredClone(donnees.academie) as unknown as Ligne],
+      parametres: [structuredClone(donnees.emetteur) as unknown as Ligne],
       envois_email: [],
     };
   }
@@ -124,7 +122,7 @@ class FauxSupabase {
         const facture = this.tables.factures.find((f) => f.id === args.p_facture_id);
         if (nom !== "emettre_facture" || !facture) return { data: null, error: { message: "Facture introuvable" } };
         const client = this.tables.clients.find((c) => c.id === facture.client_id);
-        const entite = this.tables.entites.find((e) => e.id === facture.entite_id);
+        const academie = this.tables.academies.find((a) => a.id === facture.academie_id);
         Object.assign(facture, {
           statut: "emise",
           numero: "AD-2026-0001",
@@ -133,7 +131,8 @@ class FauxSupabase {
           date_emission: "2026-09-24",
           date_echeance: "2026-10-24",
           client_snapshot: structuredClone(client),
-          entite_snapshot: structuredClone(entite),
+          emetteur_snapshot: structuredClone(this.tables.parametres[0]),
+          academie_snapshot: structuredClone(academie),
         });
         return { data: structuredClone(facture), error: null };
       },
@@ -148,8 +147,8 @@ class FauxSupabase {
   }
 }
 
-function base(options: Parameters<typeof donneesExemple>[1] = {}, entite: Partial<Entite> = {}) {
-  const donnees = donneesExemple(entiteExemple(entite), {
+function base(options: Parameters<typeof donneesExemple>[1] = {}, parametres: Partial<Parametres> = {}) {
+  const donnees = donneesExemple(parametresExemple(parametres), {
     ...options,
     client: { email: "marie@exemple.fr", emails_cc: ["papa@exemple.fr"], ...options.client },
   });
@@ -197,6 +196,23 @@ describe("envoyerFacture", () => {
     expect(faux.facture.statut).toBe("brouillon");
   });
 
+  it("n'émet pas un brouillon si les paramètres (modèles d'e-mail) sont illisibles", async () => {
+    const { faux, supabase } = base();
+    // 1re lecture (chargement de la facture) réussie, 2e (modèles d'e-mail) vide : accès retiré entre-temps.
+    const lire = faux.from.bind(faux);
+    let lectures = 0;
+    faux.from = (table: string) => {
+      if (table === "parametres" && ++lectures > 1) faux.tables.parametres = [];
+      return lire(table);
+    };
+    const resultat = await envoyerFacture(supabase, faux.facture.id);
+
+    expect(resultat).toEqual({ ok: false, erreur: expect.stringMatching(/^Lecture des paramètres impossible/) });
+    expect(faux.appelsRpc).toHaveLength(0);
+    expect(faux.facture.statut).toBe("brouillon");
+    expect(envoyerEmail).not.toHaveBeenCalled();
+  });
+
   it("émet puis envoie un brouillon, journalise l'envoi et passe la facture à « envoyée »", async () => {
     const { faux, supabase } = base({}, { email_copie: "archives@academie.fr" });
     const resultat = await envoyerFacture(supabase, faux.facture.id);
@@ -224,6 +240,63 @@ describe("envoyerFacture", () => {
     ]);
     expect(faux.facture.statut).toBe("envoyee");
     expect(faux.facture.envoyee_le).toEqual(expect.any(String));
+    // Émission : émetteur et académie figés.
+    expect(faux.facture.emetteur_snapshot?.raison_sociale).toBe("Académie Delaveau");
+    expect(faux.facture.academie_snapshot?.nom).toBe("Académie Delaveau");
+  });
+
+  it("met l'e-mail aux couleurs des paramètres et rappelle l'académie du client", async () => {
+    const { faux, supabase } = base(
+      { academie: { nom: "Académie Espoir", couleur: "#2E7D8C" } },
+      {
+        couleur_primaire: "#123456",
+        couleur_secondaire: "#ABCDEF",
+        email_objet: "Facture {numero} – {academie}",
+        email_corps: "Bonjour {client},\n{structure} – {academie}",
+      },
+    );
+    const resultat = await envoyerFacture(supabase, faux.facture.id);
+
+    expect(resultat.ok).toBe(true);
+    const message = envoyerEmail.mock.calls[0][0];
+    expect(message.objet).toBe("Facture AD-2026-0001 – Académie Espoir");
+    expect(message.texte).toBe("Bonjour Client Exemple,\nAcadémie Delaveau – Académie Espoir");
+    expect(message.html).toContain("background-color:#123456");
+    expect(message.html).toContain("border-bottom:3px solid #ABCDEF");
+    expect(message.html).toContain("Académie Espoir</div>");
+    expect(message.cci).toEqual([]);
+  });
+
+  it("utilise les modèles et la copie cachée actuels pour un duplicata (PDF : émetteur figé)", async () => {
+    const figes: Partial<Parametres> = {
+      raison_sociale: "Académie Delaveau (ancienne)",
+      email_objet: "Ancien objet {numero}",
+      email_corps: "Ancien corps",
+      email_copie: "ancienne-archive@academie.fr",
+    };
+    const { faux, supabase } = base(
+      {
+        statut: "envoyee",
+        facture: {
+          ...EMISE,
+          envoyee_le: "2026-09-01T08:00:00Z",
+          emetteur_snapshot: parametresExemple(figes),
+          academie_snapshot: { nom: "Académie Espoir" } as Academie,
+        },
+      },
+      { email_objet: "Rappel : facture {numero} ({structure})", email_copie: "archives@academie.fr; compta@academie.fr" },
+    );
+    const resultat = await envoyerFacture(supabase, faux.facture.id);
+
+    expect(resultat.ok).toBe(true);
+    const message = envoyerEmail.mock.calls[0][0];
+    // {structure} = émetteur imprimé sur la facture (figé) ; modèle et copie = paramètres du jour.
+    expect(message.objet).toBe("Rappel : facture AD-2026-0042 (Académie Delaveau (ancienne))");
+    expect(message.cci).toEqual(["archives@academie.fr", "compta@academie.fr"]);
+    const pdf = genererPdfFacture.mock.calls[0][0];
+    expect(pdf.emetteur.raison_sociale).toBe("Académie Delaveau (ancienne)");
+    expect(pdf.academie.nom).toBe("Académie Espoir");
+    expect(faux.facture.statut).toBe("envoyee");
   });
 
   it("renvoie une facture payée (duplicata) sans changer son statut", async () => {

@@ -88,7 +88,7 @@ export function FormulaireParametres(props: Omit<Contexte, "onModifie">) {
   return (
     // Remonté à chaque enregistrement (updated_at change) : affiche les valeurs normalisées.
     <form key={parametres.updated_at} onSubmit={soumettre} onChange={() => setModifie(true)} className="min-w-0 space-y-6">
-      <SectionIdentite {...contexte} />
+      <SectionCharte {...contexte} />
       <SectionLegale {...contexte} />
       <SectionCoordonnees {...contexte} />
       <SectionPaiement {...contexte} />
@@ -134,10 +134,10 @@ export function FormulaireParametres(props: Omit<Contexte, "onModifie">) {
 }
 
 // -----------------------------------------------------------------------------
-// Identité et charte
+// Charte et numérotation
 // -----------------------------------------------------------------------------
 
-function SectionIdentite({ parametres, prefixeVerrouille, dernierNumero, prochainNumero, aujourdhui }: Contexte) {
+function SectionCharte({ parametres, prefixeVerrouille, dernierNumero, prochainNumero, aujourdhui }: Contexte) {
   const [prefixe, setPrefixe] = useState(parametres.prefixe_facture);
   const [primaire, setPrimaire] = useState(parametres.couleur_primaire.toUpperCase());
   const [secondaire, setSecondaire] = useState(parametres.couleur_secondaire.toUpperCase());
@@ -153,8 +153,8 @@ function SectionIdentite({ parametres, prefixeVerrouille, dernierNumero, prochai
 
   return (
     <Section
-      id="identite"
-      titre={titreSection("identite")}
+      id="charte"
+      titre={titreSection("charte")}
       description="Numérotation des factures, couleurs et logo. Une seule série de numéros pour toutes les académies."
     >
       <div className="grid gap-4 sm:grid-cols-2">

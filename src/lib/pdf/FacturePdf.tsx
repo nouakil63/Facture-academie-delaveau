@@ -10,7 +10,7 @@ import {
   nomClient,
   sansEspacesSpeciales,
 } from "@/lib/format";
-import type { Client, Entite, Facture, LigneFacture } from "@/lib/types";
+import type { Academie, Client, Facture, LigneFacture, Parametres } from "@/lib/types";
 
 /*
  * Mise en page A4 d'une facture (@react-pdf/renderer, police Helvetica intégrée au PDF).
@@ -20,9 +20,9 @@ import type { Client, Entite, Facture, LigneFacture } from "@/lib/types";
  * Tout texte affiché passe donc par `t()` (→ sansEspacesSpeciales) ou formatEurosPdf.
  */
 
-/** Informations de la structure émettrice imprimées sur la facture. */
+/** Informations de la structure émettrice (paramètres) imprimées sur la facture. */
 export type EmetteurPdf = Pick<
-  Entite,
+  Parametres,
   | "raison_sociale"
   | "forme_juridique"
   | "adresse_ligne1"
@@ -53,6 +53,8 @@ export interface ProprietesFacturePdf {
   lignes: LigneFacture[];
   client: Client;
   emetteur: EmetteurPdf;
+  /** Académie du client (Académie Delaveau / Académie Espoir), rappelée sous le(s) cavalier(s). */
+  academie: Pick<Academie, "nom"> | null;
   /** Logo : data URI ou URL http(s) ; null → pas de logo. */
   logo: string | null;
   /** Proportions connues du logo (largeur / hauteur) ; absent → logo ajusté dans un cadre. */
@@ -108,14 +110,6 @@ function assombrir(hex: string, proportion: number): string {
 function ajouterJours(dateIso: string, jours: number): string {
   const [a, m, j] = dateIso.slice(0, 10).split("-").map(Number);
   return new Date(Date.UTC(a, m - 1, j + jours)).toISOString().slice(0, 10);
-}
-
-/** « FR7612345… » → « FR76 1234 5… » */
-function formatIban(iban: string): string {
-  return iban
-    .replace(/\s+/g, "")
-    .toUpperCase()
-    .replace(/(.{4})(?=.)/g, "$1 ");
 }
 
 function formatTaux(taux: number): string {
@@ -269,6 +263,7 @@ function creerStyles(primaire: string, secondaire: string) {
     lignePartie: { fontSize: 8.5 },
     lignePartieDiscrete: { fontSize: 8, color: DISCRET },
     cavaliers: { fontSize: 8.5, marginTop: 5 },
+    academie: { fontSize: 7.5, color: DISCRET, marginTop: 2, letterSpacing: 0.3 },
     gras: { fontFamily: "Helvetica-Bold" },
 
     // Objet et période
@@ -412,6 +407,7 @@ export function FacturePdf({
   lignes,
   client,
   emetteur,
+  academie,
   logo,
   logoRatio,
 }: ProprietesFacturePdf): ReactElement<DocumentProps> {
@@ -460,6 +456,7 @@ export function FacturePdf({
         rempli(client.numero_tva) ? `N° TVA : ${client.numero_tva}` : null,
       ].filter(rempli)
     : [];
+  const nomAcademie = academie?.nom?.trim() ?? "";
 
   // --- Pied de page
   const paragraphesPied = [
@@ -607,6 +604,9 @@ export function FacturePdf({
                 {t(client.cavaliers.trim())}
               </Text>
             )}
+            {rempli(nomAcademie) && (
+              <Text style={[s.academie, rempli(client.cavaliers) ? {} : { marginTop: 5 }]}>{t(nomAcademie)}</Text>
+            )}
           </View>
         </View>
 
@@ -721,13 +721,13 @@ export function FacturePdf({
                 {rempli(emetteur.iban) && (
                   <Text style={s.reglementLigne}>
                     <Text style={s.reglementLibelle}>IBAN : </Text>
-                    <Text style={s.gras}>{t(formatIban(emetteur.iban))}</Text>
+                    <Text style={s.gras}>{t(emetteur.iban.trim())}</Text>
                   </Text>
                 )}
                 {rempli(emetteur.bic) && (
                   <Text style={s.reglementLigne}>
                     <Text style={s.reglementLibelle}>BIC : </Text>
-                    <Text style={s.gras}>{t(emetteur.bic.replace(/\s+/g, "").toUpperCase())}</Text>
+                    <Text style={s.gras}>{t(emetteur.bic.trim())}</Text>
                   </Text>
                 )}
               </View>

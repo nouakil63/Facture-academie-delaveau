@@ -84,7 +84,7 @@ export default async function PageFactures(props: PageProps<"/factures">) {
 
   const libelleStatut = FILTRES_STATUT.find((f) => f.valeur === statut)?.libelle;
   const resume = [
-    academie ? null : "Toutes les académies",
+    academie || academies.length < 2 ? null : "Toutes les académies",
     pluriel(total, "facture"),
     libelleStatut ? libelleStatut.toLowerCase() : null,
     periode ? formatPeriode(periode) : null,

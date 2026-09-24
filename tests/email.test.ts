@@ -1,8 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-// `server-only` refuse d'être chargé hors de Next.js : neutralisé pour les tests.
-vi.mock("server-only", () => ({}));
-
 // Transport SMTP factice : aucun e-mail réel n'est envoyé.
 const sendMail = vi.fn();
 const createTransport = vi.fn(() => ({ sendMail, close: vi.fn() }));
@@ -18,15 +15,16 @@ const {
   texteVersHtml,
   variablesEmailManquantes,
 } = await import("@/lib/email");
-const { donneesExemple, entiteExemple } = await import("@/lib/pdf/exemple");
+const { donneesExemple, parametresExemple } = await import("@/lib/pdf/exemple");
 const { formatEuros } = await import("@/lib/format");
 
 function factureEmise() {
-  return donneesExemple(entiteExemple({ nom: "Académie Espoir" }), {
+  return donneesExemple(parametresExemple(), {
     statut: "emise",
+    academie: { nom: "Académie Espoir" },
     client: { prenom: "Marie", nom: "Dupont" },
     facture: {
-      numero: "AE-2026-0007",
+      numero: "AD-2026-0007",
       objet: "Formation et accompagnement – octobre 2026",
       periode: "2026-10-01",
       date_emission: "2026-10-01",
@@ -40,27 +38,34 @@ function factureEmise() {
 describe("remplirModele", () => {
   it("remplace toutes les variables", () => {
     const texte = remplirModele(
-      "{client} | {numero} | {montant} | {echeance} | {periode} | {entite} | {objet}",
+      "{client} | {numero} | {montant} | {echeance} | {periode} | {structure} | {academie} | {objet}",
       factureEmise(),
     );
     expect(texte).toBe(
-      `Marie Dupont | AE-2026-0007 | ${formatEuros(123450)} | 31/10/2026 | octobre 2026 | Académie Espoir | Formation et accompagnement – octobre 2026`,
+      `Marie Dupont | AD-2026-0007 | ${formatEuros(123450)} | 31/10/2026 | octobre 2026 | Académie Delaveau | Académie Espoir | Formation et accompagnement – octobre 2026`,
     );
   });
 
-  it("remplace chaque occurrence et laisse les accolades inconnues", () => {
-    expect(remplirModele("{numero} / {numero} {inconnue} {Client}", factureEmise())).toBe(
-      "AE-2026-0007 / AE-2026-0007 {inconnue} {Client}",
+  it("{structure} = raison sociale de l'émetteur, {academie} = académie du client", () => {
+    const d = donneesExemple(parametresExemple({ raison_sociale: "Association Académie Delaveau" }), {
+      academie: { nom: "Académie Espoir" },
+    });
+    expect(remplirModele("{structure} / {academie}", d)).toBe("Association Académie Delaveau / Académie Espoir");
+  });
+
+  it("remplace chaque occurrence et laisse les accolades inconnues (dont l'ancienne {entite})", () => {
+    expect(remplirModele("{numero} / {numero} {inconnue} {Client} {entite}", factureEmise())).toBe(
+      "AD-2026-0007 / AD-2026-0007 {inconnue} {Client} {entite}",
     );
   });
 
   it("gère un brouillon sans numéro ni période", () => {
-    const brouillon = donneesExemple(entiteExemple(), { facture: { periode: null } });
+    const brouillon = donneesExemple(parametresExemple(), { facture: { periode: null } });
     expect(remplirModele("Facture {numero} ({periode})", brouillon)).toBe("Facture brouillon ()");
   });
 
   it("affiche la raison sociale d'un client professionnel", () => {
-    const pro = donneesExemple(entiteExemple(), {
+    const pro = donneesExemple(parametresExemple(), {
       client: { type: "professionnel", raison_sociale: "Haras du Cotentin", prenom: "Paul", nom: "Martin" },
     });
     expect(remplirModele("Bonjour {client}", pro)).toBe("Bonjour Haras du Cotentin");
@@ -72,10 +77,13 @@ describe("remplirModele", () => {
     expect(remplirModele("{client}", donnees)).toBe("$& Dupont");
   });
 
-  it("remplit le modèle par défaut de l'entité", () => {
+  it("remplit les modèles par défaut des paramètres", () => {
     const d = factureEmise();
-    expect(remplirModele(d.entite.email_objet, d)).toBe("Facture AE-2026-0007 – Académie Espoir");
-    expect(remplirModele(d.entite.email_corps, d)).toContain("à régler avant le 31/10/2026");
+    expect(remplirModele(d.emetteur.email_objet, d)).toBe("Facture AD-2026-0007 – Académie Delaveau");
+    const corps = remplirModele(d.emetteur.email_corps, d);
+    expect(corps).toContain("Bonjour Marie Dupont,");
+    expect(corps).toContain("à régler avant le 31/10/2026");
+    expect(corps).toMatch(/Cordialement,\nAcadémie Delaveau$/);
   });
 });
 
@@ -92,24 +100,41 @@ describe("HTML des e-mails", () => {
     );
   });
 
-  it("construit un gabarit avec bandeau coloré, corps et pied échappés", () => {
+  it("construit un gabarit aux couleurs de l'émetteur, corps et pied échappés", () => {
     const html = construireHtmlEmail({
       texte: "Bonjour <Marie>\nMerci",
-      titre: "Académie <Espoir>",
+      titre: "Académie <Delaveau>",
+      sousTitre: "Académie <Espoir>",
       couleur: "#2E7D8C",
-      pied: "Pièce jointe : Facture-AE-2026-0007.pdf",
+      couleurSecondaire: "#C0C0C0",
+      pied: "Pièce jointe : Facture-AD-2026-0007.pdf",
     });
     expect(html).toContain("background-color:#2E7D8C");
-    expect(html).toContain("Académie &lt;Espoir&gt;");
+    expect(html).toContain("border-bottom:3px solid #C0C0C0");
+    expect(html).toContain("Académie &lt;Delaveau&gt;");
+    expect(html).toContain("Académie &lt;Espoir&gt;</div>");
     expect(html).toContain("Bonjour &lt;Marie&gt;<br>\nMerci");
-    expect(html).toContain("Pièce jointe : Facture-AE-2026-0007.pdf");
+    expect(html).toContain("Pièce jointe : Facture-AD-2026-0007.pdf");
     expect(html).not.toContain("<Marie>");
   });
 
+  it("n'affiche pas l'académie quand elle porte le nom de la structure", () => {
+    const html = construireHtmlEmail({ texte: "x", titre: "Académie Delaveau", sousTitre: " académie delaveau " });
+    expect(html).not.toContain("</div></td>");
+    expect(html.match(/Académie Delaveau/g)).toHaveLength(2); // <title> + bandeau
+  });
+
   it("ignore une couleur invalide (injection de style)", () => {
-    const html = construireHtmlEmail({ texte: "x", titre: "t", couleur: "red;background:url(x)" });
+    const html = construireHtmlEmail({
+      texte: "x",
+      titre: "t",
+      couleur: "red;background:url(x)",
+      couleurSecondaire: "#fff;x:y",
+    });
     expect(html).toContain("background-color:#0050A0");
+    expect(html).toContain("border-bottom:3px solid #DADADA");
     expect(html).not.toContain("url(x)");
+    expect(html).not.toContain("x:y");
   });
 });
 

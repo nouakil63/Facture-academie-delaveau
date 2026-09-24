@@ -1,14 +1,10 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it, vi } from "vitest";
-import type { Entite } from "@/lib/types";
-
-// `server-only` refuse d'être chargé hors de Next.js : neutralisé pour les tests.
-vi.mock("server-only", () => ({}));
-
-const { genererPdfFacture, nomFichierFacture } = await import("@/lib/pdf");
-const { donneesExemple, entiteExemple } = await import("@/lib/pdf/exemple");
+import { describe, expect, it } from "vitest";
+import { genererPdfFacture, nomFichierFacture } from "@/lib/pdf";
+import { donneesExemple, parametresExemple } from "@/lib/pdf/exemple";
+import type { Parametres } from "@/lib/types";
 
 /**
  * Les PDF rendus sont écrits dans APERCU_PDF_DIR (ou le dossier temporaire du système)
@@ -17,9 +13,10 @@ const { donneesExemple, entiteExemple } = await import("@/lib/pdf/exemple");
  */
 const DOSSIER_APERCU = process.env.APERCU_PDF_DIR ?? tmpdir();
 
-const ENTITE: Entite = entiteExemple({
+// IBAN et SIRET sont enregistrés déjà mis en forme (voir Paramètres) : imprimés tels quels.
+const PARAMETRES: Parametres = parametresExemple({
   telephone: "06 12 34 56 78",
-  iban: "FR7630006000011234567890189",
+  iban: "FR76 3000 6000 0112 3456 7890 189",
   bic: "AGRIFRPPXXX",
   titulaire_compte: "Académie Delaveau",
   mentions_legales: "Association loi 1901 – Formation de jeunes cavaliers vers le haut niveau.",
@@ -38,8 +35,9 @@ function ecrireApercu(nom: string, pdf: Buffer): string {
 
 describe("PDF de facture", () => {
   it("rend une facture émise d'un particulier (2 lignes, cavaliers)", async () => {
-    const donnees = donneesExemple(ENTITE, {
+    const donnees = donneesExemple(PARAMETRES, {
       statut: "emise",
+      academie: { nom: "Académie Espoir", couleur: "#2E7D8C" },
       lignes: [
         {
           libelle: "Pension et formation – octobre 2026",
@@ -85,9 +83,10 @@ describe("PDF de facture", () => {
       prix_unitaire_centimes: 3500 + i * 125,
     }));
     const donnees = donneesExemple(
-      { ...ENTITE, taux_tva: 20, mention_tva: "TVA acquittée sur les débits." },
+      { ...PARAMETRES, taux_tva: 20, mention_tva: "TVA acquittée sur les débits." },
       {
         statut: "payee",
+        academie: { nom: "Académie Delaveau" },
         lignes,
         client: {
           type: "professionnel",
@@ -122,13 +121,13 @@ describe("PDF de facture", () => {
   });
 
   it("rend un brouillon (filigrane) et une facture annulée (bandeau)", async () => {
-    const brouillon = donneesExemple(ENTITE);
+    const brouillon = donneesExemple(PARAMETRES);
     const pdfBrouillon = await genererPdfFacture(brouillon);
     expect(nombrePages(pdfBrouillon)).toBe(1);
     ecrireApercu("apercu-brouillon.pdf", pdfBrouillon);
     expect(nomFichierFacture(brouillon.facture)).toMatch(/^Brouillon-\d{4}-\d{2}-[0-9a-f]{8}\.pdf$/);
 
-    const annulee = donneesExemple(ENTITE, {
+    const annulee = donneesExemple(PARAMETRES, {
       statut: "annulee",
       facture: {
         numero: "AD-2026-0044",
@@ -143,8 +142,16 @@ describe("PDF de facture", () => {
     ecrireApercu("apercu-annulee.pdf", pdfAnnulee);
   });
 
-  it("rend une facture sans aucune ligne sans planter", async () => {
-    const pdf = await genererPdfFacture(donneesExemple(ENTITE, { lignes: [] }));
+  it("rend une facture sans aucune ligne ni cavalier sans planter", async () => {
+    const pdf = await genererPdfFacture(
+      donneesExemple(PARAMETRES, { lignes: [], client: { cavaliers: null }, academie: { nom: "Académie Espoir" } }),
+    );
     expect(pdf.subarray(0, 5).toString()).toBe("%PDF-");
+  });
+
+  it("rend une facture sans académie (nom vide) ni coordonnées bancaires", async () => {
+    const donnees = donneesExemple(parametresExemple(), { academie: { nom: "" } });
+    const pdf = await genererPdfFacture(donnees);
+    expect(nombrePages(pdf)).toBe(1);
   });
 });
