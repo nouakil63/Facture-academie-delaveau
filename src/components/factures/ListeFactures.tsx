@@ -41,7 +41,16 @@ const MAX_LOT = 100;
  * Tableau des factures avec sélection multiple et action groupée « Émettre et envoyer ».
  * Les factures annulées ne sont pas sélectionnables.
  */
-export function ListeFactures({ factures, afficherEntite }: { factures: FactureListe[]; afficherEntite: boolean }) {
+export function ListeFactures({
+  factures,
+  afficherEntite,
+  envoiPossible,
+}: {
+  factures: FactureListe[];
+  afficherEntite: boolean;
+  /** false si l'envoi d'e-mails (SMTP) n'est pas configuré. */
+  envoiPossible: boolean;
+}) {
   const [selection, setSelection] = useState<Set<string>>(new Set());
   const [confirmation, setConfirmation] = useState(false);
   const [compteRendu, setCompteRendu] = useState<{ resultats: ResultatEnvoiFacture[]; synthese?: string } | null>(null);
@@ -88,7 +97,7 @@ export function ListeFactures({ factures, afficherEntite }: { factures: FactureL
       )}
 
       {choisies.length > 0 && (
-        <div className="sticky top-2 z-20 flex flex-col gap-3 rounded-xl border border-brand/30 bg-brand-light px-4 py-3 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+        <div className="sticky top-18 z-20 flex flex-col gap-3 rounded-xl lg:top-2 border border-brand/30 bg-brand-light px-4 py-3 shadow-sm sm:flex-row sm:items-center sm:justify-between">
           <p className="text-sm text-ink">
             <span className="font-semibold">{pluriel(choisies.length, "facture sélectionnée", "factures sélectionnées")}</span>
             <span className="text-muted"> · {formatEuros(totalSelection)} TTC</span>
@@ -101,14 +110,28 @@ export function ListeFactures({ factures, afficherEntite }: { factures: FactureL
               type="button"
               className="btn-primaire btn-petit"
               onClick={() => setConfirmation(true)}
-              disabled={tropNombreuses}
-              title={tropNombreuses ? `${MAX_LOT} factures au maximum par envoi` : undefined}
+              disabled={tropNombreuses || !envoiPossible}
+              title={
+                !envoiPossible
+                  ? "L'envoi d'e-mails n'est pas configuré (Paramètres)"
+                  : tropNombreuses
+                    ? `${MAX_LOT} factures au maximum par envoi`
+                    : undefined
+              }
             >
               <IconeEnvoi className="size-3.5" />
               Émettre et envoyer
             </button>
           </div>
         </div>
+      )}
+      {choisies.length > 0 && !envoiPossible && (
+        <p className="avertissement">
+          L&apos;envoi d&apos;e-mails n&apos;est pas configuré (serveur SMTP) : l&apos;envoi groupé est indisponible.{" "}
+          <Link href="/parametres" className="font-medium underline">
+            Paramètres
+          </Link>
+        </p>
       )}
       {tropNombreuses && (
         <p className="avertissement">

@@ -1,6 +1,7 @@
 import "server-only";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { emailConfigure } from "@/lib/email";
 import { envoyerFactures } from "@/lib/facturation/envoi";
 import { destinatairesFacture } from "@/lib/facturation/service";
 import { parseEurosEnCentimes } from "@/lib/format";
@@ -289,6 +290,9 @@ export async function envoyerLot(
   ids: string[],
   filtre?: (f: FactureLot) => string | null,
 ): Promise<ResultatAction<ResultatEnvoiFacture[]>> {
+  if (!emailConfigure()) {
+    return { ok: false, erreur: "L'envoi d'e-mails n'est pas configuré (serveur SMTP) : voir les Paramètres." };
+  }
   const resFactures = await supabase
     .from("factures_vue")
     .select("id, statut, numero, client_id, client_type, client_nom, client_prenom, client_raison_sociale")

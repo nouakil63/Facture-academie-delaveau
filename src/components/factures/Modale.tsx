@@ -40,6 +40,10 @@ export function Modale({
         e.preventDefault();
         onFermer();
       }}
+      onClose={() => {
+        // Fermeture imposée par le navigateur (ex. Échap répété) : on resynchronise l'état.
+        if (ouverte) onFermer();
+      }}
       onClick={(e) => {
         if (e.target === e.currentTarget) onFermer();
       }}

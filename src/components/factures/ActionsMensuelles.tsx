@@ -1,0 +1,158 @@
+"use client";
+
+import { useState, useTransition } from "react";
+import { envoyerBrouillonsMensuels, genererBrouillons } from "@/app/(app)/facturation-mensuelle/actions";
+import { formatEuros } from "@/lib/format";
+import { IconeAlerte, IconeEnvoi, IconePlus, IconeValide } from "./Icones";
+import { ModaleConfirmation } from "./Modale";
+import { pluriel, type ResultatEnvoiFacture } from "./outils";
+import { ResultatsEnvoi } from "./ResultatsEnvoi";
+
+/** Étape 1 : création des brouillons du mois. */
+export function BoutonGenerer({
+  entiteId,
+  mois,
+  nombre,
+  libelleMois,
+}: {
+  entiteId: string;
+  mois: string;
+  nombre: number;
+  libelleMois: string;
+}) {
+  const [enCours, demarrer] = useTransition();
+  const [retour, setRetour] = useState<{ ok: boolean; texte: string } | null>(null);
+
+  function generer() {
+    setRetour(null);
+    demarrer(async () => {
+      try {
+        const r = await genererBrouillons(entiteId, mois);
+        setRetour(r.ok ? { ok: true, texte: r.message ?? "Brouillons créés." } : { ok: false, texte: r.erreur });
+      } catch {
+        setRetour({ ok: false, texte: "La requête n'a pas abouti. Vérifiez la connexion puis réessayez." });
+      }
+    });
+  }
+
+  return (
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="min-w-0 text-sm">
+        {retour ? (
+          <p role={retour.ok ? "status" : "alert"} className={retour.ok ? "succes" : "erreur whitespace-pre-line"}>
+            {retour.texte}
+          </p>
+        ) : nombre > 0 ? (
+          <p className="text-muted">
+            {pluriel(nombre, "brouillon sera créé", "brouillons seront créés")} pour {libelleMois}. Rien n&apos;est envoyé
+            à cette étape.
+          </p>
+        ) : (
+          <p className="flex items-center gap-2 text-emerald-700">
+            <IconeValide className="size-4" />
+            Tous les brouillons de {libelleMois} sont déjà générés.
+          </p>
+        )}
+      </div>
+      <button type="button" className="btn-primaire shrink-0" onClick={generer} disabled={enCours || nombre === 0}>
+        <IconePlus />
+        {enCours ? "Génération…" : `Générer les brouillons (${nombre})`}
+      </button>
+    </div>
+  );
+}
+
+/** Étape 2 : émission et envoi groupé des brouillons du mois. */
+export function EnvoiBrouillons({
+  entiteId,
+  mois,
+  libelleMois,
+  brouillons,
+  nbSansEmail,
+}: {
+  entiteId: string;
+  mois: string;
+  libelleMois: string;
+  /** Brouillons envoyables (client avec au moins une adresse e-mail). */
+  brouillons: { id: string; client: string; totalTtc: number }[];
+  nbSansEmail: number;
+}) {
+  const [confirmation, setConfirmation] = useState(false);
+  const [compteRendu, setCompteRendu] = useState<{ resultats: ResultatEnvoiFacture[]; synthese?: string } | null>(null);
+  const total = brouillons.reduce((s, b) => s + b.totalTtc, 0);
+  const n = brouillons.length;
+
+  return (
+    <div className="space-y-4">
+      {compteRendu && (
+        <ResultatsEnvoi
+          resultats={compteRendu.resultats}
+          synthese={compteRendu.synthese}
+          onFermer={() => setCompteRendu(null)}
+        />
+      )}
+
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-sm text-muted">
+          {n > 0
+            ? "Relisez les brouillons (lien « Relire »), puis émettez-les et envoyez-les en une fois."
+            : "Aucun brouillon à envoyer pour ce mois."}
+        </p>
+        <button
+          type="button"
+          className="btn-primaire shrink-0"
+          onClick={() => setConfirmation(true)}
+          disabled={n === 0}
+        >
+          <IconeEnvoi />
+          {n > 0 ? `Émettre et envoyer tous les brouillons (${n} — ${formatEuros(total)})` : "Émettre et envoyer"}
+        </button>
+      </div>
+
+      {nbSansEmail > 0 && (
+        <p className="avertissement flex items-start gap-2">
+          <IconeAlerte className="mt-0.5 size-4 text-amber-600" />
+          <span>
+            {nbSansEmail === 1
+              ? "1 brouillon concerne un client sans adresse e-mail : il n'est pas inclus dans l'envoi groupé. Ouvrez-le pour l'émettre sans envoi (remise en main propre) ou complétez la fiche client."
+              : `${nbSansEmail} brouillons concernent des clients sans adresse e-mail : ils ne sont pas inclus dans l'envoi groupé. Ouvrez-les pour les émettre sans envoi (remise en main propre) ou complétez les fiches clients.`}
+          </span>
+        </p>
+      )}
+
+      <ModaleConfirmation
+        ouverte={confirmation}
+        onFermer={() => setConfirmation(false)}
+        titre={`Émettre et envoyer les factures de ${libelleMois}`}
+        libelleConfirmer={`Émettre et envoyer (${n})`}
+        libelleEnCours="Envoi en cours…"
+        desactiver={n === 0}
+        onConfirmer={() =>
+          envoyerBrouillonsMensuels(
+            entiteId,
+            mois,
+            brouillons.map((b) => b.id),
+          )
+        }
+        onSucces={(r) => setCompteRendu({ resultats: r.donnees ?? [], synthese: r.message })}
+      >
+        <p>
+          <strong>{pluriel(n, "brouillon")}</strong> pour un total de <strong>{formatEuros(total)} TTC</strong> :
+        </p>
+        <ul className="list-disc space-y-1 pl-5">
+          <li>chaque facture reçoit son numéro définitif et ne pourra plus être modifiée ;</li>
+          <li>elle est envoyée par e-mail au client (adresse principale et copies) avec le PDF en pièce jointe.</li>
+        </ul>
+        <ul className="max-h-48 divide-y divide-line overflow-y-auto rounded-lg border border-line">
+          {brouillons.map((b) => (
+            <li key={b.id} className="flex justify-between gap-3 px-3 py-1.5 text-xs">
+              <span className="truncate">{b.client}</span>
+              <span className="shrink-0 tabular-nums">{formatEuros(b.totalTtc)}</span>
+            </li>
+          ))}
+        </ul>
+        {n > 10 && <p className="text-xs text-muted">L&apos;envoi est séquentiel : comptez quelques secondes par facture.</p>}
+      </ModaleConfirmation>
+    </div>
+  );
+}

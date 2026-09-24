@@ -96,11 +96,7 @@ const schemaPrestation = z
   .object({
     id: z.union([z.literal(""), z.uuid({ error: "Prestation introuvable." })]),
     entite_id: z.uuid({ error: "Choisissez l'entité (Académie Delaveau ou Académie Espoir)." }),
-    libelle: z
-      .string()
-      .trim()
-      .min(1, { error: "Le libellé est obligatoire." })
-      .max(200, { error: "Libellé : 200 caractères au maximum." }),
+    libelle: z.string().trim().max(200, { error: "Libellé : 200 caractères au maximum." }),
     description: texteFacultatif(1000, "Description"),
     prix: z.string().trim(),
     unite: z.string().trim(),
@@ -111,6 +107,9 @@ const schemaPrestation = z
   })
   .transform((p, ctx) => {
     const erreur = (message: string) => ctx.addIssue({ code: "custom", message });
+
+    // Contrôlé ici (et non dans le champ) pour afficher toutes les erreurs d'un coup.
+    if (p.libelle === "") erreur("Le libellé est obligatoire.");
 
     let prix = 0;
     if (p.prix === "") {

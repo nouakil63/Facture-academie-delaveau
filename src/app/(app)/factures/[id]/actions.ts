@@ -14,11 +14,12 @@ import {
   traduireErreur,
 } from "@/components/factures/serveur";
 import { exigerUtilisateur } from "@/lib/auth";
+import { emailConfigure } from "@/lib/email";
 import { envoyerFacture } from "@/lib/facturation/envoi";
-import { emettreFacture } from "@/lib/facturation/service";
+import { destinatairesFacture, emettreFacture } from "@/lib/facturation/service";
 import { aujourdhuiParis, formatDate, LIBELLES_STATUT, MODES_PAIEMENT } from "@/lib/format";
 import type { ClientSupabase } from "@/lib/supabase/server";
-import type { Facture, LigneFacture, ResultatAction, StatutFacture } from "@/lib/types";
+import type { Client, Facture, LigneFacture, ResultatAction, StatutFacture } from "@/lib/types";
 
 /*
  * Server Actions de la fiche facture : édition d'un brouillon (en-tête et lignes),
@@ -36,13 +37,13 @@ const ERREUR_INATTENDUE: ResultatAction = {
   erreur: "L'opération n'a pas abouti. Vérifiez la connexion puis réessayez.",
 };
 
-type EtatFacture = Pick<Facture, "id" | "statut" | "numero" | "entite_id" | "envoyee_le">;
+type EtatFacture = Pick<Facture, "id" | "statut" | "numero" | "entite_id" | "client_id" | "envoyee_le">;
 
 /** Statut actuel de la facture, ou un message d'erreur. */
 async function lireFacture(supabase: ClientSupabase, id: string): Promise<EtatFacture | string> {
   const { data, error } = await supabase
     .from("factures")
-    .select("id, statut, numero, entite_id, envoyee_le")
+    .select("id, statut, numero, entite_id, client_id, envoyee_le")
     .eq("id", id)
     .maybeSingle();
   if (error) return traduireErreur(error);
@@ -328,9 +329,26 @@ export async function envoyerParEmail(factureId: string): Promise<ResultatAction
   const id = schemaId.safeParse(factureId);
   if (!id.success) return { ok: false, erreur: messagesValidation(id.error) };
 
+  if (!emailConfigure()) {
+    return { ok: false, erreur: "L'envoi d'e-mails n'est pas configuré (serveur SMTP) : voir les Paramètres." };
+  }
+
   const avant = await lireFacture(supabase, id.data).catch(() => null);
   if (typeof avant === "string") return { ok: false, erreur: avant };
   if (avant?.statut === "annulee") return { ok: false, erreur: "Une facture annulée ne peut pas être envoyée." };
+  if (avant?.statut === "brouillon") {
+    // Ne jamais attribuer de numéro à un brouillon qui ne pourrait pas partir.
+    const resClient = await supabase.from("clients").select("email, emails_cc").eq("id", avant.client_id).maybeSingle();
+    if (resClient.error) return { ok: false, erreur: traduireErreur(resClient.error) };
+    const client = resClient.data as Pick<Client, "email" | "emails_cc"> | null;
+    if (!client || destinatairesFacture(client).length === 0) {
+      return {
+        ok: false,
+        erreur:
+          "Le client n'a aucune adresse e-mail : complétez sa fiche, ou émettez la facture sans l'envoyer pour la remettre en main propre.",
+      };
+    }
+  }
 
   let resultat: Awaited<ReturnType<typeof envoyerFacture>>;
   try {

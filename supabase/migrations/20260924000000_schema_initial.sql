@@ -1,13 +1,19 @@
 -- =============================================================================
--- CRM de facturation — Académie Delaveau / Académie Espoir
+-- CRM de facturation — Académie Delaveau
 -- Schéma initial
 --
 -- Principes :
+--   * Une seule structure émettrice (l'association Académie Delaveau) : ses
+--     réglages (informations légales, IBAN, mentions, e-mails, automatisation)
+--     sont dans la table `parametres` (une seule ligne).
+--   * Les élèves/clients sont rattachés à une académie (Académie Delaveau ou
+--     Académie Espoir) pour les distinguer et filtrer. Tout le reste est commun :
+--     catalogue, tarifs, numérotation, modèle de facture.
 --   * Montants stockés en centimes (integer) pour éviter les erreurs d'arrondi.
 --   * Une facture est un brouillon (sans numéro) tant qu'elle n'est pas émise.
 --     L'émission (fonction emettre_facture) attribue un numéro séquentiel
---     continu par entité et par année, fige les coordonnées client/entité et
---     rend le contenu de la facture non modifiable.
+--     continu par année, fige les coordonnées client/émetteur et rend le
+--     contenu de la facture non modifiable.
 --   * Seuls les utilisateurs listés dans la table `membres` ont accès aux données.
 -- =============================================================================
 
@@ -55,7 +61,7 @@ as $$
 $$;
 
 -- -----------------------------------------------------------------------------
--- Membres autorisés (les 2 utilisateurs de l'application)
+-- Membres autorisés (les utilisateurs de l'application)
 -- -----------------------------------------------------------------------------
 create table public.membres (
   email text primary key check (email = lower(email)),
@@ -88,12 +94,13 @@ as $$
 $$;
 
 -- -----------------------------------------------------------------------------
--- Entités (Académie Delaveau, Académie Espoir)
+-- Paramètres de la structure émettrice (une seule ligne)
 -- -----------------------------------------------------------------------------
-create table public.entites (
-  id uuid primary key default gen_random_uuid(),
-  nom text not null,                                   -- nom affiché : « Académie Delaveau »
-  prefixe_facture text not null unique
+create table public.parametres (
+  id boolean primary key default true check (id),
+
+  -- Identité et charte
+  prefixe_facture text not null default 'AD'
     check (prefixe_facture ~ '^[A-Z0-9]{1,8}$'),       -- « AD » → AD-2026-0001
   couleur_primaire text not null default '#0050A0' check (couleur_primaire ~ '^#[0-9A-Fa-f]{6}$'),
   couleur_secondaire text not null default '#DADADA' check (couleur_secondaire ~ '^#[0-9A-Fa-f]{6}$'),
@@ -139,29 +146,42 @@ create table public.entites (
   generation_auto boolean not null default false,      -- le cron crée les brouillons
   envoi_auto boolean not null default false,           -- le cron émet ET envoie (à activer en connaissance de cause)
 
-  -- Modèles d'e-mail ({client} {numero} {montant} {echeance} {periode} {entite} {objet})
-  email_objet text not null default 'Facture {numero} – {entite}',
+  -- Modèles d'e-mail ({client} {numero} {montant} {echeance} {periode} {structure} {academie} {objet})
+  email_objet text not null default 'Facture {numero} – {structure}',
   email_corps text not null default
     E'Bonjour {client},\n\nVeuillez trouver ci-joint la facture {numero} d''un montant de {montant}, '
     || E'à régler avant le {echeance}.\n\nNous restons à votre disposition pour toute question.\n\n'
-    || E'Cordialement,\n{entite}',
+    || E'Cordialement,\n{structure}',
   email_copie text,                                     -- adresse en copie cachée de chaque envoi (archivage)
 
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create trigger parametres_updated_at before update on public.parametres
+  for each row execute function public.maj_updated_at();
+
+-- -----------------------------------------------------------------------------
+-- Académies : regroupement des élèves (Académie Delaveau, Académie Espoir)
+-- -----------------------------------------------------------------------------
+create table public.academies (
+  id uuid primary key default gen_random_uuid(),
+  nom text not null unique check (length(trim(nom)) > 0),
+  couleur text not null default '#0050A0' check (couleur ~ '^#[0-9A-Fa-f]{6}$'),
   actif boolean not null default true,
   ordre integer not null default 0,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
 
-create trigger entites_updated_at before update on public.entites
+create trigger academies_updated_at before update on public.academies
   for each row execute function public.maj_updated_at();
 
 -- -----------------------------------------------------------------------------
--- Prestations (catalogue, par entité)
+-- Prestations (catalogue commun)
 -- -----------------------------------------------------------------------------
 create table public.prestations (
   id uuid primary key default gen_random_uuid(),
-  entite_id uuid not null references public.entites(id) on delete restrict,
   libelle text not null check (length(trim(libelle)) > 0),
   description text,
   prix_unitaire_centimes integer not null check (prix_unitaire_centimes >= 0),
@@ -173,16 +193,15 @@ create table public.prestations (
   updated_at timestamptz not null default now()
 );
 
-create index prestations_entite_idx on public.prestations(entite_id);
 create trigger prestations_updated_at before update on public.prestations
   for each row execute function public.maj_updated_at();
 
 -- -----------------------------------------------------------------------------
--- Clients (payeurs : parents, entreprises, sponsors…), rattachés à une entité
+-- Clients (payeurs : parents, entreprises, sponsors…), rattachés à une académie
 -- -----------------------------------------------------------------------------
 create table public.clients (
   id uuid primary key default gen_random_uuid(),
-  entite_id uuid not null references public.entites(id) on delete restrict,
+  academie_id uuid not null references public.academies(id) on delete restrict,
   type public.type_client not null default 'particulier',
   civilite text,
   nom text not null check (length(trim(nom)) > 0),
@@ -206,7 +225,7 @@ create table public.clients (
   constraint clients_pro_raison_sociale check (type = 'particulier' or raison_sociale is not null)
 );
 
-create index clients_entite_idx on public.clients(entite_id);
+create index clients_academie_idx on public.clients(academie_id);
 create trigger clients_updated_at before update on public.clients
   for each row execute function public.maj_updated_at();
 
@@ -237,38 +256,17 @@ create table public.tarifs_clients (
 );
 
 create index tarifs_clients_client_idx on public.tarifs_clients(client_id);
+create index tarifs_clients_prestation_idx on public.tarifs_clients(prestation_id);
 create trigger tarifs_clients_updated_at before update on public.tarifs_clients
   for each row execute function public.maj_updated_at();
-
--- La prestation d'un tarif doit appartenir à l'entité du client.
-create or replace function public.verifier_tarif_entite()
-returns trigger
-language plpgsql
-set search_path = public
-as $$
-begin
-  if new.prestation_id is not null and not exists (
-    select 1
-    from public.prestations p
-    join public.clients c on c.id = new.client_id
-    where p.id = new.prestation_id and p.entite_id = c.entite_id
-  ) then
-    raise exception 'La prestation n''appartient pas à l''entité du client';
-  end if;
-  return new;
-end;
-$$;
-
-create trigger tarifs_clients_entite before insert or update on public.tarifs_clients
-  for each row execute function public.verifier_tarif_entite();
 
 -- -----------------------------------------------------------------------------
 -- Factures
 -- -----------------------------------------------------------------------------
 create table public.factures (
   id uuid primary key default gen_random_uuid(),
-  entite_id uuid not null references public.entites(id) on delete restrict,
   client_id uuid not null references public.clients(id) on delete restrict,
+  academie_id uuid not null references public.academies(id) on delete restrict, -- repris du client
 
   numero text unique,                                  -- attribué à l'émission
   annee integer,
@@ -289,7 +287,8 @@ create table public.factures (
   notes_internes text,
 
   client_snapshot jsonb,                               -- coordonnées figées à l'émission
-  entite_snapshot jsonb,
+  emetteur_snapshot jsonb,                             -- paramètres figés à l'émission
+  academie_snapshot jsonb,
 
   envoyee_le timestamptz,
   payee_le date,
@@ -307,17 +306,17 @@ create table public.factures (
     (statut = 'brouillon' and numero is null)
     or (statut <> 'brouillon' and numero is not null and date_emission is not null)
   ),
-  unique (entite_id, annee, sequence)
+  unique (annee, sequence)
 );
 
-create index factures_entite_idx on public.factures(entite_id);
 create index factures_client_idx on public.factures(client_id);
+create index factures_academie_idx on public.factures(academie_id);
 create index factures_statut_idx on public.factures(statut);
 create index factures_periode_idx on public.factures(periode);
 
--- Une seule facture mensuelle automatique (non annulée) par client / entité / mois.
+-- Une seule facture mensuelle automatique (non annulée) par client et par mois.
 create unique index factures_mensuelle_unique
-  on public.factures(client_id, entite_id, periode)
+  on public.factures(client_id, periode)
   where generation_auto and statut <> 'annulee';
 
 create table public.lignes_facture (
@@ -350,19 +349,34 @@ create table public.envois_email (
 
 create index envois_email_facture_idx on public.envois_email(facture_id);
 
--- Compteurs de numérotation (par entité et par année)
+-- Compteur de numérotation (par année)
 create table public.compteurs_factures (
-  entite_id uuid not null references public.entites(id) on delete restrict,
-  annee integer not null,
-  dernier_numero integer not null check (dernier_numero > 0),
-  primary key (entite_id, annee)
+  annee integer primary key,
+  dernier_numero integer not null check (dernier_numero > 0)
 );
 
 -- -----------------------------------------------------------------------------
 -- Règles d'intégrité des factures
 -- -----------------------------------------------------------------------------
 
--- a) Protection du contenu d'une facture émise + transitions de statut autorisées.
+-- a) Académie d'un brouillon = académie de son client.
+create or replace function public.renseigner_academie_facture()
+returns trigger
+language plpgsql
+set search_path = public
+as $$
+begin
+  if tg_op = 'INSERT' or (old.statut = 'brouillon' and new.statut = 'brouillon') then
+    select c.academie_id into new.academie_id from public.clients c where c.id = new.client_id;
+  end if;
+  return new;
+end;
+$$;
+
+create trigger a_factures_academie before insert or update on public.factures
+  for each row execute function public.renseigner_academie_facture();
+
+-- b) Protection du contenu d'une facture émise + transitions de statut autorisées.
 create or replace function public.proteger_facture()
 returns trigger
 language plpgsql
@@ -391,8 +405,8 @@ begin
   end if;
 
   -- Facture émise : contenu figé.
-  if new.entite_id is distinct from old.entite_id
-     or new.client_id is distinct from old.client_id
+  if new.client_id is distinct from old.client_id
+     or new.academie_id is distinct from old.academie_id
      or new.numero is distinct from old.numero
      or new.annee is distinct from old.annee
      or new.sequence is distinct from old.sequence
@@ -406,7 +420,8 @@ begin
      or new.total_ttc_centimes is distinct from old.total_ttc_centimes
      or new.notes is distinct from old.notes
      or new.client_snapshot is distinct from old.client_snapshot
-     or new.entite_snapshot is distinct from old.entite_snapshot
+     or new.emetteur_snapshot is distinct from old.emetteur_snapshot
+     or new.academie_snapshot is distinct from old.academie_snapshot
      or new.generation_auto is distinct from old.generation_auto
      or new.created_by is distinct from old.created_by
   then
@@ -443,10 +458,10 @@ begin
 end;
 $$;
 
-create trigger a_factures_proteger before update or delete on public.factures
+create trigger b_factures_proteger before update or delete on public.factures
   for each row execute function public.proteger_facture();
 
--- b) Calcul TVA / TTC à partir du HT.
+-- c) Calcul TVA / TTC à partir du HT.
 create or replace function public.calculer_totaux_facture()
 returns trigger
 language plpgsql
@@ -459,13 +474,13 @@ begin
 end;
 $$;
 
-create trigger b_factures_totaux before insert or update on public.factures
+create trigger c_factures_totaux before insert or update on public.factures
   for each row execute function public.calculer_totaux_facture();
 
-create trigger c_factures_updated_at before update on public.factures
+create trigger d_factures_updated_at before update on public.factures
   for each row execute function public.maj_updated_at();
 
--- c) Les lignes d'une facture émise sont figées.
+-- d) Les lignes d'une facture émise sont figées.
 create or replace function public.proteger_lignes_facture()
 returns trigger
 language plpgsql
@@ -499,7 +514,7 @@ $$;
 create trigger a_lignes_proteger before insert or update or delete on public.lignes_facture
   for each row execute function public.proteger_lignes_facture();
 
--- d) Recalcul du total HT d'un brouillon à chaque modification de ligne.
+-- e) Recalcul du total HT d'un brouillon à chaque modification de ligne.
 create or replace function public.recalculer_total_facture()
 returns trigger
 language plpgsql
@@ -519,6 +534,27 @@ $$;
 create trigger b_lignes_totaux after insert or update or delete on public.lignes_facture
   for each row execute function public.recalculer_total_facture();
 
+-- Le paramétrage est une ligne unique : ni ajout ni suppression.
+create or replace function public.proteger_parametres()
+returns trigger
+language plpgsql
+set search_path = public
+as $$
+begin
+  if tg_op = 'DELETE' then
+    raise exception 'Les paramètres ne peuvent pas être supprimés';
+  end if;
+  if tg_op = 'UPDATE' and new.prefixe_facture is distinct from old.prefixe_facture
+     and exists (select 1 from public.compteurs_factures) then
+    raise exception 'Le préfixe ne peut plus changer : des factures ont déjà été émises (la numérotation doit rester continue)';
+  end if;
+  return coalesce(new, old);
+end;
+$$;
+
+create trigger parametres_proteger before update or delete on public.parametres
+  for each row execute function public.proteger_parametres();
+
 -- -----------------------------------------------------------------------------
 -- Émission d'une facture : numéro séquentiel + figement
 -- -----------------------------------------------------------------------------
@@ -530,8 +566,9 @@ set search_path = public
 as $$
 declare
   f public.factures;
-  e public.entites;
+  p public.parametres;
   c public.clients;
+  a public.academies;
   v_date date := public.aujourdhui_paris();
   v_annee integer := extract(year from v_date)::integer;
   v_seq integer;
@@ -551,30 +588,32 @@ begin
     raise exception 'La facture ne contient aucune ligne';
   end if;
 
-  select * into e from public.entites where id = f.entite_id;
-  select * into c from public.clients where id = f.client_id;
-  if c.entite_id <> f.entite_id then
-    raise exception 'Le client n''appartient pas à l''entité de la facture';
+  select * into p from public.parametres where id;
+  if not found then
+    raise exception 'Paramètres de facturation absents';
   end if;
+  select * into c from public.clients where id = f.client_id;
+  select * into a from public.academies where id = f.academie_id;
 
-  insert into public.compteurs_factures as cf (entite_id, annee, dernier_numero)
-  values (e.id, v_annee, 1)
-  on conflict (entite_id, annee) do update set dernier_numero = cf.dernier_numero + 1
+  insert into public.compteurs_factures as cf (annee, dernier_numero)
+  values (v_annee, 1)
+  on conflict (annee) do update set dernier_numero = cf.dernier_numero + 1
   returning dernier_numero into v_seq;
 
   perform set_config('app.emission_facture', 'on', true);
 
   update public.factures
      set statut = 'emise',
-         numero = e.prefixe_facture || '-' || v_annee || '-' || lpad(v_seq::text, 4, '0'),
+         numero = p.prefixe_facture || '-' || v_annee || '-' || lpad(v_seq::text, 4, '0'),
          annee = v_annee,
          sequence = v_seq,
          date_emission = v_date,
-         date_echeance = v_date + e.delai_paiement_jours,
-         taux_tva = e.taux_tva,
+         date_echeance = v_date + p.delai_paiement_jours,
+         taux_tva = p.taux_tva,
          total_ht_centimes = (select coalesce(sum(total_centimes), 0) from public.lignes_facture where facture_id = f.id),
          client_snapshot = to_jsonb(c) - 'notes',
-         entite_snapshot = to_jsonb(e)
+         emetteur_snapshot = to_jsonb(p),
+         academie_snapshot = to_jsonb(a)
    where id = f.id
   returning * into f;
 
@@ -585,12 +624,13 @@ $$;
 
 -- -----------------------------------------------------------------------------
 -- Génération mensuelle des brouillons
---   p_periode : n'importe quel jour du mois à facturer
---   p_dry_run : true → aperçu sans rien créer
+--   p_periode     : n'importe quel jour du mois à facturer
+--   p_academie_id : null → toutes les académies
+--   p_dry_run     : true → aperçu sans rien créer
 -- -----------------------------------------------------------------------------
 create or replace function public.generer_brouillons_mensuels(
-  p_entite_id uuid,
   p_periode date,
+  p_academie_id uuid default null,
   p_dry_run boolean default false
 )
 returns table (
@@ -607,23 +647,23 @@ as $$
 declare
   v_debut date := date_trunc('month', p_periode)::date;
   v_fin date := (date_trunc('month', p_periode) + interval '1 month - 1 day')::date;
-  e public.entites;
+  p public.parametres;
   r record;
   v_facture uuid;
 begin
-  select * into e from public.entites where id = p_entite_id;
+  select * into p from public.parametres where id;
   if not found then
-    raise exception 'Entité introuvable';
+    raise exception 'Paramètres de facturation absents';
   end if;
 
   for r in
     select c.id as cid,
            count(t.id)::integer as nb,
-           sum(round(t.quantite * coalesce(t.prix_unitaire_centimes, p.prix_unitaire_centimes)))::integer as total
+           sum(round(t.quantite * coalesce(t.prix_unitaire_centimes, pr.prix_unitaire_centimes)))::integer as total
       from public.clients c
       join public.tarifs_clients t on t.client_id = c.id
-      left join public.prestations p on p.id = t.prestation_id
-     where c.entite_id = p_entite_id
+      left join public.prestations pr on pr.id = t.prestation_id
+     where (p_academie_id is null or c.academie_id = p_academie_id)
        and c.actif
        and t.actif
        and t.recurrent
@@ -635,7 +675,6 @@ begin
     select f.id into v_facture
       from public.factures f
      where f.client_id = r.cid
-       and f.entite_id = p_entite_id
        and f.periode = v_debut
        and f.generation_auto
        and f.statut <> 'annulee'
@@ -645,6 +684,7 @@ begin
       client_id := r.cid; facture_id := v_facture; nb_lignes := r.nb;
       total_ht_centimes := r.total; deja_existante := true;
       return next;
+      v_facture := null;
       continue;
     end if;
 
@@ -655,22 +695,22 @@ begin
       continue;
     end if;
 
-    insert into public.factures (entite_id, client_id, statut, objet, periode, taux_tva, generation_auto)
-    values (p_entite_id, r.cid, 'brouillon',
-            e.objet_facture_mensuelle || ' – ' || public.nom_mois_fr(v_debut),
-            v_debut, e.taux_tva, true)
+    insert into public.factures (client_id, statut, objet, periode, taux_tva, generation_auto)
+    values (r.cid, 'brouillon',
+            p.objet_facture_mensuelle || ' – ' || public.nom_mois_fr(v_debut),
+            v_debut, p.taux_tva, true)
     returning id into v_facture;
 
     insert into public.lignes_facture (facture_id, ordre, libelle, description, quantite, prix_unitaire_centimes, prestation_id)
     select v_facture,
            row_number() over (order by t.ordre, t.created_at)::integer,
-           coalesce(t.libelle, p.libelle),
-           coalesce(t.description, p.description),
+           coalesce(t.libelle, pr.libelle),
+           coalesce(t.description, pr.description),
            t.quantite,
-           coalesce(t.prix_unitaire_centimes, p.prix_unitaire_centimes),
+           coalesce(t.prix_unitaire_centimes, pr.prix_unitaire_centimes),
            t.prestation_id
       from public.tarifs_clients t
-      left join public.prestations p on p.id = t.prestation_id
+      left join public.prestations pr on pr.id = t.prestation_id
      where t.client_id = r.cid
        and t.actif
        and t.recurrent
@@ -697,18 +737,18 @@ select f.*,
        c.raison_sociale as client_raison_sociale,
        c.email as client_email,
        c.cavaliers as client_cavaliers,
-       e.nom as entite_nom,
-       e.prefixe_facture as entite_prefixe,
-       e.couleur_primaire as entite_couleur
+       a.nom as academie_nom,
+       a.couleur as academie_couleur
   from public.factures f
   join public.clients c on c.id = f.client_id
-  join public.entites e on e.id = f.entite_id;
+  join public.academies a on a.id = f.academie_id;
 
 -- -----------------------------------------------------------------------------
 -- Sécurité : Row Level Security
 -- -----------------------------------------------------------------------------
 alter table public.membres enable row level security;
-alter table public.entites enable row level security;
+alter table public.parametres enable row level security;
+alter table public.academies enable row level security;
 alter table public.prestations enable row level security;
 alter table public.clients enable row level security;
 alter table public.tarifs_clients enable row level security;
@@ -720,7 +760,12 @@ alter table public.compteurs_factures enable row level security;
 create policy membres_lecture on public.membres
   for select to authenticated using (public.est_membre());
 
-create policy entites_membres on public.entites
+create policy parametres_lecture on public.parametres
+  for select to authenticated using (public.est_membre());
+create policy parametres_modification on public.parametres
+  for update to authenticated using (public.est_membre()) with check (public.est_membre());
+
+create policy academies_membres on public.academies
   for all to authenticated using (public.est_membre()) with check (public.est_membre());
 create policy prestations_membres on public.prestations
   for all to authenticated using (public.est_membre()) with check (public.est_membre());
@@ -741,6 +786,6 @@ create policy compteurs_lecture on public.compteurs_factures
 
 -- Les fonctions ne sont pas exposées aux visiteurs anonymes.
 revoke execute on function public.emettre_facture(uuid) from public, anon;
-revoke execute on function public.generer_brouillons_mensuels(uuid, date, boolean) from public, anon;
+revoke execute on function public.generer_brouillons_mensuels(date, uuid, boolean) from public, anon;
 grant execute on function public.emettre_facture(uuid) to authenticated, service_role;
-grant execute on function public.generer_brouillons_mensuels(uuid, date, boolean) to authenticated, service_role;
+grant execute on function public.generer_brouillons_mensuels(date, uuid, boolean) to authenticated, service_role;

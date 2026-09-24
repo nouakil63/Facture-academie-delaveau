@@ -5,6 +5,7 @@ import { IconeCalendrier, IconeFacture, IconePlus } from "@/components/factures/
 import { ListeFactures, type FactureListe } from "@/components/factures/ListeFactures";
 import { estFiltreStatut, FILTRES_STATUT, moisVersPeriode, pluriel } from "@/components/factures/outils";
 import { exigerUtilisateur } from "@/lib/auth";
+import { emailConfigure } from "@/lib/email";
 import { entiteSelectionnee } from "@/lib/entite-selectionnee";
 import { formatPeriode } from "@/lib/format";
 import type { Entite } from "@/lib/types";
@@ -16,27 +17,10 @@ export const maxDuration = 300;
 
 const LIMITE = 500;
 
-const COLONNES = [
-  "id",
-  "numero",
-  "statut",
-  "objet",
-  "periode",
-  "date_emission",
-  "date_echeance",
-  "total_ht_centimes",
-  "total_ttc_centimes",
-  "en_retard",
-  "client_id",
-  "client_type",
-  "client_nom",
-  "client_prenom",
-  "client_raison_sociale",
-  "client_email",
-  "client_cavaliers",
-  "entite_nom",
-  "entite_couleur",
-].join(", ");
+const COLONNES =
+  "id, numero, statut, objet, periode, date_emission, date_echeance, total_ht_centimes, total_ttc_centimes, " +
+  "en_retard, client_id, client_type, client_nom, client_prenom, client_raison_sociale, client_email, " +
+  "client_cavaliers, entite_nom, entite_couleur";
 
 const COLONNES_RECHERCHE = ["numero", "client_nom", "client_prenom", "client_raison_sociale", "client_cavaliers"];
 
@@ -87,7 +71,7 @@ export default async function PageFactures(props: PageProps<"/factures">) {
     .limit(LIMITE);
   if (resFactures.error) return <ErreurChargement message={resFactures.error.message} />;
 
-  const factures = resFactures.data as FactureListe[];
+  const factures = resFactures.data as unknown as FactureListe[];
   const total = resFactures.count ?? factures.length;
   const tronque = total > factures.length;
   const filtresActifs = Boolean(statut || mois || q);
@@ -205,7 +189,7 @@ export default async function PageFactures(props: PageProps<"/factures">) {
           )}
         </div>
       ) : (
-        <ListeFactures factures={factures} afficherEntite={afficherEntite} />
+        <ListeFactures factures={factures} afficherEntite={afficherEntite} envoiPossible={emailConfigure()} />
       )}
     </div>
   );
