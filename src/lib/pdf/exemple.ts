@@ -63,7 +63,6 @@ export function parametresExemple(modifications: Partial<Parametres> = {}): Para
     jour_generation: 1,
     mois_facture: "courant",
     generation_auto: false,
-    envoi_auto: false,
     email_objet: "Facture {numero} – {structure}",
     email_corps:
       "Bonjour {client},\n\nVeuillez trouver ci-joint la facture {numero} d'un montant de {montant}, à régler avant le {echeance}.\n\nNous restons à votre disposition pour toute question.\n\nCordialement,\n{structure}",
@@ -144,6 +143,7 @@ export function donneesExemple(emetteur: Parametres, options: OptionsExemple = {
     cavaliers: "Léa Exemple",
     notes: null,
     actif: true,
+    envoi_auto: false,
     created_at: maintenant,
     updated_at: maintenant,
     ...options.client,

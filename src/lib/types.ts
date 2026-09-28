@@ -43,7 +43,6 @@ export interface Parametres {
   jour_generation: number;
   mois_facture: MoisFacture;
   generation_auto: boolean;
-  envoi_auto: boolean;
   email_objet: string;
   email_corps: string;
   email_copie: string | null;
@@ -96,6 +95,8 @@ export interface Client {
   cavaliers: string | null;
   notes: string | null;
   actif: boolean;
+  /** Le jour de génération, sa facture mensuelle est émise et envoyée sans relecture (tâche planifiée). */
+  envoi_auto: boolean;
   created_at: string;
   updated_at: string;
 }

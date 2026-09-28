@@ -22,7 +22,7 @@ export function ProchaineFacturation({
   /** Académie filtrée, ou null pour « Toutes ». */
   nomAcademie: string | null;
 }) {
-  const { generationAuto, envoiAuto, jourGeneration, prochaineDate, prochainePeriode, periodeEnCours, apercu } = facturation;
+  const { generationAuto, nbClientsEnvoiAuto, jourGeneration, prochaineDate, prochainePeriode, periodeEnCours, apercu } = facturation;
   const reste = apercu ? apercu.aFacturer - apercu.dejaFactures : 0;
   const avancement = apercu && apercu.aFacturer > 0 ? Math.round((apercu.dejaFactures / apercu.aFacturer) * 100) : 0;
 
@@ -41,12 +41,21 @@ export function ProchaineFacturation({
             <p className="mt-1 text-xl font-semibold tracking-tight text-ink">{formatDateLongue(prochaineDate)}</p>
             <p className="text-sm text-muted">Factures de {formatPeriode(prochainePeriode)}</p>
 
-            {generationAuto ? (
-              <p className="mt-3 text-xs text-muted">
-                <span className="badge mr-1.5 bg-emerald-100 text-emerald-800">Automatique</span>
-                Brouillons préparés le {jourDuMois(jourGeneration)} de chaque mois
-                {envoiAuto ? ", puis émis et envoyés automatiquement." : ", à vérifier puis envoyer."}
-              </p>
+            {generationAuto || nbClientsEnvoiAuto > 0 ? (
+              <div className="mt-3 space-y-1.5 text-xs text-muted">
+                <p>
+                  <span className="badge mr-1.5 bg-emerald-100 text-emerald-800">Automatique</span>
+                  Brouillons préparés le {jourDuMois(jourGeneration)} de chaque mois, à vérifier puis envoyer.
+                </p>
+                {nbClientsEnvoiAuto > 0 && (
+                  <p>
+                    <Link href="/clients" className="btn-lien text-xs">
+                      {pluriel(nbClientsEnvoiAuto, "client")} en envoi automatique
+                    </Link>{" "}
+                    : factures émises et envoyées le même jour, sans relecture.
+                  </p>
+                )}
+              </div>
             ) : (
               <div className="mt-3 space-y-1.5 text-xs text-amber-900">
                 <span className="badge bg-amber-100 text-amber-900">Automatisation désactivée</span>

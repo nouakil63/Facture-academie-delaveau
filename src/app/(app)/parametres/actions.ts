@@ -271,7 +271,6 @@ const schemaParametres = z
     jour_generation: entierBorne(1, 28, "Jour de génération"),
     mois_facture: z.enum(["courant", "precedent"], { error: "Choisis le mois facturé (en cours ou précédent)." }),
     generation_auto: z.boolean(),
-    envoi_auto: z.boolean(),
 
     // E-mails
     email_objet: modeleEmail(200, "Objet de l'e-mail"),
@@ -283,11 +282,6 @@ const schemaParametres = z
     error:
       "Mention TVA obligatoire lorsque la TVA n'est pas facturée (taux 0 %) : ex. « TVA non applicable, art. 293 B du CGI ».",
     when: (p) => !p.issues.some((i) => i.path?.[0] === "taux_tva" || i.path?.[0] === "mention_tva"),
-  })
-  .refine((e) => !e.envoi_auto || e.generation_auto, {
-    path: ["envoi_auto"],
-    error: "Pour l'envoi automatique, il faut aussi la génération automatique des brouillons : coche les deux, ou aucun.",
-    when: (p) => !p.issues.some((i) => i.path?.[0] === "envoi_auto" || i.path?.[0] === "generation_auto"),
   })
   .refine((e) => !e.siren || !e.siret || chiffresSeuls(e.siret).startsWith(chiffresSeuls(e.siren)), {
     path: ["siret"],
@@ -309,7 +303,6 @@ function lireFormulaireParametres(formData: FormData) {
   return {
     ...Object.fromEntries(CHAMPS_TEXTE.map((n) => [n, champ(formData, n)])),
     generation_auto: formData.get("generation_auto") === "on",
-    envoi_auto: formData.get("envoi_auto") === "on",
   };
 }
 

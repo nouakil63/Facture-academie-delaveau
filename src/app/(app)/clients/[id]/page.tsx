@@ -5,11 +5,11 @@ import { AcademieBadge } from "@/components/AcademieBadge";
 import { ActionsClient } from "@/components/clients/ActionsClient";
 import { FacturesClient, type FactureDuClient } from "@/components/clients/FacturesClient";
 import { FormulaireClient } from "@/components/clients/FormulaireClient";
-import { IconeAlerte, IconeRetour } from "@/components/Icones";
+import { IconeAlerte, IconeInfo, IconeRetour } from "@/components/Icones";
 import { TarifsClient } from "@/components/clients/TarifsClient";
 import { exigerUtilisateur } from "@/lib/auth";
-import { chargerAcademies } from "@/lib/facturation/service";
-import { destinatairesFacture, formatEuros, formatPeriode, nomClient, premierDuMois } from "@/lib/format";
+import { chargerAcademies, chargerParametres } from "@/lib/facturation/service";
+import { destinatairesFacture, formatEuros, formatPeriode, jourDuMois, nomClient, premierDuMois } from "@/lib/format";
 import { mensuelEstime, type PrestationDuTarif, type TarifAvecPrestation } from "@/lib/tarifs";
 import type { Academie, Client } from "@/lib/types";
 
@@ -35,8 +35,12 @@ export default async function PageClient(props: PageProps<"/clients/[id]">) {
   if (!resClient.data) notFound();
   const client = resClient.data as Client;
 
-  const [resAcademies, resTarifs, resPrestations, resFactures] = await Promise.all([
+  const [resAcademies, resParametres, resTarifs, resPrestations, resFactures] = await Promise.all([
     chargerAcademies(supabase).then(
+      (data) => ({ data, error: null }),
+      (e: unknown) => ({ data: null, error: { message: e instanceof Error ? e.message : String(e) } }),
+    ),
+    chargerParametres(supabase).then(
       (data) => ({ data, error: null }),
       (e: unknown) => ({ data: null, error: { message: e instanceof Error ? e.message : String(e) } }),
     ),
@@ -61,10 +65,12 @@ export default async function PageClient(props: PageProps<"/clients/[id]">) {
       .eq("client_id", id)
       .order("created_at", { ascending: false }),
   ]);
-  const erreur = resAcademies.error ?? resTarifs.error ?? resPrestations.error ?? resFactures.error;
-  if (erreur) return <ErreurChargement message={erreur.message} />;
+  const erreur =
+    resAcademies.error ?? resParametres.error ?? resTarifs.error ?? resPrestations.error ?? resFactures.error;
+  if (erreur || !resParametres.data) return <ErreurChargement message={erreur?.message ?? "paramètres absents"} />;
 
   const academies = resAcademies.data as Academie[];
+  const jourGeneration = resParametres.data.jour_generation;
   const tarifs = (resTarifs.data as TarifAvecPrestation[]).map((t) => ({ ...t, quantite: Number(t.quantite) }));
   const prestations = resPrestations.data as PrestationDuTarif[];
   const factures = resFactures.data as FactureDuClient[];
@@ -93,6 +99,14 @@ export default async function PageClient(props: PageProps<"/clients/[id]">) {
             {academie && <AcademieBadge nom={academie.nom} couleur={academie.couleur} />}
             {client.type === "professionnel" && <span className="badge bg-slate-100 text-slate-700">Professionnel</span>}
             {!client.actif && <span className="badge bg-zinc-200 text-zinc-600">Archivé</span>}
+            {client.envoi_auto && (
+              <span
+                className="badge bg-brand-light text-brand-dark"
+                title={`Émise et envoyée automatiquement le ${jourDuMois(jourGeneration)} de chaque mois, sans relecture`}
+              >
+                Envoi auto
+              </span>
+            )}
           </div>
           <p className="mt-1 text-sm text-muted">
             {client.cavaliers ? <>Cavalier(s) : {client.cavaliers}</> : "Aucun cavalier renseigné"}
@@ -121,10 +135,24 @@ export default async function PageClient(props: PageProps<"/clients/[id]">) {
           facturer.
         </p>
       )}
+      {client.envoi_auto && client.actif && (
+        <p className="flex items-center gap-2 rounded-lg border border-line bg-surface px-3 py-2 text-sm text-muted">
+          <IconeInfo className="size-4 shrink-0 text-brand" />
+          <span>
+            Envoi automatique : facture mensuelle émise et envoyée le{" "}
+            <strong className="text-ink">{jourDuMois(jourGeneration)}</strong> de chaque mois, sans relecture.{" "}
+            <a href="#fiche" className="btn-lien text-sm">
+              Modifier
+            </a>
+          </span>
+        </p>
+      )}
       {destinatairesFacture(client).length === 0 && (
         <p className="avertissement flex items-center gap-2">
           <IconeAlerte className="size-4 text-amber-600" />
-          Pas d&apos;adresse e-mail : on ne pourra pas lui envoyer ses factures par e-mail.{" "}
+          {client.envoi_auto && client.actif
+            ? "Aucune adresse e-mail : l'envoi automatique échouera. "
+            : "Pas d'adresse e-mail : on ne pourra pas lui envoyer ses factures par e-mail. "}
           <a href="#email" className="font-medium underline">
             Compléter
           </a>
@@ -172,7 +200,7 @@ export default async function PageClient(props: PageProps<"/clients/[id]">) {
           </p>
         </div>
         <div className="carte-corps sm:p-6">
-          <FormulaireClient client={client} academies={academiesProposees} />
+          <FormulaireClient client={client} academies={academiesProposees} jourGeneration={jourGeneration} />
         </div>
       </section>
     </div>

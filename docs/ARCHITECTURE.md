@@ -37,6 +37,7 @@ d'« entité » dans l'interface.
 | Tarif client : `prix_unitaire_centimes` null → prix catalogue de la prestation ; `libelle` null → libellé de la prestation. Catalogue commun. | SQL |
 | Génération mensuelle : `generer_brouillons_mensuels(periode, academie_id?, dry_run)` crée un brouillon par client actif ayant des tarifs actifs, récurrents et valides sur le mois (toutes académies si `academie_id` null). Idempotente. `dry_run` ne fait que lire (aperçu du tableau de bord et de la facturation mensuelle). Désactiver une académie ne coupe **pas** la facturation de ses clients actifs (archiver les clients pour cela). | SQL |
 | `parametres` : une seule ligne, ni insertion ni suppression ; `select`/`update` seulement | SQL |
+| Envoi automatique **par client** (`clients.envoi_auto`, défaut `false`) : le jour de génération, la tâche planifiée émet et envoie les brouillons mensuels des clients actifs cochés (voir Tâche planifiée). Plus de réglage global (`parametres.envoi_auto` supprimé, migration `20260928000000`) | SQL + cron |
 | « En retard » = `emise`/`envoyee` et échéance dépassée → colonne `en_retard` de la vue `factures_vue` | SQL |
 | Accès : utilisateur connecté **et** e-mail présent dans la table `membres` (RLS) | SQL |
 
@@ -165,12 +166,27 @@ src/app/
 
 ## Tâche planifiée
 Vercel appelle chaque jour à 6 h UTC `GET /api/cron/facturation-mensuelle` avec
-`Authorization: Bearer $CRON_SECRET`. Si `parametres.generation_auto` et
-`jour_generation` = jour du mois (Paris) : génère les brouillons du mois pour toutes les académies
-(`periodeAFacturer`). Si `envoi_auto` : émet et envoie les brouillons nouvellement créés.
-Réponse JSON : `ok`, `date`, `jour`, `apercu`, `execute`, `raison` (si rien à faire) ou `periode`,
-`reglages`, `brouillons_crees`, `deja_existantes`, `par_academie`, `envoi_auto`, `envoyees`,
-`echecs_envoi`. Tests manuels : `?date=AAAA-MM-JJ` (simule un jour) et `?apercu=1` (n'écrit rien).
-Codes : 401 secret faux, 500 `CRON_SECRET` absent ou génération impossible, 400 date invalide ;
-un envoi en échec (client sans e-mail…) laisse la réponse à 200 et figure dans `echecs_envoi`
-(et dans `envois_email`).
+`Authorization: Bearer $CRON_SECRET`. Le jour `jour_generation` (jour du mois, Paris), si
+`parametres.generation_auto` **ou** s'il existe au moins un client actif avec `clients.envoi_auto` :
+1. génère les brouillons du mois pour toutes les académies (`periodeAFacturer`) ;
+2. émet et envoie (`envoyerFactures(…, { exigerBrouillon: true })`) les brouillons **mensuels** de la
+   période (`generation_auto`, `periode`, statut `brouillon` — nouveaux ou déjà existants) des seuls
+   clients **actifs** avec `envoi_auto` ; les autres brouillons restent à relire à la main ;
+3. si au moins un envoi a été tenté (réussi ou en échec, hors factures ignorées car plus en
+   brouillon), envoie **un** e-mail récapitulatif (`src/lib/facturation/recapitulatif.ts`, via
+   `envoyerEmail`) aux adresses de `membres` + `parametres.email_copie` (sans doublon) : nombre
+   envoyé, total TTC, liste (client, numéro, montant), échecs et raison, lien
+   `urlApplication()/factures?statut=brouillon` (`@/lib/env` : `APP_URL`, sinon domaine Vercel).
+   Son échec est journalisé (`console.error`) et reporté dans `recapitulatif.erreur`, sans faire
+   échouer la tâche.
+
+Réponse JSON : `ok`, `date`, `jour`, `apercu`, `execute`, `reglages` (`generation_auto`,
+`jour_generation`, `mois_facture`, `clients_envoi_auto`), `raison` (si rien à faire) ou `periode`,
+`brouillons_crees`, `deja_existantes`, `par_academie`, `a_envoyer` (client, facture, numéro, montant
+TTC), `envoyees`, `echecs_envoi` (`facture_id`, `client`, `numero`, `erreur`), `ignorees`,
+`recapitulatif` (`envoye`, `destinataires`, `erreur?` ; `null` si aucun envoi tenté).
+Tests manuels : `?date=AAAA-MM-JJ` (simule un jour) et `?apercu=1` (n'écrit et n'envoie rien, ni
+factures ni récapitulatif : `a_envoyer` liste ce qui partirait, montant estimé pour un brouillon à
+créer). Codes : 401 secret faux, 500 `CRON_SECRET` absent, lecture ou génération impossible,
+400 date invalide ; un envoi en échec (client sans e-mail…) laisse la réponse à 200 et figure dans
+`echecs_envoi` (et dans `envois_email`).

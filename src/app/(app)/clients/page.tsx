@@ -159,6 +159,7 @@ export default async function PageClients(props: PageProps<"/clients">) {
                         <Link href={`/clients/${c.id}`} className="font-medium text-brand hover:underline">
                           {c.nomAffiche}
                         </Link>
+                        {c.envoi_auto && <BadgeAuto />}
                         {c.type === "professionnel" && (
                           <div className="text-xs text-muted">
                             {[c.prenom, c.nom].filter(Boolean).join(" ")}
@@ -230,7 +231,10 @@ export default async function PageClients(props: PageProps<"/clients">) {
                   <Link href={`/clients/${c.id}`} className="block px-4 py-3 hover:bg-page">
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
-                        <div className={`font-medium ${c.actif ? "text-brand" : "text-muted"}`}>{c.nomAffiche}</div>
+                        <div className={`font-medium ${c.actif ? "text-brand" : "text-muted"}`}>
+                          {c.nomAffiche}
+                          {c.envoi_auto && <BadgeAuto />}
+                        </div>
                         {c.cavaliers && <div className="truncate text-sm text-ink">{c.cavaliers}</div>}
                       </div>
                       <div className="shrink-0 text-right text-sm font-medium tabular-nums">
@@ -267,6 +271,18 @@ function ErreurChargement({ message }: { message: string }) {
         Impossible de charger les clients : {message}
       </p>
     </div>
+  );
+}
+
+/** Client en envoi automatique : sa facture mensuelle part sans relecture. */
+function BadgeAuto() {
+  return (
+    <span
+      className="badge ml-2 bg-brand-light align-middle text-brand-dark"
+      title="Envoi automatique : facture mensuelle émise et envoyée sans relecture"
+    >
+      Auto
+    </span>
   );
 }
 

@@ -23,3 +23,16 @@ export function supabaseCleePublique(): string {
 export function supabaseCleeSecrete(): string {
   return requis("SUPABASE_SECRET_KEY", process.env.SUPABASE_SECRET_KEY ?? process.env.SUPABASE_SERVICE_ROLE_KEY);
 }
+
+/**
+ * Adresse publique de l'application, sans « / » final (liens dans les e-mails envoyés par la
+ * tâche planifiée) : APP_URL si elle est définie, sinon le domaine de production Vercel
+ * (VERCEL_PROJECT_PRODUCTION_URL, puis VERCEL_URL, fournies par Vercel). null si aucune n'est définie.
+ */
+export function urlApplication(): string | null {
+  const brute = [process.env.APP_URL, process.env.VERCEL_PROJECT_PRODUCTION_URL, process.env.VERCEL_URL]
+    .map((v) => v?.trim())
+    .find(Boolean);
+  if (!brute) return null;
+  return (/^https?:\/\//i.test(brute) ? brute : `https://${brute}`).replace(/\/+$/, "");
+}

@@ -3,7 +3,9 @@
 import Link from "next/link";
 import { startTransition, useActionState, useState } from "react";
 import { creerClient, modifierClient } from "@/app/(app)/clients/actions";
+import { IconeAlerte } from "@/components/Icones";
 import { appeler } from "@/lib/appeler";
+import { jourDuMois } from "@/lib/format";
 import type { Academie, Client, ResultatAction, TypeClient } from "@/lib/types";
 
 const CIVILITES = ["Mme", "M.", "M. et Mme"];
@@ -19,6 +21,7 @@ export function FormulaireClient({
   client,
   academies,
   academieParDefaut,
+  jourGeneration,
 }: {
   /** Absent → création. */
   client?: Client;
@@ -26,6 +29,8 @@ export function FormulaireClient({
   academies: AcademieOption[];
   /** Création : académie présélectionnée (celle du filtre), sinon la première. */
   academieParDefaut?: string | null;
+  /** Jour de génération mensuelle (paramètres) : jour de l'envoi automatique. */
+  jourGeneration: number;
 }) {
   const creation = !client;
   const [etat, envoyer, enCours] = useActionState<ResultatAction | null, FormData>(
@@ -34,6 +39,11 @@ export function FormulaireClient({
   );
   const [type, setType] = useState<TypeClient>(client?.type ?? "particulier");
   const professionnel = type === "professionnel";
+  // Suivis pour avertir d'un envoi automatique sans destinataire.
+  const [email, setEmail] = useState(client?.email ?? "");
+  const [copies, setCopies] = useState(client?.emails_cc?.join(", ") ?? "");
+  const [envoiAuto, setEnvoiAuto] = useState(client?.envoi_auto ?? false);
+  const sansDestinataire = email.trim() === "" && copies.trim() === "";
 
   const academieInitiale = client?.academie_id ?? academieParDefaut ?? academies[0]?.id ?? "";
   const civilites =
@@ -207,6 +217,7 @@ export function FormulaireClient({
                 type="email"
                 maxLength={254}
                 defaultValue={client?.email ?? ""}
+                onChange={(e) => setEmail(e.target.value)}
                 autoComplete="off"
                 className="champ"
               />
@@ -234,6 +245,7 @@ export function FormulaireClient({
                 id="emails_cc"
                 name="emails_cc"
                 defaultValue={client?.emails_cc?.join(", ") ?? ""}
+                onChange={(e) => setCopies(e.target.value)}
                 placeholder="autre.parent@exemple.fr, comptabilite@exemple.fr"
                 autoComplete="off"
                 className="champ"
@@ -334,6 +346,36 @@ export function FormulaireClient({
                 className="champ"
               />
               <p className="aide">Pour nous seulement : jamais imprimées sur les factures.</p>
+            </div>
+            <div className="space-y-2">
+              <label
+                className={`flex cursor-pointer items-start gap-3 rounded-lg border px-3 py-3 hover:bg-page ${
+                  envoiAuto ? "border-brand bg-brand-light/40" : "border-line"
+                }`}
+              >
+                <input
+                  type="checkbox"
+                  name="envoi_auto"
+                  defaultChecked={client?.envoi_auto ?? false}
+                  onChange={(e) => setEnvoiAuto(e.target.checked)}
+                  className="mt-0.5 size-4 shrink-0 accent-brand"
+                />
+                <span className="text-sm">
+                  <span className="font-medium text-ink">Envoyer sa facture automatiquement chaque mois</span>
+                  <span className="block text-muted">
+                    Le {jourDuMois(jourGeneration)} de chaque mois, sa facture est émise et envoyée sans relecture.
+                  </span>
+                </span>
+              </label>
+              {envoiAuto && sansDestinataire && (
+                <p role="alert" className="avertissement flex items-center gap-2">
+                  <IconeAlerte className="size-4 shrink-0 text-amber-600" />
+                  Aucune adresse e-mail : l&apos;envoi automatique échouera.
+                </p>
+              )}
+              {envoiAuto && client && !client.actif && (
+                <p className="aide">Client archivé : pas de facture mensuelle, donc aucun envoi automatique.</p>
+              )}
             </div>
           </div>
         </Section>

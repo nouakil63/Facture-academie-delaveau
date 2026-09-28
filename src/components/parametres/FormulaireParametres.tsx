@@ -1,10 +1,19 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
 import { startTransition, useActionState, useEffect, useRef, useState } from "react";
 import { enregistrerParametres } from "@/app/(app)/parametres/actions";
 import { appeler } from "@/lib/appeler";
-import { datesGeneration, formatDate, formatDateLongue, formatPeriode, nomCourtAcademie, premierDuMois } from "@/lib/format";
+import {
+  datesGeneration,
+  formatDate,
+  formatDateLongue,
+  formatPeriode,
+  nomCourtAcademie,
+  pluriel,
+  premierDuMois,
+} from "@/lib/format";
 import type { Academie, MoisFacture, Parametres, ResultatAction } from "@/lib/types";
 import { IconeAlerte, IconeCadenas, IconeCoche, IconeInfo } from "@/components/Icones";
 import { ChampCouleur, Champ, ChampControle, contrasteAvecBlanc, Obligatoire, Section, ZoneTexte } from "./Champs";
@@ -43,8 +52,10 @@ type Contexte = {
   aujourdhui: string;
   /** Variables SMTP présentes. */
   smtpConfigure: boolean;
-  /** Clients actifs (toutes académies) sans adresse e-mail. */
-  nbClientsSansEmail: number;
+  /** Clients actifs (toutes académies) en envoi automatique. */
+  nbClientsEnvoiAuto: number;
+  /** Parmi eux, ceux sans adresse e-mail (envoi voué à l'échec). */
+  nbClientsAutoSansEmail: number;
   /** Académies actives, pour l'aperçu de l'e-mail ({academie}). */
   academies: Pick<Academie, "id" | "nom">[];
   onModifie: () => void;
@@ -693,12 +704,13 @@ function SectionTva({ parametres, onModifie }: Contexte) {
 // Facturation mensuelle
 // -----------------------------------------------------------------------------
 
-function SectionMensuelle({ parametres, aujourdhui, smtpConfigure, nbClientsSansEmail }: Contexte) {
+function SectionMensuelle({ parametres, aujourdhui, smtpConfigure, nbClientsEnvoiAuto, nbClientsAutoSansEmail }: Contexte) {
   const [objet, setObjet] = useState(parametres.objet_facture_mensuelle);
   const [jour, setJour] = useState(String(parametres.jour_generation));
   const [mois, setMois] = useState<MoisFacture>(parametres.mois_facture);
   const [generationAuto, setGenerationAuto] = useState(parametres.generation_auto);
-  const [envoiAuto, setEnvoiAuto] = useState(parametres.envoi_auto);
+  // Des clients en envoi automatique : la génération a lieu ce jour-là, même sans la case.
+  const envoiAuto = nbClientsEnvoiAuto > 0;
 
   const jourNombre = Number(jour);
   const jourValide = Number.isInteger(jourNombre) && jourNombre >= 1 && jourNombre <= 28;
@@ -791,10 +803,7 @@ function SectionMensuelle({ parametres, aujourdhui, smtpConfigure, nbClientsSans
             type="checkbox"
             name="generation_auto"
             checked={generationAuto}
-            onChange={(e) => {
-              setGenerationAuto(e.target.checked);
-              if (!e.target.checked) setEnvoiAuto(false);
-            }}
+            onChange={(e) => setGenerationAuto(e.target.checked)}
             className="mt-0.5 size-4 shrink-0 accent-brand"
           />
           <span className="text-sm">
@@ -807,59 +816,58 @@ function SectionMensuelle({ parametres, aujourdhui, smtpConfigure, nbClientsSans
           </span>
         </label>
 
-        <label
-          className={`flex items-start gap-3 rounded-lg border px-3 py-3 ${
-            generationAuto ? "cursor-pointer hover:bg-page" : "cursor-not-allowed opacity-60"
-          } ${envoiAuto ? "border-red-300 bg-red-50/50" : "border-line"}`}
+        <div
+          className={`rounded-lg border px-3 py-3 text-sm ${envoiAuto ? "border-brand/40 bg-brand-light/40" : "border-line"}`}
         >
-          <input
-            type="checkbox"
-            name="envoi_auto"
-            checked={envoiAuto}
-            disabled={!generationAuto}
-            onChange={(e) => setEnvoiAuto(e.target.checked)}
-            className="mt-0.5 size-4 shrink-0 accent-red-600"
-          />
-          <span className="text-sm">
-            <span className="font-medium text-ink">Émettre et envoyer automatiquement</span>
-            <span className="block text-muted">
-              {generationAuto
-                ? "Les brouillons sont aussitôt émis (numéro définitif) et partent par e-mail aux familles, sans qu'on les relise."
-                : "Coche d'abord « Générer automatiquement les brouillons »."}
+          <p className="font-medium text-ink">Envoi automatique : réglé client par client</p>
+          <p className="mt-0.5 text-muted">
+            Case « Envoyer sa facture automatiquement chaque mois » sur la fiche de chaque client. Le jour de génération
+            est aussi le jour d&apos;envoi : la facture des clients cochés est émise et envoyée sans relecture ; les autres
+            brouillons restent à relire. Un récapitulatif part ensuite aux utilisateurs de l&apos;application.
+          </p>
+          <p className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
+            <span className={envoiAuto ? "font-medium text-brand-dark" : "text-muted"}>
+              {envoiAuto
+                ? `${pluriel(nbClientsEnvoiAuto, "client actif", "clients actifs")} en envoi automatique`
+                : "Aucun client en envoi automatique"}
             </span>
-          </span>
-        </label>
+            <Link href="/clients" className="btn-lien text-sm">
+              Voir les clients
+            </Link>
+          </p>
+          {envoiAuto && !generationAuto && (
+            <p className="mt-2 text-muted">
+              Génération automatique décochée : les brouillons du mois sont tout de même préparés ce jour-là pour tous
+              les clients, les autres restant à relire.
+            </p>
+          )}
+        </div>
 
-        {envoiAuto && (
+        {envoiAuto && (!smtpConfigure || nbClientsAutoSansEmail > 0) && (
           <div role="alert" className="flex items-start gap-2 rounded-lg border border-red-300 bg-red-50 px-3 py-2.5 text-sm text-red-800">
             <IconeAlerte className="mt-0.5 size-4 shrink-0 text-red-600" />
             <div className="space-y-1">
-              <p className="font-semibold">Attention : nos factures partiront sans qu&apos;on les relise.</p>
-              <p>
-                Une facture émise ne se modifie plus et ne se supprime plus : en cas d&apos;erreur, il faudra l&apos;annuler
-                et en refaire une. Vérifie bien les tarifs de chaque client avant le jour de génération.
-              </p>
               {!smtpConfigure && (
-                <p className="font-medium">L&apos;envoi d&apos;e-mails n&apos;est pas encore configuré : nos factures ne pourront pas partir.</p>
+                <p className="font-medium">Envoi d&apos;e-mails non configuré : les factures automatiques ne pourront pas partir.</p>
               )}
-              {nbClientsSansEmail > 0 && (
+              {nbClientsAutoSansEmail > 0 && (
                 <p>
-                  {nbClientsSansEmail > 1
-                    ? `${nbClientsSansEmail} clients actifs n'ont pas d'adresse e-mail : leurs factures seront émises mais pas envoyées. Complète leur fiche avant.`
-                    : "1 client actif n'a pas d'adresse e-mail : sa facture sera émise mais pas envoyée. Complète sa fiche avant."}
+                  {nbClientsAutoSansEmail > 1
+                    ? `${nbClientsAutoSansEmail} clients en envoi automatique sans adresse e-mail : leur envoi échouera.`
+                    : "1 client en envoi automatique sans adresse e-mail : son envoi échouera."}
                 </p>
               )}
             </div>
           </div>
         )}
 
-        {generationAuto && dateGeneration && periode && (
+        {(generationAuto || envoiAuto) && dateGeneration && periode && (
           <p className="flex items-start gap-2 text-sm text-muted">
             <IconeInfo className="mt-0.5 size-4 shrink-0 text-brand" />
             <span>
               Prochaine génération : <span className="font-medium text-ink">{formatDateLongue(dateGeneration)}</span>, pour{" "}
               {formatPeriode(periode)}
-              {envoiAuto ? ", avec envoi immédiat." : "."}
+              {envoiAuto ? `, avec envoi automatique pour ${pluriel(nbClientsEnvoiAuto, "client")}.` : "."}
             </span>
           </p>
         )}

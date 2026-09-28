@@ -4,8 +4,8 @@ import { FormulaireClient } from "@/components/clients/FormulaireClient";
 import { IconeRetour } from "@/components/Icones";
 import { academieSelectionnee, resoudreAcademie } from "@/lib/academie-selectionnee";
 import { exigerUtilisateur } from "@/lib/auth";
-import { chargerAcademies } from "@/lib/facturation/service";
-import type { Academie } from "@/lib/types";
+import { chargerAcademies, chargerParametres } from "@/lib/facturation/service";
+import type { Academie, Parametres } from "@/lib/types";
 
 export const metadata: Metadata = { title: "Nouveau client" };
 
@@ -14,9 +14,16 @@ export default async function PageNouveauClient() {
 
   let academies: Academie[] = [];
   let selection: string | null = null;
+  let jourGeneration = 1;
   let erreur: string | null = null;
   try {
-    [academies, selection] = await Promise.all([chargerAcademies(supabase, true), academieSelectionnee()]);
+    let parametres: Parametres;
+    [academies, selection, parametres] = await Promise.all([
+      chargerAcademies(supabase, true),
+      academieSelectionnee(),
+      chargerParametres(supabase),
+    ]);
+    jourGeneration = parametres.jour_generation;
   } catch (e) {
     erreur = e instanceof Error ? e.message : String(e);
   }
@@ -38,7 +45,7 @@ export default async function PageNouveauClient() {
 
       {erreur ? (
         <p role="alert" className="erreur">
-          Impossible de charger les académies : {erreur}
+          Chargement impossible : {erreur}
         </p>
       ) : academies.length === 0 ? (
         <p className="avertissement">
@@ -50,7 +57,7 @@ export default async function PageNouveauClient() {
         </p>
       ) : (
         <div className="carte carte-corps sm:p-6">
-          <FormulaireClient academies={academies} academieParDefaut={academieParDefaut} />
+          <FormulaireClient academies={academies} academieParDefaut={academieParDefaut} jourGeneration={jourGeneration} />
         </div>
       )}
     </div>

@@ -49,7 +49,11 @@ export interface Indicateurs {
 export interface EtatFacturationMensuelle {
   jourGeneration: number;
   generationAuto: boolean;
-  envoiAuto: boolean;
+  /**
+   * Clients actifs en envoi automatique (toutes académies : le calendrier est commun). Leur facture
+   * est émise et envoyée le jour de génération, qui a lieu dès qu'il y en a au moins un.
+   */
+  nbClientsEnvoiAuto: number;
   /** Prochaine date de génération (strictement après aujourd'hui), "AAAA-MM-JJ". */
   prochaineDate: string;
   /** Mois facturé à cette date, "AAAA-MM-01". */
@@ -161,6 +165,7 @@ export async function chargerTableauDeBord(
     nbClients,
     nbTarifs,
     nbFactures,
+    nbEnvoiAuto,
   ] = await Promise.all([
     calendrier,
     depuis("factures_vue", COLONNES_RESUME)
@@ -179,6 +184,11 @@ export async function chargerTableauDeBord(
     depuis("clients", "id", { count: "exact", head: true }),
     requeteTarifs,
     depuis("factures", "id", { count: "exact", head: true }),
+    supabase
+      .from("clients")
+      .select("id", { count: "exact", head: true })
+      .eq("actif", true)
+      .eq("envoi_auto", true),
   ]);
 
   const facturesOuvertes = lignes<FactureResumee>(ouvertes, "factures à encaisser");
@@ -210,7 +220,7 @@ export async function chargerTableauDeBord(
     facturation: {
       jourGeneration: parametres.jour_generation,
       generationAuto: parametres.generation_auto,
-      envoiAuto: parametres.envoi_auto,
+      nbClientsEnvoiAuto: compte(nbEnvoiAuto, "clients en envoi automatique"),
       prochaineDate: prochaine,
       prochainePeriode: periodeAFacturer(parametres, prochaine),
       periodeEnCours,

@@ -159,6 +159,7 @@ const schemaClient = z
       .transform((v) => v || null),
     cavaliers: texteFacultatif(300, "Cavalier(s)"),
     notes: texteFacultatif(4000, "Notes internes"),
+    envoi_auto: z.boolean({ error: "Envoi automatique : valeur invalide." }),
   })
   .refine((c) => c.type !== "professionnel" || Boolean(c.raison_sociale), {
     path: ["raison_sociale"],
@@ -183,7 +184,10 @@ function lireFormulaireClient(formData: FormData) {
     "telephone", "adresse_ligne1", "adresse_ligne2", "code_postal", "ville", "pays", "siret",
     "numero_tva", "cavaliers", "notes",
   ];
-  return Object.fromEntries(noms.map((n) => [n, champ(formData, n)]));
+  return {
+    ...Object.fromEntries(noms.map((n) => [n, champ(formData, n)])),
+    envoi_auto: formData.get("envoi_auto") === "on",
+  };
 }
 
 /** Création d'un client, puis redirection vers sa fiche. */

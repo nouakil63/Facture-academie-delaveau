@@ -26,7 +26,8 @@ Application web interne de suivi des clients et de facturation de l'association
   → payée, ou annulée. PDF aux couleurs de l'académie, avec l'IBAN et les mentions légales.
 - **Facturation mensuelle** : prépare en un clic les brouillons du mois pour tous les clients
   (ou une seule académie), avec un aperçu avant création, puis émission et envoi groupés par
-  e-mail. Le tout peut être automatisé, jusqu'à l'envoi.
+  e-mail. Le tout peut être automatisé, jusqu'à l'envoi pour les clients choisis (case
+  « envoi automatique » sur leur fiche), avec un récapitulatif par e-mail.
 - **Envoi par e-mail** depuis la boîte `contact@academiedelaveau.com`, PDF en pièce jointe.
   Chaque envoi est journalisé, qu'il réussisse ou non.
 - **Tableau de bord** : montants à encaisser, factures en retard, brouillons en attente,
@@ -52,12 +53,18 @@ passe de la boîte mail Amen.
    - **Region : une région de l'Union européenne**, par exemple *West EU (Paris)* ou
      *Central EU (Frankfurt)*.
 2. Une fois le projet prêt, ouvrez **SQL Editor** (menu de gauche) → **New query**.
-   Exécutez les deux fichiers du dossier `supabase/migrations`, **dans cet ordre et une
+   Exécutez les trois fichiers du dossier `supabase/migrations`, **dans cet ordre et une
    seule fois chacun** :
    1. ouvrez `supabase/migrations/20260924000000_schema_initial.sql`, copiez tout son
       contenu, collez-le dans l'éditeur, puis cliquez sur **Run** ;
    2. faites de même avec `supabase/migrations/20260924000100_donnees_initiales.sql`.
-      Ce fichier crée les paramètres de l'association et les deux académies.
+      Ce fichier crée les paramètres de l'association et les deux académies ;
+   3. faites de même avec `supabase/migrations/20260928000000_envoi_auto_clients.sql`
+      (envoi automatique réglé client par client).
+
+   **Base déjà installée** (les deux premiers fichiers déjà exécutés) : exécuter seulement le
+   troisième, une seule fois. Si l'envoi automatique global était activé, tous les clients
+   passent en envoi automatique ; sinon, aucun.
 3. **Authentication → Sign In / Providers** : désactivez **« Allow new users to sign up »**.
    Personne ne pourra créer de compte depuis le site.
 4. **Authentication → Users → Add user → Create new user**, pour **chacun des deux comptes** :
@@ -91,6 +98,7 @@ passe de la boîte mail Amen.
    | `SUPABASE_SECRET_KEY` | clé secret |
    | `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASSWORD`, `EMAIL_FROM` | voir c) ci-dessous |
    | `CRON_SECRET` | une chaîne aléatoire d'au moins 32 caractères |
+   | `APP_URL` | *(facultatif)* adresse du site, pour le lien du récapitulatif d'envoi automatique ; par défaut, le domaine de production Vercel |
 
    Pour `CRON_SECRET`, générez une chaîne longue au hasard : par exemple avec un gestionnaire
    de mots de passe, ou la commande `openssl rand -hex 32`. Vous n'aurez jamais à la saisir
@@ -100,9 +108,11 @@ passe de la boîte mail Amen.
    comptes.
 4. **Tâche planifiée.** Le fichier `vercel.json` demande à Vercel d'appeler l'application
    **chaque jour vers 6 h (heure UTC)**. L'application vérifie alors si c'est le jour de
-   génération choisi dans les Paramètres. Si oui, et si l'automatisation est activée, elle
-   prépare les brouillons du mois pour les deux académies, puis les envoie si l'envoi
-   automatique est aussi activé. Les autres jours, elle ne fait rien. Le suivi se trouve dans
+   génération choisi dans les Paramètres. Si oui, et si l'automatisation est activée (ou si
+   au moins un client est en envoi automatique), elle prépare les brouillons du mois pour les
+   deux académies, puis émet et envoie ceux des clients en envoi automatique, et adresse un
+   récapitulatif aux utilisateurs (table `membres`, plus l'adresse en copie cachée des
+   Paramètres). Les autres jours, elle ne fait rien. Le suivi se trouve dans
    Vercel, onglet **Settings → Cron Jobs**, puis **Logs**.
 5. *(Facultatif)* Dans **Project Settings → Functions**, choisissez la région **Paris
    (cdg1)**, proche de la base de données.
@@ -150,7 +160,8 @@ mot de passe refusé, serveur introuvable…
    - **Identité & charte** : couleurs et logo, et le **préfixe** des numéros (`AD`). Le
      préfixe ne peut plus changer après la première facture émise.
    - **Facturation mensuelle** : jour de préparation (1 à 28), mois facturé (mois en cours ou
-     mois précédent), préparation automatique, envoi automatique.
+     mois précédent), préparation automatique. L'envoi automatique se règle client par
+     client (voir ci-dessous) ; il a lieu le jour de préparation.
    - **E-mails** : objet et texte du message envoyé avec chaque facture. Variables
      disponibles : `{client}` `{numero}` `{montant}` `{echeance}` `{periode}` `{structure}`
      `{academie}` `{objet}`.
@@ -161,13 +172,18 @@ mot de passe refusé, serveur introuvable…
 3. **Clients** : créez chaque payeur. Choisissez son **académie**, puis renseignez son
    e-mail (et d'éventuelles adresses en copie) et le nom du ou des cavaliers. Sur sa fiche,
    ajoutez ses **tarifs** : les prestations facturées chaque mois, au prix du catalogue ou à
-   un prix personnalisé.
+   un prix personnalisé. La case **« Envoyer sa facture automatiquement chaque mois »** fait
+   émettre et envoyer sa facture mensuelle sans relecture, le jour de préparation (badge
+   « Auto » dans la liste des clients).
 
 ## Utilisation mensuelle
 
 1. **Préparer les factures du mois.**
-   - *Automatiquement* : le jour choisi, les brouillons sont créés tout seuls. Si l'envoi
-     automatique est activé, ils sont aussi émis et envoyés.
+   - *Automatiquement* : le jour choisi, les brouillons sont créés tout seuls. Ceux des
+     clients en envoi automatique sont aussitôt émis et envoyés (y compris un brouillon du
+     mois déjà présent) ; les autres attendent une relecture. Un e-mail récapitulatif
+     (factures envoyées, total, échecs et leur raison) part alors aux utilisateurs.
+     Un échec (client sans adresse e-mail…) laisse le brouillon à reprendre à la main.
    - *Manuellement* : menu **Facturation mensuelle**, choisissez le mois (et au besoin une
      académie), vérifiez l'aperçu, puis cliquez sur **« Générer les brouillons »**.
 2. **Vérifier** les brouillons. On peut les ouvrir, ajouter une ligne (stage, frais
@@ -242,7 +258,7 @@ Commandes utiles :
 | `node scripts/generer-logo-pdf.mjs` | régénère les logos « fond clair » et le logo du PDF depuis `public/brand/logo-delaveau.png` |
 
 La tâche planifiée peut se tester en local avec l'en-tête du secret, sans rien enregistrer
-grâce à `apercu=1` :
+grâce à `apercu=1` (ni facture ni récapitulatif envoyé ; la réponse liste ce qui partirait) :
 
 ```bash
 curl -H "Authorization: Bearer $CRON_SECRET" "http://localhost:3000/api/cron/facturation-mensuelle?date=2026-10-01&apercu=1"

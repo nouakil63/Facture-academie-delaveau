@@ -16,7 +16,7 @@ import {
 import { exigerUtilisateur } from "@/lib/auth";
 import { emailConfigure } from "@/lib/email";
 import { chargerAcademies, chargerParametres } from "@/lib/facturation/service";
-import { aujourdhuiParis, formatDate } from "@/lib/format";
+import { aujourdhuiParis, formatDate, jourDuMois, pluriel } from "@/lib/format";
 import type { Academie, Parametres } from "@/lib/types";
 
 export const metadata: Metadata = { title: "Paramètres" };
@@ -62,14 +62,23 @@ export default async function PageParametres() {
 
   let membres: Membre[];
   let compteurs: Compteur[];
-  let nbClientsSansEmail: number;
+  let nbClientsEnvoiAuto: number;
+  let nbClientsAutoSansEmail: number;
   let academiesGestion: AcademieGestion[];
   try {
-    const [resMembres, resCompteurs, sansEmail, comptes] = await Promise.all([
+    const [resMembres, resCompteurs, envoiAuto, autoSansEmail, comptes] = await Promise.all([
       supabase.from("membres").select("email, nom, created_at").order("created_at"),
       supabase.from("compteurs_factures").select("annee, dernier_numero").order("annee", { ascending: false }),
+      // Clients actifs en envoi automatique (réglage client par client), dont ceux sans adresse.
+      compter(supabase.from("clients").select("id", { count: "exact", head: true }).eq("actif", true).eq("envoi_auto", true)),
       compter(
-        supabase.from("clients").select("id", { count: "exact", head: true }).eq("actif", true).is("email", null).eq("emails_cc", "{}"),
+        supabase
+          .from("clients")
+          .select("id", { count: "exact", head: true })
+          .eq("actif", true)
+          .eq("envoi_auto", true)
+          .is("email", null)
+          .eq("emails_cc", "{}"),
       ),
       // Rattachements de chaque académie : affichés, et bloquants pour la suppression.
       Promise.all(
@@ -92,7 +101,8 @@ export default async function PageParametres() {
     if (resCompteurs.error) throw new Error(resCompteurs.error.message);
     membres = resMembres.data as Membre[];
     compteurs = resCompteurs.data as Compteur[];
-    nbClientsSansEmail = sansEmail;
+    nbClientsEnvoiAuto = envoiAuto;
+    nbClientsAutoSansEmail = autoSansEmail;
     academiesGestion = academies.map((a, i) => ({
       ...a,
       nbClients: comptes[i][0],
@@ -168,14 +178,18 @@ export default async function PageParametres() {
         <p className="flex items-center gap-2">
           <span className="text-muted">Facturation mensuelle</span>
           <span className="font-medium text-ink">
-            {parametres.generation_auto
-              ? `automatique, le ${parametres.jour_generation === 1 ? "1er" : parametres.jour_generation}`
+            {parametres.generation_auto || nbClientsEnvoiAuto > 0
+              ? `automatique, le ${jourDuMois(parametres.jour_generation)}`
               : "manuelle"}
           </span>
-          {parametres.envoi_auto && (
-            <span className="badge bg-red-100 text-red-800" title="Nos factures sont émises et envoyées sans qu'on les relise">
-              Envoi automatique
-            </span>
+          {nbClientsEnvoiAuto > 0 && (
+            <a
+              href="#mensuelle"
+              className="badge bg-brand-light text-brand-dark"
+              title="Factures émises et envoyées sans relecture, le jour de génération"
+            >
+              Envoi auto : {pluriel(nbClientsEnvoiAuto, "client")}
+            </a>
           )}
         </p>
         <div className="sm:ml-auto">
@@ -215,7 +229,8 @@ export default async function PageParametres() {
             prochainNumero={prochainNumero}
             aujourdhui={aujourdhui}
             smtpConfigure={smtpOk}
-            nbClientsSansEmail={nbClientsSansEmail}
+            nbClientsEnvoiAuto={nbClientsEnvoiAuto}
+            nbClientsAutoSansEmail={nbClientsAutoSansEmail}
             academies={(academiesActives.length > 0 ? academiesActives : academies).map((a) => ({ id: a.id, nom: a.nom }))}
           />
 
@@ -249,12 +264,12 @@ export default async function PageParametres() {
             </div>
 
             <div className="space-y-5 px-5 py-5">
-              {!smtpOk && parametres.envoi_auto && (
+              {!smtpOk && nbClientsEnvoiAuto > 0 && (
                 <p className="erreur flex items-start gap-2">
                   <IconeAlerte className="mt-0.5 size-4 shrink-0" />
                   <span>
-                    L&apos;envoi automatique est activé, mais on n&apos;a pas encore configuré de serveur SMTP : nos
-                    factures seront émises sans pouvoir partir. Suis les étapes Amen ci-dessous.
+                    {pluriel(nbClientsEnvoiAuto, "client")} en envoi automatique, mais aucun serveur SMTP configuré :
+                    leurs factures ne pourront pas partir. Suivre les étapes Amen ci-dessous.
                   </span>
                 </p>
               )}

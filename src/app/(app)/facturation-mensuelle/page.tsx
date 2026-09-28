@@ -115,7 +115,7 @@ export default async function PageFacturationMensuelle(props: PageProps<"/factur
     .eq("generation_auto", true);
   if (academieId) requeteFactures = requeteFactures.eq("academie_id", academieId);
 
-  const [apercu, resClients, resFactures] = await Promise.all([
+  const [apercu, resClients, resFactures, resEnvoiAuto] = await Promise.all([
     genererBrouillonsMensuels(supabase, periode, { academieId, apercu: true }).then(
       (r): { ok: true; donnees: ResultatGeneration[] } => ({ ok: true, donnees: r }),
       (e: unknown): { ok: false; erreur: string } => ({
@@ -125,8 +125,12 @@ export default async function PageFacturationMensuelle(props: PageProps<"/factur
     ),
     requeteClients,
     requeteFactures,
+    // Envoi automatique (réglage client par client), toutes académies comme l'automatisation.
+    supabase.from("clients").select("id", { count: "exact", head: true }).eq("actif", true).eq("envoi_auto", true),
   ]);
   if (resClients.error) return <ErreurChargement message={resClients.error.message} />;
+  if (resEnvoiAuto.error) return <ErreurChargement message={resEnvoiAuto.error.message} />;
+  const nbClientsEnvoiAuto = resEnvoiAuto.count ?? 0;
   if (resFactures.error) return <ErreurChargement message={resFactures.error.message} />;
 
   const clients = new Map((resClients.data as ClientMensuel[]).map((c) => [c.id, c]));
@@ -212,17 +216,20 @@ export default async function PageFacturationMensuelle(props: PageProps<"/factur
             <IconeParametres className="mt-0.5 size-4 shrink-0 text-brand" />
             <p>
               <span className="font-medium text-ink">Automatisation</span> (toutes académies) :{" "}
-              {parametres.generation_auto ? (
+              {parametres.generation_auto || nbClientsEnvoiAuto > 0 ? (
                 <>
                   brouillons générés automatiquement le{" "}
                   <strong className="text-ink">{jourDuMois(parametres.jour_generation)}</strong> de chaque mois (factures{" "}
-                  {moisFacture})
-                  {parametres.envoi_auto ? (
+                  {moisFacture}), à relire puis envoyer depuis cette page.{" "}
+                  {nbClientsEnvoiAuto > 0 ? (
                     <>
-                      , puis <strong className="text-ink">émis et envoyés automatiquement</strong>.
+                      <Link href="/clients" className="btn-lien">
+                        {pluriel(nbClientsEnvoiAuto, "client")} en envoi automatique
+                      </Link>{" "}
+                      : factures <strong className="text-ink">émises et envoyées le même jour</strong>, sans relecture.
                     </>
                   ) : (
-                    <>, qu&apos;on relit et qu&apos;on envoie depuis cette page.</>
+                    <>Aucun client en envoi automatique.</>
                   )}
                 </>
               ) : (
