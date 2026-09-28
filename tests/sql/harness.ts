@@ -5,8 +5,10 @@ import { join } from "node:path";
 /**
  * Base PostgreSQL en mémoire (PGlite) reproduisant le minimum de Supabase
  * nécessaire aux migrations : rôles, schéma `auth`, fonctions auth.jwt()/auth.uid().
+ * Toutes les migrations sont appliquées, sauf `arreterAvant` : seulement celles qui précèdent
+ * ce fichier (pour tester la reprise de données d'une migration).
  */
-export async function creerBase() {
+export async function creerBase(options: { arreterAvant?: string } = {}) {
   const db = new PGlite();
   await db.exec(`
     create role anon nologin;
@@ -25,11 +27,23 @@ export async function creerBase() {
     alter default privileges in schema public grant all on sequences to anon, authenticated, service_role;
     alter default privileges in schema public grant all on functions to anon, authenticated, service_role;
   `);
-  const dir = join(__dirname, "../../supabase/migrations");
-  for (const f of readdirSync(dir).filter((f) => f.endsWith(".sql")).sort()) {
-    await db.exec(readFileSync(join(dir, f), "utf8"));
+  for (const f of migrations()) {
+    if (options.arreterAvant && f >= options.arreterAvant) break;
+    await appliquerMigration(db, f);
   }
   return db;
+}
+
+const DOSSIER_MIGRATIONS = join(__dirname, "../../supabase/migrations");
+
+/** Fichiers de migration, dans l'ordre d'application. */
+export function migrations(): string[] {
+  return readdirSync(DOSSIER_MIGRATIONS).filter((f) => f.endsWith(".sql")).sort();
+}
+
+/** Applique un fichier de migration (nom du fichier dans supabase/migrations). */
+export async function appliquerMigration(db: PGlite, fichier: string) {
+  await db.exec(readFileSync(join(DOSSIER_MIGRATIONS, fichier), "utf8"));
 }
 
 /** Exécute `fn` en tant qu'utilisateur authentifié portant l'e-mail donné. */

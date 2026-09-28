@@ -1,6 +1,6 @@
 import { PGlite } from "@electric-sql/pglite";
 import { beforeEach, describe, expect, test } from "vitest";
-import { commeUtilisateur, creerBase } from "./harness";
+import { appliquerMigration, commeUtilisateur, creerBase } from "./harness";
 
 const MEMBRE = "equipe@academie-delaveau.fr";
 let db: PGlite;
@@ -373,6 +373,68 @@ describe("vue factures_vue", () => {
     await db.exec(`alter table factures enable trigger b_factures_proteger`);
     row = await un(`select * from factures_vue where id = $1`, [f]);
     expect(row.en_retard).toBe(true);
+  });
+});
+
+describe("envoi automatique par client", () => {
+  const MIGRATION = "20260928000000_envoi_auto_clients.sql";
+
+  test("colonne clients.envoi_auto, fausse par défaut ; plus de réglage global", async () => {
+    const c = await client(ad);
+    const row = await un<{ envoi_auto: boolean }>(`select envoi_auto from clients where id = $1`, [c]);
+    expect(row.envoi_auto).toBe(false);
+    await db.query(`update clients set envoi_auto = true where id = $1`, [c]);
+    expect((await un<{ envoi_auto: boolean }>(`select envoi_auto from clients where id = $1`, [c])).envoi_auto).toBe(true);
+    await expect(db.query(`update clients set envoi_auto = null where id = $1`, [c])).rejects.toThrow(/null/);
+
+    const colonne = await un<{ is_nullable: string; column_default: string }>(
+      `select is_nullable, column_default from information_schema.columns
+        where table_schema = 'public' and table_name = 'clients' and column_name = 'envoi_auto'`,
+    );
+    expect(colonne).toMatchObject({ is_nullable: "NO", column_default: "false" });
+    const globale = await db.query(
+      `select 1 from information_schema.columns
+        where table_schema = 'public' and table_name = 'parametres' and column_name = 'envoi_auto'`,
+    );
+    expect(globale.rows).toHaveLength(0);
+  });
+
+  test("migration : l'envoi automatique global activé passe à tous les clients", async () => {
+    const ancienne = await creerBase({ arreterAvant: MIGRATION });
+    const idAcademie = (await ancienne.query<{ id: string }>(`select id from academies order by ordre limit 1`)).rows[0].id;
+    await ancienne.query(`insert into clients (academie_id, nom) values ($1, 'Martin'), ($1, 'Durand')`, [idAcademie]);
+    await ancienne.query(`update clients set actif = false where nom = 'Durand'`);
+    await ancienne.query(`update parametres set generation_auto = true, envoi_auto = true`);
+    await appliquerMigration(ancienne, MIGRATION);
+    const rows = (await ancienne.query<{ nom: string; envoi_auto: boolean }>(`select nom, envoi_auto from clients order by nom`)).rows;
+    expect(rows).toEqual([
+      { nom: "Durand", envoi_auto: true },
+      { nom: "Martin", envoi_auto: true },
+    ]);
+    await ancienne.close();
+  });
+
+  test("migration : l'envoi automatique global désactivé laisse les clients en relecture", async () => {
+    const ancienne = await creerBase({ arreterAvant: MIGRATION });
+    const idAcademie = (await ancienne.query<{ id: string }>(`select id from academies order by ordre limit 1`)).rows[0].id;
+    await ancienne.query(`insert into clients (academie_id, nom) values ($1, 'Martin')`, [idAcademie]);
+    await appliquerMigration(ancienne, MIGRATION);
+    const rows = (await ancienne.query<{ envoi_auto: boolean }>(`select envoi_auto from clients`)).rows;
+    expect(rows).toEqual([{ envoi_auto: false }]);
+    await ancienne.close();
+  });
+
+  test("l'émission fige l'envoi automatique dans l'instantané client sans erreur", async () => {
+    const c = await client(ad);
+    await db.query(`update clients set envoi_auto = true where id = $1`, [c]);
+    const f = await brouillon(c, [["A", 1, 100]]);
+    await db.query(`select emettre_facture($1)`, [f]);
+    const row = await un<{ client_snapshot: { envoi_auto: boolean }; emetteur_snapshot: Record<string, unknown> }>(
+      `select client_snapshot, emetteur_snapshot from factures where id = $1`,
+      [f],
+    );
+    expect(row.client_snapshot.envoi_auto).toBe(true);
+    expect(row.emetteur_snapshot).not.toHaveProperty("envoi_auto");
   });
 });
 
