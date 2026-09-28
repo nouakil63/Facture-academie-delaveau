@@ -1,13 +1,11 @@
 import "server-only";
 import { renderToBuffer } from "@react-pdf/renderer";
-import type { AvisComplet, Echeance, Facture, FactureComplete } from "@/lib/types";
-import { AvisEcheancePdf } from "./AvisEcheancePdf";
+import type { Facture, FactureComplete } from "@/lib/types";
 import { FacturePdf } from "./FacturePdf";
 import { LOGO_DELAVEAU_PNG, LOGO_DELAVEAU_RATIO } from "./logo";
 
 /*
- * Génération des PDF (serveur uniquement : routes API, envoi par e-mail) : facture
- * (ponctuelle ou annuelle, avec son échéancier) et avis d'échéance.
+ * Génération du PDF d'une facture (serveur uniquement : routes API, envoi par e-mail).
  */
 
 /** Logo à imprimer : l'URL des paramètres si c'est une adresse http(s) absolue, sinon le logo Delaveau intégré. */
@@ -22,27 +20,9 @@ function logoEmetteur(logoUrl: string | null | undefined): { logo: string; ratio
  * les mentions et l'IBAN de l'émetteur (paramètres, figés à l'émission) et l'académie du client.
  */
 export async function genererPdfFacture(donnees: FactureComplete): Promise<Buffer> {
-  const { facture, lignes, client, emetteur, academie, echeances } = donnees;
+  const { facture, lignes, client, emetteur, academie } = donnees;
   const { logo, ratio } = logoEmetteur(emetteur.logo_url);
-  return renderToBuffer(FacturePdf({ facture, lignes, client, emetteur, academie, logo, logoRatio: ratio, echeances }));
-}
-
-/**
- * Rend un avis d'échéance (document non fiscal) au format PDF A4 : montant à payer, date
- * limite, coordonnées bancaires et référence à rappeler (numéro de l'avis), avec l'émetteur
- * figé de la facture annuelle.
- */
-export async function genererPdfAvis(donnees: AvisComplet): Promise<Buffer> {
-  const { echeance, echeances, facture, client, emetteur, academie } = donnees;
-  const { logo, ratio } = logoEmetteur(emetteur.logo_url);
-  return renderToBuffer(
-    AvisEcheancePdf({ echeance, echeances, facture, client, emetteur, academie, logo, logoRatio: ratio }),
-  );
-}
-
-/** Nom du fichier PDF d'un avis : « Avis-E1-2026-09.pdf ». */
-export function nomFichierAvis(echeance: Pick<Echeance, "numero_avis">): string {
-  return `Avis-${echeance.numero_avis.replace(/[^A-Za-z0-9_-]+/g, "-")}.pdf`;
+  return renderToBuffer(FacturePdf({ facture, lignes, client, emetteur, academie, logo, logoRatio: ratio }));
 }
 
 /** Nom du fichier PDF : « Facture-AD-2026-0001.pdf », ou « Brouillon-2026-10-1a2b3c4d.pdf » avant émission. */

@@ -247,7 +247,8 @@ describe("échéances créées à l'émission", () => {
     // Les brouillons n'ont pas d'échéance.
     expect(await echeances(factureId)).toEqual([]);
     const f = await un<{ numero: string; total_ttc_centimes: number; date_echeance: Date; date_emission: Date }>(`select * from emettre_facture($1)`, [factureId]);
-    expect(f.numero).toMatch(/^AD-\d{4}-0001$/);
+    // Facture annuelle (sans période) : mois de la date d'émission (migration 20261001000000).
+    expect(f.numero).toMatch(/^F-E1-\d{2}-\d{4}-0001$/);
     expect(f.total_ttc_centimes).toBe(1320000);
 
     const liste = await echeances(factureId);

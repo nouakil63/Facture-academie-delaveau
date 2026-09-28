@@ -296,7 +296,8 @@ export async function modifierClient(_precedent: ResultatAction | null, formData
     if (avant.error) return { ok: false, erreur: traduireErreur(avant.error) };
     if (!avant.data) return { ok: false, erreur: "Client introuvable : il a peut-être été supprimé." };
 
-    const { data, error } = await supabase.from("clients").update(champsClient(lecture.data)).eq("id", id.data).select("id");
+    const { data, error } = await supabase.from("clients").update(champsClient(lecture.data))
+.eq("id", id.data).select("id");
     if (error) return { ok: false, erreur: traduireErreur(error, ACADEMIE_INTROUVABLE) };
     if (!data || data.length === 0) return { ok: false, erreur: "Client introuvable : il a peut-être été supprimé." };
 
@@ -324,7 +325,7 @@ export async function modifierClient(_precedent: ResultatAction | null, formData
   };
 }
 
-/** Archive (exclut de la facturation de l'année) ou réactive un client. */
+/** Archive (exclut de la facturation mensuelle) ou réactive un client. */
 export async function changerArchivageClient(clientId: string, archiver: boolean): Promise<ResultatAction> {
   const { supabase } = await exigerUtilisateur();
 
@@ -347,8 +348,8 @@ export async function changerArchivageClient(clientId: string, archiver: boolean
   return {
     ok: true,
     message: archiver
-      ? "Client archivé : plus de facture annuelle ni d'envoi automatique."
-      : "Client réactivé : il revient dans la facturation de l'année.",
+      ? "Client archivé : plus de facture mensuelle."
+      : "Client réactivé : il revient dans la facturation mensuelle.",
   };
 }
 
@@ -537,7 +538,7 @@ export async function supprimerTarif(tarifId: string): Promise<ResultatAction> {
   return { ok: true, message: "Ligne de tarif supprimée." };
 }
 
-/** Monte ou descend une ligne : l'ordre des tarifs est celui des lignes de la facture annuelle. */
+/** Monte ou descend une ligne : l'ordre des tarifs est celui des lignes de la facture mensuelle. */
 export async function deplacerTarif(tarifId: string, sens: "haut" | "bas"): Promise<ResultatAction> {
   const { supabase } = await exigerUtilisateur();
 

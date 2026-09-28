@@ -7,16 +7,10 @@ export function ResultatsEnvoi({
   resultats,
   synthese,
   onFermer,
-  lien = (r) => `/factures/${r.id}`,
-  libelleEnvoi = "Envoyée",
 }: {
   resultats: ResultatEnvoiFacture[];
   synthese?: string;
   onFermer?: () => void;
-  /** Lien de chaque ligne (défaut : fiche facture ; null : pas de lien). */
-  lien?: ((r: ResultatEnvoiFacture) => string) | null;
-  /** Libellé d'un envoi réussi (« Envoyée » pour une facture, « Envoyé » pour un avis). */
-  libelleEnvoi?: string;
 }) {
   const echecs = resultats.filter((r) => !r.ok).length;
   return (
@@ -62,13 +56,9 @@ export function ResultatsEnvoi({
               ) : (
                 <IconeFermer className="size-4 text-red-600" />
               )}
-              {lien ? (
-                <Link href={lien(r)} className="font-medium text-brand hover:underline">
-                  {libelleNumero(r.numero)}
-                </Link>
-              ) : (
-                <span className="font-medium text-ink">{r.numero ?? "—"}</span>
-              )}
+              <Link href={`/factures/${r.id}`} className="font-medium text-brand hover:underline">
+                {libelleNumero(r.numero)}
+              </Link>
               <span className="truncate text-ink">{r.client}</span>
             </span>
             <span
@@ -76,7 +66,7 @@ export function ResultatsEnvoi({
                 r.ok ? "text-emerald-700" : r.ignoree ? "text-muted" : "text-red-700"
               }`}
             >
-              {r.ok ? (r.erreur ? `${libelleEnvoi} · ${r.erreur}` : libelleEnvoi) : r.erreur}
+              {r.ok ? (r.erreur ? `Envoyée · ${r.erreur}` : "Envoyée") : r.erreur}
             </span>
           </li>
         ))}

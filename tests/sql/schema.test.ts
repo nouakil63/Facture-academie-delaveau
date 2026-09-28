@@ -110,18 +110,19 @@ describe("émission et numérotation", () => {
     const a1 = await un<{ numero: string }>(`select * from emettre_facture($1)`, [await brouillon(c1, [["A", 1, 100]])]);
     const e1 = await un<{ numero: string; academie_id: string }>(`select * from emettre_facture($1)`, [await brouillon(c2, [["C", 1, 100]])]);
     const a2 = await un<{ numero: string }>(`select * from emettre_facture($1)`, [await brouillon(c1, [["B", 1, 100]])]);
-    const annee = (await un<{ a: number }>(`select extract(year from aujourdhui_paris())::int as a`)).a;
-    expect(a1.numero).toBe(`AD-${annee}-0001`);
-    expect(e1.numero).toBe(`AD-${annee}-0002`);
-    expect(a2.numero).toBe(`AD-${annee}-0003`);
+    // Sans période : mois de la date d'émission (F-<réf.>-<MM>-<AAAA>-<n°>, migration 20261001000000).
+    const mois = (await un<{ m: string }>(`select to_char(aujourdhui_paris(), 'MM-YYYY') as m`)).m;
+    expect(a1.numero).toBe(`F-E1-${mois}-0001`);
+    expect(e1.numero).toBe(`F-E2-${mois}-0002`);
+    expect(a2.numero).toBe(`F-E1-${mois}-0003`);
     expect(e1.academie_id).toBe(ae);
   });
 
-  test("le préfixe est modifiable avant la première émission, figé ensuite", async () => {
+  test("le préfixe n'entre plus dans le numéro ; il reste figé après la première émission", async () => {
     await db.query(`update parametres set prefixe_facture = 'FA'`);
     const c = await client(ad);
     const f = await un<{ numero: string }>(`select * from emettre_facture($1)`, [await brouillon(c, [["A", 1, 100]])]);
-    expect(f.numero).toMatch(/^FA-/);
+    expect(f.numero).toMatch(/^F-E1-\d{2}-\d{4}-0001$/);
     await expect(db.query(`update parametres set prefixe_facture = 'AD'`)).rejects.toThrow(/continue/);
     await db.query(`update parametres set iban = 'FR7630006000011234567890189'`);
   });
@@ -156,10 +157,11 @@ describe("émission et numérotation", () => {
 
   test("au-delà de 9999 factures dans l'année, le numéro s'allonge sans être tronqué", async () => {
     const annee = (await un<{ a: number }>(`select extract(year from aujourdhui_paris())::int as a`)).a;
+    const mois = (await un<{ m: string }>(`select to_char(aujourdhui_paris(), 'MM-YYYY') as m`)).m;
     await db.query(`insert into compteurs_factures (annee, dernier_numero) values ($1, 9999)`, [annee]);
     const c = await client(ad);
     const f = await un<{ numero: string }>(`select * from emettre_facture($1)`, [await brouillon(c, [["A", 1, 100]])]);
-    expect(f.numero).toBe(`AD-${annee}-10000`);
+    expect(f.numero).toBe(`F-E1-${mois}-10000`);
   });
 
   test("l'émission fige les coordonnées et fixe l'échéance", async () => {
@@ -764,7 +766,7 @@ describe("sécurité (RLS)", () => {
     const f = await brouillon(c, [["A", 1, 100]]);
     const numero = await commeUtilisateur(db, MEMBRE, async () =>
       (await un<{ numero: string }>(`select * from emettre_facture($1)`, [f])).numero);
-    expect(numero).toMatch(/^AD-\d{4}-0001$/);
+    expect(numero).toMatch(/^F-E1-\d{2}-\d{4}-0001$/);
   });
 
   test("un utilisateur authentifié non membre ne voit rien et ne peut rien faire", async () => {

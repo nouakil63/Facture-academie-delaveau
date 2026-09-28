@@ -33,7 +33,7 @@ export function FormulaireClient({
   academies: AcademieOption[];
   /** Création : académie présélectionnée (celle du filtre), sinon la première. */
   academieParDefaut?: string | null;
-  /** Jour d'envoi des avis (paramètres jour_generation) : jour de l'envoi automatique. */
+  /** Jour de génération mensuelle (paramètres) : jour de l'envoi automatique. */
   jourGeneration: number;
   /** Saison des arrhes proposée par défaut : la saison en cours (heure de Paris), calculée côté serveur. */
   saisonParDefaut: number;
@@ -61,7 +61,7 @@ export function FormulaireClient({
   const [copies, setCopies] = useState(client?.emails_cc?.join(", ") ?? "");
   const [envoiAuto, setEnvoiAuto] = useState(client?.envoi_auto ?? false);
   const sansDestinataire = email.trim() === "" && copies.trim() === "";
-  // Arrhes : répartition sur les échéances calculée en direct.
+  // Arrhes : déduction mensuelle calculée en direct.
   const [arrhesReglees, setArrhesReglees] = useState(client?.arrhes_reglees ?? false);
   const [arrhesSaisie, setArrhesSaisie] = useState(centimesVersSaisie(client?.arrhes_centimes));
   const arrhesCentimes = parseEurosEnCentimes(arrhesSaisie);
@@ -109,12 +109,13 @@ export function FormulaireClient({
               />
               <p className="aide">
                 {creation
-                  ? "Laisser vide : prochain numéro libre. Unique pour les deux académies, imprimée sur les factures et les avis."
-                  : "Unique pour les deux académies. Les factures et avis déjà émis gardent l'ancienne référence."}
+                  ? "Laisser vide : prochain numéro libre. Unique pour les deux académies, reprise dans le numéro de facture (F-E12-…)."
+                  : "Unique pour les deux académies. Les factures déjà émises gardent leur numéro et l'ancienne référence."}
               </p>
             </div>
             <div>
               <label htmlFor="academie_id" className="label">
+
                 Académie <Obligatoire />
               </label>
               <select id="academie_id" name="academie_id" defaultValue={academieInitiale} required className="champ">
@@ -380,7 +381,7 @@ export function FormulaireClient({
                 placeholder="Ex. Léa et Hugo Martin"
                 className="champ"
               />
-              <p className="aide">Figure sur chacune de ses factures et sur ses avis d&apos;échéance.</p>
+              <p className="aide">Figure sur chacune de ses factures.</p>
             </div>
             <div>
               <label htmlFor="notes" className="label">
@@ -410,10 +411,9 @@ export function FormulaireClient({
                   className="mt-0.5 size-4 shrink-0 accent-brand"
                 />
                 <span className="text-sm">
-                  <span className="font-medium text-ink">Envoyer ses avis d&apos;échéance automatiquement</span>
+                  <span className="font-medium text-ink">Envoyer sa facture automatiquement chaque mois</span>
                   <span className="block text-muted">
-                    Le {jourDuMois(jourGeneration)} de chaque mois (septembre à juin), l&apos;avis du mois de sa facture
-                    annuelle part sans relecture.
+                    Le {jourDuMois(jourGeneration)} de chaque mois, sa facture est émise et envoyée sans relecture.
                   </span>
                 </span>
               </label>
@@ -424,7 +424,7 @@ export function FormulaireClient({
                 </p>
               )}
               {envoiAuto && client && !client.actif && (
-                <p className="aide">Client archivé : aucun envoi automatique.</p>
+                <p className="aide">Client archivé : pas de facture mensuelle, donc aucun envoi automatique.</p>
               )}
             </div>
           </div>
@@ -447,8 +447,7 @@ export function FormulaireClient({
               <span className="text-sm">
                 <span className="font-medium text-ink">Arrhes réglées</span>
                 <span className="block text-muted">
-                  Déduites du total de la facture annuelle de la saison : l&apos;échéancier (10 mois, septembre à juin)
-                  porte sur le reste à payer.
+                  Déduites des factures mensuelles de septembre à juin ; la facture n&apos;affiche que le montant net.
                 </span>
               </span>
             </label>
@@ -489,14 +488,14 @@ export function FormulaireClient({
             <p className="aide sm:col-span-6" aria-live="polite">
               {arrhesCentimes !== null && arrhesCentimes > 0 ? (
                 <>
-                  Déduites de la facture annuelle : −{formatEuros(mensualiteArrhes(arrhesCentimes))} par échéance en
-                  moyenne.
+                  Déduites des mensualités de septembre à juin : −{formatEuros(mensualiteArrhes(arrhesCentimes))} par
+                  mois.
                   {juinArrhes !== mensualiteArrhes(arrhesCentimes) && <> Juin : −{formatEuros(juinArrhes)}.</>}
                 </>
               ) : arrhesSaisie.trim() !== "" ? (
                 "Montant invalide : saisir un montant en euros (ex. 450 ou 450,50)."
               ) : (
-                "Déduites de la facture annuelle de la saison, avant le calcul des 10 échéances. Juillet et août : facturation manuelle."
+                "Déduites des mensualités de septembre à juin, par dixièmes. Juillet et août : facturation manuelle."
               )}
             </p>
           </div>

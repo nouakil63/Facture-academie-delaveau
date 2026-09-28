@@ -22,12 +22,10 @@ const LIMITE = 500;
 const COLONNES =
   "id, numero, statut, objet, periode, date_emission, date_echeance, total_ht_centimes, total_ttc_centimes, " +
   "en_retard, client_id, client_type, client_nom, client_prenom, client_raison_sociale, client_email, client_emails_cc, " +
-  "client_cavaliers, academie_id, academie_nom, academie_couleur, type_facture, saison, client_reference, " +
-  "echeances_actives, echeances_payees";
+  "client_cavaliers, academie_id, academie_nom, academie_couleur, client_reference";
 
-const COLONNES_RECHERCHE = ["numero", "client_reference", "client_nom", "client_prenom", "client_raison_sociale", "client_cavaliers"];
-
-const TYPES = { annuelle: "Annuelles", ponctuelle: "Ponctuelles" } as const;
+const COLONNES_RECHERCHE = ["numero", "client_reference", "client_nom",
+ "client_prenom", "client_raison_sociale", "client_cavaliers"];
 
 /**
  * Filtre PostgREST `or=(…)` pour un mot : recherche insensible à la casse sur plusieurs colonnes.
@@ -51,7 +49,6 @@ export default async function PageFactures(props: PageProps<"/factures">) {
   const mois = moisVersPeriode(texte(parametres.mois)) ? texte(parametres.mois) : "";
   const periode = moisVersPeriode(mois);
   const q = texte(parametres.q).slice(0, 100);
-  const type = Object.hasOwn(TYPES, texte(parametres.type)) ? (texte(parametres.type) as keyof typeof TYPES) : "";
   const mots = q.split(/\s+/).filter(Boolean).slice(0, 5);
 
   let academies: Academie[];
@@ -69,7 +66,6 @@ export default async function PageFactures(props: PageProps<"/factures">) {
   if (statut === "en_retard") requete = requete.eq("en_retard", true);
   else if (statut) requete = requete.eq("statut", statut);
   if (periode) requete = requete.eq("periode", periode);
-  if (type) requete = requete.eq("type_facture", type);
   for (const mot of mots) requete = requete.or(filtreRecherche(mot));
 
   // Brouillons d'abord (pas de date d'émission), puis les plus récentes.
@@ -83,7 +79,7 @@ export default async function PageFactures(props: PageProps<"/factures">) {
   const factures = resFactures.data as unknown as FactureListe[];
   const total = resFactures.count ?? factures.length;
   const tronque = total > factures.length;
-  const filtresActifs = Boolean(statut || mois || q || type);
+  const filtresActifs = Boolean(statut || mois || q);
   // Colonne « Académie » utile seulement quand plusieurs académies sont mélangées.
   const afficherAcademie = !academie && academies.length > 1;
 
@@ -92,7 +88,6 @@ export default async function PageFactures(props: PageProps<"/factures">) {
     academie || academies.length < 2 ? null : "Toutes les académies",
     pluriel(total, "facture"),
     libelleStatut ? libelleStatut.toLowerCase() : null,
-    type ? TYPES[type].toLowerCase() : null,
     periode ? formatPeriode(periode) : null,
   ]
     .filter(Boolean)
@@ -104,7 +99,6 @@ export default async function PageFactures(props: PageProps<"/factures">) {
     if (valeur) p.set("statut", valeur);
     if (mois) p.set("mois", mois);
     if (q) p.set("q", q);
-    if (type) p.set("type", type);
     const chaine = p.toString();
     return chaine ? `/factures?${chaine}` : "/factures";
   }
@@ -123,9 +117,9 @@ export default async function PageFactures(props: PageProps<"/factures">) {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Link href="/facturation-annuelle" className="btn-secondaire">
+          <Link href="/facturation-mensuelle" className="btn-secondaire">
             <IconeCalendrier />
-            Facturation de l&apos;année
+            Facturation mensuelle
           </Link>
           <Link href="/factures/nouvelle" className="btn-primaire">
             <IconePlus />
@@ -154,10 +148,9 @@ export default async function PageFactures(props: PageProps<"/factures">) {
         </nav>
         <div className="carte-corps">
           <FiltresFactures
-            key={`${statut}|${mois}|${q}|${type}`}
+            key={`${statut}|${mois}|${q}`}
             q={q}
             mois={mois}
-            type={type}
             statut={statut}
             filtresActifs={filtresActifs}
           />
@@ -194,13 +187,13 @@ export default async function PageFactures(props: PageProps<"/factures">) {
                 {academie ? `Aucune facture pour ${avecArticle(academie.nom)}` : "Aucune facture pour l'instant"}
               </p>
               <p className="mt-1 max-w-md text-sm text-muted">
-                Préparer les factures annuelles à partir des tarifs des clients, ou créer une facture ponctuelle (stage,
-                concours, juillet/août…).
+                Générer les factures du mois à partir des tarifs des clients, ou créer une facture ponctuelle (stage,
+                concours, pension…).
               </p>
               <div className="mt-5 flex flex-wrap justify-center gap-2">
-                <Link href="/facturation-annuelle" className="btn-primaire">
+                <Link href="/facturation-mensuelle" className="btn-primaire">
                   <IconeCalendrier />
-                  Facturation de l&apos;année
+                  Facturation du mois
                 </Link>
                 <Link href="/factures/nouvelle" className="btn-secondaire">
                   <IconePlus />

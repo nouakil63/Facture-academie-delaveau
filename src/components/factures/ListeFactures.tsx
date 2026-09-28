@@ -37,19 +37,8 @@ export type FactureListe = Pick<
   | "academie_id"
   | "academie_nom"
   | "academie_couleur"
-  | "type_facture"
-  | "saison"
   | "client_reference"
-  | "echeances_actives"
-  | "echeances_payees"
 >;
-
-/** Facture annuelle : « Année 2026-2027 · 3/10 échéances payées ». */
-function detailAnnuelle(f: FactureListe): string | null {
-  if (f.type_facture !== "annuelle" || f.saison == null) return null;
-  const annee = `Année ${f.saison}-${f.saison + 1}`;
-  return f.echeances_actives > 0 ? `${annee} · ${f.echeances_payees}/${f.echeances_actives} échéances payées` : annee;
-}
 
 const MAX_LOT = 100;
 
@@ -273,12 +262,6 @@ export function ListeFactures({
                         {f.objet ?? <span className="text-muted">—</span>}
                       </span>
                       {f.periode && <div className="text-xs text-muted">{formatPeriode(f.periode)}</div>}
-                      {detailAnnuelle(f) && (
-                        <div className="text-xs">
-                          <span className="badge mr-1 bg-brand-light text-brand-dark">Annuelle</span>
-                          <span className="text-muted">{detailAnnuelle(f)}</span>
-                        </div>
-                      )}
                     </td>
                     <td className="whitespace-nowrap tabular-nums">{formatDate(f.date_emission)}</td>
                     <td className={`whitespace-nowrap tabular-nums ${f.en_retard ? "font-medium text-red-700" : ""}`}>
@@ -344,13 +327,8 @@ export function ListeFactures({
                       <div className={`font-medium ${annulee ? "text-muted" : "text-ink"}`}>{nomClientFacture(f)}</div>
                       <div className="truncate text-xs text-muted">
                         {libelleNumero(f.numero)} · <span className="font-mono">{f.client_reference}</span>
-                        {detailAnnuelle(f)
-                          ? ` · ${detailAnnuelle(f)}`
-                          : f.periode
-                            ? ` · ${formatPeriode(f.periode)}`
-                            : f.objet
-                              ? ` · ${f.objet}`
-                              : ""}
+                        {f.periode ?
+ ` · ${formatPeriode(f.periode)}` : f.objet ? ` · ${f.objet}` : ""}
                       </div>
                     </div>
                     <div className={`shrink-0 text-right text-sm font-medium tabular-nums ${annulee ? "text-muted line-through" : ""}`}>
@@ -408,6 +386,7 @@ export function ListeFactures({
 
       <ModaleConfirmation
         ouverte={confirmation}
+
         onFermer={() => setConfirmation(false)}
         titre={`Émettre et envoyer ${pluriel(choisies.length, "facture")}`}
         libelleConfirmer={`Émettre et envoyer (${choisies.length})`}

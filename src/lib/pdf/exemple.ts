@@ -1,17 +1,5 @@
 import { aujourdhuiParis, formatPeriode, premierDuMois } from "@/lib/format";
-import { dateEcheanceAvis, echeancierAnnuel, libelleSaison, moisSaison } from "@/lib/tarifs";
-import type {
-  Academie,
-  AvisComplet,
-  Client,
-  Echeance,
-  Facture,
-  FactureComplete,
-  LigneFacture,
-  Parametres,
-  StatutEcheance,
-  StatutFacture,
-} from "@/lib/types";
+import type { Academie, Client, Facture, FactureComplete, LigneFacture, Parametres, StatutFacture } from "@/lib/types";
 
 /*
  * Facture fictive, pour prévisualiser la charte (Paramètres → « Aperçu d'une facture type »)
@@ -82,9 +70,6 @@ export function parametresExemple(modifications: Partial<Parametres> = {}): Para
     email_corps:
       "Bonjour {client},\n\nVeuillez trouver ci-joint la facture {numero} d'un montant de {montant}, à régler avant le {echeance}.\n\nNous restons à votre disposition pour toute question.\n\nCordialement,\n{structure}",
     email_copie: null,
-    email_avis_objet: "Avis d'échéance {numero} – {structure}",
-    email_avis_corps:
-      "Bonjour {client},\n\nVeuillez trouver ci-joint l'avis d'échéance {numero} de {montant} à régler avant le {echeance}.\n\nCordialement,\n{structure}",
     created_at: DATE_EXEMPLE,
     updated_at: DATE_EXEMPLE,
     ...modifications,
@@ -148,6 +133,7 @@ export function donneesExemple(emetteur: Parametres, options: OptionsExemple = {
     academie_id: academie.id,
     reference: "E1",
     type: "particulier",
+
     civilite: null,
     nom: "Exemple",
     prenom: "Client",
@@ -212,91 +198,4 @@ export function donneesExemple(emetteur: Parametres, options: OptionsExemple = {
   };
 
   return { facture, lignes, client, emetteur, academie };
-}
-
-// -----------------------------------------------------------------------------
-// Année scolaire : facture annuelle et avis d'échéance fictifs
-// -----------------------------------------------------------------------------
-
-export interface OptionsAnnuelle extends Omit<OptionsExemple, "statut"> {
-  /** Statut de la facture annuelle (émise par défaut). */
-  statut?: StatutFacture;
-  saison?: number;
-  /** Statut de chaque échéance (par rang, 1 à 10) ; « a_venir » par défaut. */
-  statutsEcheances?: Partial<Record<number, StatutEcheance>>;
-}
-
-/**
- * Facture annuelle fictive (émise par défaut) avec ses échéances calculées comme en base :
- * reste = total TTC − arrhes de la saison, réparti sur 10 mois (juin reçoit le reste).
- */
-export function donneesAnnuellesExemple(emetteur: Parametres, options: OptionsAnnuelle = {}): FactureComplete {
-  const saison = options.saison ?? 2026;
-  const statut = options.statut ?? "emise";
-  const base = donneesExemple(emetteur, {
-    ...options,
-    statut,
-    facture: {
-      type_facture: "annuelle",
-      saison,
-      periode: null,
-      generation_auto: true,
-      objet: `${emetteur.objet_facture_mensuelle} – saison ${libelleSaison(saison)}`,
-      ...(statut !== "brouillon"
-        ? { numero: "AD-2026-0001", annee: 2026, sequence: 1, date_emission: `${saison}-09-01` }
-        : {}),
-      ...options.facture,
-    },
-  });
-  const { facture, client } = base;
-  if (statut !== "brouillon") {
-    facture.client_snapshot = { ...client };
-    facture.emetteur_snapshot = { ...emetteur };
-  }
-  const emission = facture.date_emission ?? aujourdhuiParis();
-  const { montants } = echeancierAnnuel(facture.total_ttc_centimes, client, saison);
-  const echeances: Echeance[] =
-    statut === "brouillon"
-      ? []
-      : montants.map((montant, k) => {
-          const periode = moisSaison(saison)[k];
-          const statutEcheance = options.statutsEcheances?.[k + 1] ?? "a_venir";
-          return {
-            id: `00000000-0000-4000-8000-0000000e${String(k + 1).padStart(4, "0")}`,
-            facture_id: facture.id,
-            client_id: client.id,
-            rang: k + 1,
-            periode,
-            montant_centimes: montant,
-            date_echeance: dateEcheanceAvis(periode, emetteur.jour_generation, emetteur.delai_paiement_jours, emission),
-            statut: statutEcheance,
-            numero_avis: `${client.reference}-${periode.slice(0, 7)}`,
-            envoyee_le: statutEcheance === "a_venir" ? null : `${periode}T08:00:00Z`,
-            payee_le: statutEcheance === "payee" ? `${periode.slice(0, 8)}20` : null,
-            mode_paiement: statutEcheance === "payee" ? "Virement" : null,
-            reference_paiement: null,
-            annulee_le: statutEcheance === "annulee" ? `${periode}T08:00:00Z` : null,
-            created_at: DATE_EXEMPLE,
-            updated_at: DATE_EXEMPLE,
-          };
-        });
-  const derniere = echeances.at(-1);
-  if (derniere) facture.date_echeance = derniere.date_echeance;
-  return { ...base, echeances };
-}
-
-/** Avis d'échéance fictif : l'échéance de rang `rang` d'une facture annuelle fictive émise. */
-export function avisExemple(emetteur: Parametres, rang = 1, options: OptionsAnnuelle = {}): AvisComplet {
-  const donnees = donneesAnnuellesExemple(emetteur, options);
-  const echeances = donnees.echeances ?? [];
-  const echeance = echeances.find((e) => e.rang === rang) ?? echeances[0];
-  if (!echeance) throw new Error("Facture annuelle sans échéance (arrhes ≥ total).");
-  return {
-    echeance,
-    echeances,
-    facture: donnees.facture,
-    client: donnees.client,
-    emetteur: donnees.emetteur,
-    academie: donnees.academie,
-  };
 }

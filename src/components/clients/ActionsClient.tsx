@@ -113,8 +113,8 @@ export function ActionsClient({
           </p>
           <p className="text-muted">
             {actif
-              ? "L'archiver pour le retirer de la liste et de la facturation de l'année, historique conservé."
-              : "Déjà archivé : absent de la liste et de la facturation de l'année."}
+              ? "L'archiver pour le retirer de la liste et de la facturation mensuelle, historique conservé."
+              : "Déjà archivé : absent de la liste et de la facturation mensuelle."}
           </p>
         </ModaleConfirmation>
       )}

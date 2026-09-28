@@ -10,46 +10,15 @@ import {
   nomClient,
   sansEspacesSpeciales,
 } from "@/lib/format";
-import {
-  dateEcheanceAvis,
-  deductionArrhes,
-  echeancierAnnuel,
-  libelleSaison,
-  moisSaison,
-  totalLigneCentimes,
-  type ArrhesClient,
-} from "@/lib/tarifs";
-import type { Academie, Client, Echeance, Facture, LigneFacture, Parametres } from "@/lib/types";
-import {
-  A4_HAUTEUR,
-  assombrir,
-  ajouterJours,
-  BAS_PIED,
-  couleurValide,
-  DISCRET,
-  ENCRE,
-  FILET,
-  formatTaux,
-  hauteurPied,
-  INTERLIGNE_PIED,
-  LARGEUR_NUMERO_PAGE,
-  MARGE_HAUT,
-  MARGE_X,
-  rempli,
-  ROUGE,
-  styleLogo as dimensionsLogo,
-  t,
-  TAILLE_PIED,
-  teinte,
-  VERT,
-  villeComplete,
-} from "./outils";
+import { deductionArrhes, totalLigneCentimes, type ArrhesClient } from "@/lib/tarifs";
+import type { Academie, Client, Facture, LigneFacture, Parametres } from "@/lib/types";
 
 /*
  * Mise en page A4 d'une facture (@react-pdf/renderer, police Helvetica intégrée au PDF).
- * Facture annuelle (type « annuelle ») : année scolaire, référence élève, arrhes et reste à
- * payer, échéancier des 10 avis d'échéance (septembre → juin).
- * Texte : toujours via `t()` ou formatEurosPdf (voir ./outils).
+ *
+ * Helvetica (police standard du PDF, encodage WinAnsi) ne connaît pas certains caractères
+ * Unicode — notamment l'espace fine insécable U+202F produite par Intl pour les montants.
+ * Tout texte affiché passe donc par `t()` (→ sansEspacesSpeciales) ou formatEurosPdf.
  */
 
 /** Informations de la structure émettrice (paramètres) imprimées sur la facture. */
@@ -79,7 +48,6 @@ export type EmetteurPdf = Pick<
   | "mentions_professionnels"
   | "couleur_primaire"
   | "couleur_secondaire"
-  | "jour_generation"
 >;
 
 export interface ProprietesFacturePdf {
@@ -93,8 +61,6 @@ export interface ProprietesFacturePdf {
   logo: string | null;
   /** Proportions connues du logo (largeur / hauteur) ; absent → logo ajusté dans un cadre. */
   logoRatio?: number;
-  /** Facture annuelle émise : ses échéances (sinon l'échéancier est calculé, prévisionnel). */
-  echeances?: Echeance[];
 }
 
 /**
@@ -106,6 +72,20 @@ export const MENTION_B2B_DEFAUT =
 
 // Pas de césure automatique : react-pdf applique des règles anglaises (« vétéri-naire »).
 Font.registerHyphenationCallback((mot) => [mot]);
+
+// -----------------------------------------------------------------------------
+// Outils de texte et de couleur
+// -----------------------------------------------------------------------------
+
+/** Texte compatible Helvetica/WinAnsi : espaces spéciales → espace simple, caractères invisibles retirés. */
+function t(valeur: string | number | null | undefined): string {
+  if (valeur == null) return "";
+  return sansEspacesSpeciales(String(valeur))
+    .replace(/[ -   　]/g, " ")
+    .replace(/[​-‍⁠﻿]/g, "")
+    .replace(/[‐‑−]/g, "-")
+    .replace(/\r\n?/g, "\n");
+}
 
 type LigneRappel = Pick<
   LigneFacture,
@@ -175,74 +155,84 @@ export function texteRappelFacture(
   return sansEspacesSpeciales(segments.join(" · "));
 }
 
-/** Ligne d'échéancier imprimée sur la facture annuelle. */
-export interface LigneEcheancier {
-  periode: string;
-  date_echeance: string;
-  montant_centimes: number;
+function rempli(valeur: string | null | undefined): valeur is string {
+  return valeur != null && valeur.trim() !== "";
 }
+
+const HEX = /^#[0-9A-Fa-f]{6}$/;
+
+function couleurValide(couleur: string | null | undefined, defaut: string): string {
+  return couleur && HEX.test(couleur) ? couleur : defaut;
+}
+
+/** Mélange une couleur avec du blanc : proportion 0 → blanc, 1 → couleur d'origine. */
+function teinte(hex: string, proportion: number): string {
+  const canaux = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+  return `#${canaux
+    .map((c) => Math.round(255 + (c - 255) * proportion))
+    .map((c) => c.toString(16).padStart(2, "0"))
+    .join("")}`;
+}
+
+/** Assombrit une couleur : proportion 0 → couleur d'origine, 1 → noir. */
+function assombrir(hex: string, proportion: number): string {
+  const canaux = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+  return `#${canaux
+    .map((c) => Math.round(c * (1 - proportion)))
+    .map((c) => c.toString(16).padStart(2, "0"))
+    .join("")}`;
+}
+
+/** "2026-09-24" + 30 → "2026-10-24". */
+function ajouterJours(dateIso: string, jours: number): string {
+  const [a, m, j] = dateIso.slice(0, 10).split("-").map(Number);
+  return new Date(Date.UTC(a, m - 1, j + jours)).toISOString().slice(0, 10);
+}
+
+function formatTaux(taux: number): string {
+  return `${formatQuantite(taux)} %`;
+}
+
+function villeComplete(codePostal: string | null, ville: string | null): string {
+  return [codePostal, ville].filter(rempli).join(" ");
+}
+
+// -----------------------------------------------------------------------------
+// Mise en page
+// -----------------------------------------------------------------------------
+
+const A4_LARGEUR = 595.28;
+const A4_HAUTEUR = 841.89;
+const MARGE_X = 42;
+const MARGE_HAUT = 38;
+const LARGEUR_UTILE = A4_LARGEUR - 2 * MARGE_X;
+const BAS_PIED = 22;
+const TAILLE_PIED = 6.8;
+const INTERLIGNE_PIED = 1.4;
+const LARGEUR_NUMERO_PAGE = 34;
+
+const ENCRE = "#1C2430";
+const DISCRET = "#5B6573";
+const FILET = "#E3E7ED";
+const ROUGE = "#B42318";
 
 /**
- * Échéancier et arrhes d'une facture annuelle : échéances réelles si elle est émise, sinon
- * calcul prévisionnel (mêmes règles que emettre_facture) à partir du total, des arrhes de la
- * fiche client et des paramètres. null pour une facture ponctuelle.
+ * Hauteur (en points) réservée au pied de page fixe. Estimation prudente (largeur moyenne
+ * d'un caractère Helvetica ≈ 0,5 em ; on compte 0,55 em) : mieux vaut un peu de marge
+ * qu'un chevauchement du contenu.
  */
-export function echeancierFacture(
-  facture: Pick<Facture, "type_facture" | "saison" | "statut" | "total_ttc_centimes" | "date_emission" | "client_snapshot">,
-  client: ArrhesClient,
-  emetteur: Pick<Parametres, "jour_generation" | "delai_paiement_jours">,
-  echeances: Echeance[] | undefined,
-  aujourdhui: string = aujourdhuiParis(),
-): { arrhes: number; reste: number; lignes: LigneEcheancier[]; previsionnel: boolean } | null {
-  if (facture.type_facture !== "annuelle" || facture.saison == null) return null;
-  const saison = facture.saison;
-  // Arrhes figées à l'émission (instantané client), fiche actuelle pour un brouillon.
-  const source: Partial<ArrhesClient> | null = facture.statut === "brouillon" ? client : facture.client_snapshot;
-  const arrhesClient: ArrhesClient = {
-    arrhes_reglees: source?.arrhes_reglees ?? false,
-    arrhes_centimes: source?.arrhes_centimes ?? null,
-    arrhes_saison: source?.arrhes_saison ?? null,
-  };
-  const prevu = echeancierAnnuel(Number(facture.total_ttc_centimes), arrhesClient, saison);
-  if (facture.statut !== "brouillon" && echeances && echeances.length > 0) {
-    const lignes = [...echeances]
-      .sort((x, y) => x.rang - y.rang)
-      .map((e) => ({ periode: e.periode, date_echeance: e.date_echeance, montant_centimes: e.montant_centimes }));
-    // Les échéances ne s'annulent qu'avec la facture : leur somme est le reste à payer d'origine.
-    const reste = echeances.reduce((somme, e) => somme + e.montant_centimes, 0);
-    return { arrhes: prevu.arrhes, reste, lignes, previsionnel: false };
-  }
-  const emission = facture.date_emission ?? aujourdhui;
-  const jour = Number(emetteur.jour_generation) || 1;
-  const delai = Number(emetteur.delai_paiement_jours) || 0;
-  const lignes = prevu.montants.map((montant, k) => {
-    const periode = moisSaison(saison)[k];
-    return { periode, date_echeance: dateEcheanceAvis(periode, jour, delai, emission), montant_centimes: montant };
-  });
-  return { arrhes: prevu.arrhes, reste: prevu.reste, lignes, previsionnel: facture.statut === "brouillon" };
-}
+function hauteurPied(paragraphes: string[], ligneLegale: string): number {
+  const hauteurLigne = TAILLE_PIED * INTERLIGNE_PIED;
+  const caracteresParLigne = Math.floor(LARGEUR_UTILE / (TAILLE_PIED * 0.55));
+  const lignes = (texte: string, largeurCar: number) =>
+    texte.split("\n").reduce((n, para) => n + Math.max(1, Math.ceil(para.length / largeurCar)), 0);
 
-/**
- * Détail d'une ligne annuelle à prix réduit (motif renseigné, prix catalogue supérieur, figés
- * sur la ligne) : « Tarif annuel 24 000,00 € – Prise en charge 50 % location cheval : −3 000,00 € ».
- */
-export function texteReductionLigne(
-  l: Pick<LigneFacture, "quantite" | "prix_unitaire_centimes" | "prix_catalogue_centimes" | "motif_reduction">,
-): string | null {
-  const motif = l.motif_reduction?.trim() ?? "";
-  const catalogue = l.prix_catalogue_centimes;
-  if (motif === "" || catalogue == null || catalogue <= l.prix_unitaire_centimes) return null;
-  return sansEspacesSpeciales(
-    `Tarif annuel ${formatEurosPdf(totalLigneCentimes(l.quantite, catalogue))} – ${motif} : −${formatEurosPdf(
-      totalLigneCentimes(l.quantite, catalogue - l.prix_unitaire_centimes),
-    )}`,
-  );
-}
-
-/** « Mois » d'un échéancier : "2026-09-01" → « Septembre 2026 ». */
-function moisCapitalise(periode: string): string {
-  const mois = formatPeriode(periode);
-  return mois.charAt(0).toUpperCase() + mois.slice(1);
+  let hauteur = 9; // filet + marge haute
+  for (const p of paragraphes) hauteur += lignes(p, caracteresParLigne) * hauteurLigne + 2.5;
+  hauteur +=
+    lignes(ligneLegale, Math.floor((LARGEUR_UTILE - LARGEUR_NUMERO_PAGE - 8) / (7.2 * 0.6))) * (7.2 * INTERLIGNE_PIED) +
+    3;
+  return hauteur;
 }
 
 function creerStyles(primaire: string, secondaire: string) {
@@ -305,18 +295,6 @@ function creerStyles(primaire: string, secondaire: string) {
     },
     sousTitreBrouillon: { fontSize: 8.5, color: ROUGE, marginTop: 2 },
     numero: { fontFamily: "Helvetica-Bold", fontSize: 11, marginTop: 4, color: ENCRE },
-    // Facture annuelle : année scolaire sous le titre, référence élève en évidence.
-    sousTitreAnnee: { fontFamily: "Helvetica-Bold", fontSize: 10.5, color: primaire, marginTop: 3, letterSpacing: 0.4 },
-    referenceEleve: {
-      marginTop: 5,
-      paddingVertical: 2.5,
-      paddingHorizontal: 7,
-      backgroundColor: fond,
-      borderLeftWidth: 2,
-      borderLeftColor: primaire,
-      fontSize: 9,
-      color: ENCRE,
-    },
     meta: { marginTop: 9, borderTopWidth: 0.75, borderTopColor: secondaire, paddingTop: 6 },
     metaLigne: { flexDirection: "row", justifyContent: "flex-end", marginBottom: 1.5 },
     metaLibelle: { color: DISCRET, fontSize: 8.5, width: 92, textAlign: "right", marginRight: 10 },
@@ -364,7 +342,8 @@ function creerStyles(primaire: string, secondaire: string) {
     lignePartieDiscrete: { fontSize: 8, color: DISCRET },
     cavaliers: { fontSize: 8.5, marginTop: 5 },
     academie: { fontSize: 7.5, color: DISCRET, marginTop: 2, letterSpacing: 0.3 },
-    referenceClient: { fontSize: 8.5, marginTop: 3 },
+    referenceClient: { fontSize: 8.5, marginBottom: 2 },
+
     gras: { fontFamily: "Helvetica-Bold" },
 
     // Objet et période
@@ -415,7 +394,6 @@ function creerStyles(primaire: string, secondaire: string) {
     colTotal: { width: 90, paddingHorizontal: 8, textAlign: "right" },
     libelle: { fontFamily: "Helvetica-Bold", fontSize: 9 },
     description: { fontSize: 7.8, color: DISCRET, marginTop: 1.5 },
-    reduction: { fontSize: 7.8, color: primaire, marginTop: 1.5 },
     vide: { paddingVertical: 14, textAlign: "center", color: DISCRET, fontSize: 8.5 },
 
     // Totaux
@@ -444,43 +422,6 @@ function creerStyles(primaire: string, secondaire: string) {
     totalFinalLibelle: { fontFamily: "Helvetica-Bold", fontSize: 10, letterSpacing: 1 },
     totalFinalValeur: { fontFamily: "Helvetica-Bold", fontSize: 12 },
     mentionTva: { fontSize: 7.8, color: DISCRET, marginTop: 4, textAlign: "right", fontFamily: "Helvetica-Oblique" },
-    // Facture annuelle : arrhes et reste à payer sous le total.
-    reste: {
-      marginTop: 4,
-      alignSelf: "flex-end",
-      paddingVertical: 4,
-      paddingHorizontal: 10,
-      backgroundColor: fond,
-      fontSize: 9,
-    },
-
-    // Échéancier (facture annuelle) : deux colonnes de 5 mois.
-    echeancier: { marginTop: 8 },
-    echeancierEntete: { flexDirection: "row", justifyContent: "space-between", alignItems: "baseline" },
-    echeancierNote: { fontSize: 7.5, color: DISCRET },
-    echeancierColonnes: { flexDirection: "row", marginTop: 2 },
-    echeancierColonne: { flex: 1 },
-    echeancierColonneDroite: { flex: 1, marginLeft: 14 },
-    echeancierTete: {
-      flexDirection: "row",
-      paddingVertical: 2.5,
-      borderBottomWidth: 1,
-      borderBottomColor: primaire,
-      fontFamily: "Helvetica-Bold",
-      fontSize: 7,
-      letterSpacing: 0.6,
-      color: primaire,
-    },
-    echeancierLigne: {
-      flexDirection: "row",
-      paddingVertical: 1.8,
-      borderBottomWidth: 0.6,
-      borderBottomColor: FILET,
-      fontSize: 8.2,
-    },
-    colMois: { flex: 1, paddingLeft: 4 },
-    colDate: { width: 70, textAlign: "center" },
-    colMontant: { width: 70, textAlign: "right", paddingRight: 4 },
 
     // Règlement
     reglement: {
@@ -505,7 +446,7 @@ function creerStyles(primaire: string, secondaire: string) {
       paddingHorizontal: 7,
       fontSize: 8.5,
     },
-    acquittee: { marginTop: 6, fontSize: 8.5, color: VERT, fontFamily: "Helvetica-Bold" },
+    acquittee: { marginTop: 6, fontSize: 8.5, color: "#067647", fontFamily: "Helvetica-Bold" },
 
     // Notes
     notes: { marginTop: 14 },
@@ -561,7 +502,6 @@ export function FacturePdf({
   academie,
   logo,
   logoRatio,
-  echeances,
 }: ProprietesFacturePdf): ReactElement<DocumentProps> {
   const primaire = couleurValide(emetteur.couleur_primaire, "#0050A0");
   const secondaire = couleurValide(emetteur.couleur_secondaire, "#DADADA");
@@ -577,10 +517,9 @@ export function FacturePdf({
   const dateEcheance = facture.date_echeance ?? ajouterJours(dateEmission, Number(emetteur.delai_paiement_jours) || 0);
   const tauxTva = Number(facture.taux_tva) || 0;
   const numero = facture.numero;
-  const annuelle = facture.type_facture === "annuelle" && facture.saison != null;
-  const echeancier = echeancierFacture(facture, client, emetteur, echeances);
-  // Référence élève : figée à l'émission (instantané) ; fiche actuelle pour un brouillon.
-  const referenceEleve = brouillon ? client.reference : (facture.client_snapshot?.reference ?? null);
+  // Référence élève : figée à l'émission (instantané client) ; fiche actuelle pour un brouillon.
+  // Absente de l'instantané d'une facture émise avant la création des références : non imprimée.
+  const referenceEleve: string | null = client.reference ?? null;
 
   // --- Émetteur
   const lignesEmetteur = [
@@ -637,11 +576,12 @@ export function FacturePdf({
   const paddingBas = BAS_PIED + hauteurPied(paragraphesPied, ligneLegale) + 16;
 
   const titreDocument = brouillon ? "Brouillon de facture" : `Facture ${numero ?? ""}`.trim();
-  const libelleAnnee = annuelle ? `Année scolaire ${libelleSaison(facture.saison as number)}` : null;
   const rappelSuite = brouillon ? "Brouillon de facture (suite)" : `Facture ${numero ?? ""} (suite)`;
 
   // --- Logo
-  const styleLogo = dimensionsLogo(logoRatio);
+  const styleLogo = logoRatio
+    ? { width: 150, height: 150 / logoRatio }
+    : { width: 170, height: 62, objectFit: "contain" as const, objectPositionX: 0 };
 
   const filigrane = brouillon ? "BROUILLON" : annulee ? "ANNULÉE" : null;
 
@@ -680,27 +620,26 @@ export function FacturePdf({
                 <Text style={s.sousTitreBrouillon}>— non valable comme facture</Text>
               </>
             ) : (
-              <Text style={s.titre}>FACTURE</Text>
-            )}
-            {libelleAnnee && <Text style={s.sousTitreAnnee}>{t(libelleAnnee)}</Text>}
-            {!brouillon && <Text style={s.numero}>{t(`N° ${numero ?? ""}`)}</Text>}
-            {annuelle && rempli(referenceEleve) && (
-              <Text style={s.referenceEleve}>
-                <Text style={{ color: DISCRET }}>Réf. élève : </Text>
-                <Text style={s.gras}>{t(referenceEleve)}</Text>
-              </Text>
+              <>
+                <Text style={s.titre}>FACTURE</Text>
+                <Text style={s.numero}>{t(`N° ${numero ?? ""}`)}</Text>
+              </>
             )}
             <View style={s.meta}>
+              {rempli(referenceEleve) && (
+                <View style={s.metaLigne}>
+                  <Text style={s.metaLibelle}>Réf. élève</Text>
+                  <Text style={[s.metaValeur, s.gras]}>{t(referenceEleve)}</Text>
+                </View>
+              )}
               <View style={s.metaLigne}>
                 <Text style={s.metaLibelle}>{brouillon ? "Date (provisoire)" : "Date d'émission"}</Text>
                 <Text style={s.metaValeur}>{t(formatDate(dateEmission))}</Text>
               </View>
-              {echeancier ? null : (
-                <View style={s.metaLigne}>
-                  <Text style={s.metaLibelle}>Échéance</Text>
-                  <Text style={s.metaValeur}>{t(formatDate(dateEcheance))}</Text>
-                </View>
-              )}
+              <View style={s.metaLigne}>
+                <Text style={s.metaLibelle}>Échéance</Text>
+                <Text style={s.metaValeur}>{t(formatDate(dateEcheance))}</Text>
+              </View>
             </View>
           </View>
         </View>
@@ -726,7 +665,7 @@ export function FacturePdf({
         )}
 
         {/* Émetteur et destinataire */}
-        <View style={annuelle ? [s.parties, { marginTop: 12 }] : s.parties}>
+        <View style={s.parties}>
           <View style={s.emetteur}>
             <Text style={s.etiquette}>ÉMETTEUR</Text>
             <Text style={s.nomPartie}>{t(emetteur.raison_sociale)}</Text>
@@ -750,7 +689,7 @@ export function FacturePdf({
             <Text style={s.etiquette}>FACTURÉ À</Text>
             <Text style={s.nomPartie}>{t(nomAffiche)}</Text>
             {rempli(referenceEleve) && (
-              <Text style={[s.referenceClient, { marginTop: 0, marginBottom: 2 }]}>
+              <Text style={s.referenceClient}>
                 <Text style={s.gras}>Réf. élève : </Text>
                 {t(referenceEleve)}
               </Text>
@@ -781,7 +720,7 @@ export function FacturePdf({
         </View>
 
         {/* Objet et période — minPresenceAhead : jamais seul en bas de page, sans le début du tableau */}
-        <View style={annuelle ? [s.objet, { marginTop: 12 }] : s.objet} minPresenceAhead={70}>
+        <View style={s.objet} minPresenceAhead={70}>
           {rempli(facture.objet) && (
             <View style={[s.objetBloc, { flexShrink: 1 }]}>
               <Text style={s.objetLibelle}>OBJET</Text>
@@ -792,14 +731,6 @@ export function FacturePdf({
             <View style={s.objetBloc}>
               <Text style={s.objetLibelle}>PÉRIODE</Text>
               <Text style={s.objetValeur}>{t(formatPeriode(facture.periode))}</Text>
-            </View>
-          )}
-          {annuelle && (
-            <View style={s.objetBloc}>
-              <Text style={s.objetLibelle}>PÉRIODE</Text>
-              <Text style={s.objetValeur}>
-                {t(`Septembre ${facture.saison} à juin ${(facture.saison as number) + 1}`)}
-              </Text>
             </View>
           )}
           {texteArrhes && (
@@ -825,7 +756,6 @@ export function FacturePdf({
                 <View style={s.colDesignation}>
                   <Text style={s.libelle}>{t(l.libelle)}</Text>
                   {rempli(l.description) && <Text style={s.description}>{t(l.description.trim())}</Text>}
-                  {annuelle && texteReductionLigne(l) && <Text style={s.reduction}>{t(texteReductionLigne(l))}</Text>}
                 </View>
                 <Text style={s.colQuantite}>{t(formatQuantite(l.quantite))}</Text>
                 <Text style={s.colPrix}>{formatEurosPdf(l.prix_unitaire_centimes)}</Text>
@@ -863,79 +793,23 @@ export function FacturePdf({
               </>
             )}
           </View>
-          {echeancier && echeancier.arrhes > 0 && (
-            <Text style={s.reste}>
-              <Text style={{ color: DISCRET }}>Arrhes versées : </Text>
-              <Text style={s.gras}>{formatEurosPdf(echeancier.arrhes)}</Text>
-              <Text style={{ color: DISCRET }}>{"  —  Reste à payer : "}</Text>
-              <Text style={s.gras}>{formatEurosPdf(echeancier.reste)}</Text>
-            </Text>
-          )}
         </View>
 
-        {/* Échéancier (facture annuelle) */}
-        {echeancier && echeancier.lignes.length > 0 && (
-          <View style={s.echeancier} wrap={false}>
-            <View style={s.echeancierEntete}>
-              <Text style={s.etiquette}>
-                {echeancier.previsionnel ? "ÉCHÉANCIER PRÉVISIONNEL" : "ÉCHÉANCIER"}
-              </Text>
-              <Text style={s.echeancierNote}>
-                {t(`${echeancier.lignes.length} échéances · un avis d'échéance chaque mois`)}
-              </Text>
-            </View>
-            <View style={s.echeancierColonnes}>
-              {[echeancier.lignes.slice(0, 5), echeancier.lignes.slice(5)].map((colonne, c) => (
-                <View key={`col${c}`} style={c === 0 ? s.echeancierColonne : s.echeancierColonneDroite}>
-                  <View style={s.echeancierTete}>
-                    <Text style={s.colMois}>MOIS</Text>
-                    <Text style={s.colDate}>ÉCHÉANCE</Text>
-                    <Text style={s.colMontant}>MONTANT</Text>
-                  </View>
-                  {colonne.map((e) => (
-                    <View key={e.periode} style={s.echeancierLigne}>
-                      <Text style={s.colMois}>{t(moisCapitalise(e.periode))}</Text>
-                      <Text style={s.colDate}>{t(formatDate(e.date_echeance))}</Text>
-                      <Text style={[s.colMontant, s.gras]}>{formatEurosPdf(e.montant_centimes)}</Text>
-                    </View>
-                  ))}
-                </View>
-              ))}
-            </View>
-          </View>
-        )}
-
         {/* Règlement */}
-        <View style={annuelle ? [s.reglement, { marginTop: 12, paddingVertical: 8 }] : s.reglement} wrap={false}>
+        <View style={s.reglement} wrap={false}>
           <Text style={s.etiquette}>RÈGLEMENT</Text>
           <View style={s.reglementColonnes}>
             <View style={s.reglementGauche}>
-              {echeancier ? (
-                <Text style={s.reglementLigne}>
-                  {t(
-                    echeancier.lignes.length > 0
-                      ? "Paiement selon l'échéancier ci-dessus, sur avis d'échéance mensuel."
-                      : "Montant intégralement couvert par les arrhes versées.",
-                  )}
-                </Text>
-              ) : (
-                <Text style={s.reglementLigne}>
-                  <Text style={s.reglementLibelle}>Échéance : </Text>
-                  <Text style={s.gras}>{t(formatDate(dateEcheance))}</Text>
-                </Text>
-              )}
+              <Text style={s.reglementLigne}>
+                <Text style={s.reglementLibelle}>Échéance : </Text>
+                <Text style={s.gras}>{t(formatDate(dateEcheance))}</Text>
+              </Text>
               {rempli(emetteur.conditions_paiement) && (
                 <Text style={s.reglementLigne}>{t(emetteur.conditions_paiement.trim())}</Text>
               )}
               <Text style={s.reference}>
                 <Text style={s.reglementLibelle}>Référence à rappeler : </Text>
-                <Text style={s.gras}>
-                  {t(
-                    echeancier && echeancier.lignes.length > 0
-                      ? `n° de l'avis (ex. ${rempli(referenceEleve) ? referenceEleve : "E1"}-${echeancier.lignes[0].periode.slice(0, 7)})`
-                      : (numero ?? "attribuée à l'émission"),
-                  )}
-                </Text>
+                <Text style={s.gras}>{t(numero ?? "attribuée à l'émission")}</Text>
               </Text>
               {payee && facture.payee_le && (
                 <Text style={s.acquittee}>

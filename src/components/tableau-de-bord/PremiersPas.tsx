@@ -5,7 +5,7 @@ import { avecArticle, jourDuMois } from "@/lib/format";
 
 /**
  * Accueil du premier démarrage (aucune facture dans le périmètre affiché), guide pas à pas :
- * prestations (catalogue commun) → clients et leurs tarifs → facturation de l'année.
+ * prestations (catalogue commun) → clients et leurs tarifs → facturation mensuelle.
  */
 export function PremiersPas({
   compteurs,
@@ -17,7 +17,7 @@ export function PremiersPas({
   /** Académie filtrée, ou null pour « Toutes ». */
   nomAcademie: string | null;
   ibanManquant: boolean;
-  facturation: Pick<DonneesTableauDeBord["annee"], "jourGeneration">;
+  facturation: Pick<DonneesTableauDeBord["facturation"], "generationAuto" | "jourGeneration">;
 }) {
   const sansTarifs = compteurs.clients > 0 && compteurs.tarifs === 0;
 
@@ -35,18 +35,20 @@ export function PremiersPas({
         ? "Sur la fiche de chaque client, ajouter les prestations à facturer chaque mois (au prix du catalogue ou à un prix personnalisé)."
         : `Chaque famille ou structure facturée, rattachée ${
             nomAcademie ? `à ${avecArticle(nomAcademie)}` : "à l'Académie Delaveau ou à l'Académie Espoir"
-          }, avec les prestations de l'année (prix mensuel).`,
+          }, avec les prestations à lui facturer chaque mois.`,
       href: compteurs.clients > 0 ? "/clients" : "/clients/nouveau",
       action: compteurs.clients > 0 ? "Ajouter les tarifs" : "Nouveau client",
       faite: compteurs.clients > 0 && compteurs.tarifs > 0,
     },
     {
-      titre: "Préparer les factures de l'année",
-      texte: `Une facture annuelle par élève (prix mensuel × 10), à vérifier puis émettre ; ensuite un avis d'échéance chaque mois, envoyé automatiquement le ${jourDuMois(
-        facturation.jourGeneration,
-      )} pour les clients choisis.`,
-      href: "/facturation-annuelle",
-      action: "Facturation de l'année",
+      titre: "Lancer la facturation du mois",
+      texte: `Un brouillon par client ayant des tarifs, à vérifier puis envoyer. ${
+        facturation.generationAuto
+          ? `Préparation automatique le ${jourDuMois(facturation.jourGeneration)} de chaque mois.`
+          : "Automatisation mensuelle désactivée : activable dans les paramètres."
+      }`,
+      href: "/facturation-mensuelle",
+      action: "Facturation du mois",
       faite: compteurs.factures > 0,
     },
   ];
@@ -60,7 +62,7 @@ export function PremiersPas({
         </h2>
         <p className="mt-1 text-sm text-muted">
           {nomAcademie ? `Aucune facture pour ${avecArticle(nomAcademie)} pour l'instant. ` : "Aucune facture pour l'instant. "}
-          Créer d&apos;abord les prestations, puis les clients : la facturation de l&apos;année s&apos;appuie sur eux.
+          Créer d&apos;abord les prestations, puis les clients : la facturation mensuelle s&apos;appuie sur eux.
         </p>
       </div>
 

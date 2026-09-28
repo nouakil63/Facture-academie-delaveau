@@ -9,7 +9,6 @@ import { PremiersPas } from "@/components/tableau-de-bord/PremiersPas";
 import { ProchaineFacturation } from "@/components/tableau-de-bord/ProchaineFacturation";
 import { Raccourcis } from "@/components/tableau-de-bord/Raccourcis";
 import { RepartitionAcademies } from "@/components/tableau-de-bord/RepartitionAcademies";
-import { TableauAvisRetard } from "@/components/tableau-de-bord/TableauAvisRetard";
 import { TableauFactures } from "@/components/tableau-de-bord/TableauFactures";
 import { academieSelectionnee, resoudreAcademie } from "@/lib/academie-selectionnee";
 import { exigerUtilisateur } from "@/lib/auth";
@@ -81,7 +80,7 @@ export default async function PageTableauDeBord() {
   }
 
   const donnees = await chargerTableauDeBord(supabase, academieId, academies);
-  const { indicateurs: ind, premiersPas, annee } = donnees;
+  const { indicateurs: ind, premiersPas, facturation } = donnees;
   const afficherAcademie = academieId === null && academies.length > 1;
 
   // Premier démarrage : aucune facture dans le périmètre affiché.
@@ -93,7 +92,7 @@ export default async function PageTableauDeBord() {
           compteurs={premiersPas}
           nomAcademie={academie?.nom ?? null}
           ibanManquant={donnees.ibanManquant}
-          facturation={annee}
+          facturation={facturation}
         />
       </div>
     );
@@ -111,15 +110,8 @@ export default async function PageTableauDeBord() {
           valeur={formatEuros(ind.aEncaisser.centimes)}
           detail={
             ind.aEncaisser.nombre > 0
-              ? [
-                  ind.aEncaisserAvis.nombre > 0 ? pluriel(ind.aEncaisserAvis.nombre, "avis d'échéance", "avis d'échéance") : null,
-                  ind.aEncaisser.nombre > ind.aEncaisserAvis.nombre
-                    ? pluriel(ind.aEncaisser.nombre - ind.aEncaisserAvis.nombre, "facture ponctuelle", "factures ponctuelles")
-                    : null,
-                ]
-                  .filter(Boolean)
-                  .join(" · ")
-              : "Aucun règlement attendu"
+              ? pluriel(ind.aEncaisser.nombre, "facture émise ou envoyée", "factures émises ou envoyées")
+              : "Aucune facture en attente de règlement"
           }
           icone={<IconeBillet className="h-5 w-5" />}
         />
@@ -128,12 +120,12 @@ export default async function PageTableauDeBord() {
           valeur={formatEuros(ind.enRetard.centimes)}
           detail={
             ind.enRetard.nombre > 0
-              ? pluriel(ind.enRetard.nombre, "règlement échu (avis ou facture)", "règlements échus (avis ou factures)")
-              : "Aucun règlement échu"
+              ? pluriel(ind.enRetard.nombre, "facture échue non réglée", "factures échues non réglées")
+              : "Aucune facture échue"
           }
           icone={<IconeHorloge className="h-5 w-5" />}
           ton={ind.enRetard.nombre > 0 ? "alerte" : "neutre"}
-          href="#titre-retards"
+          href={FACTURES_EN_RETARD}
           action="Voir les retards"
         />
         <Indicateur
@@ -154,7 +146,7 @@ export default async function PageTableauDeBord() {
         />
       </section>
 
-      <ProchaineFacturation annee={annee} nomAcademie={academie?.nom ?? null} />
+      <ProchaineFacturation facturation={facturation} nomAcademie={academie?.nom ?? null} />
 
       {afficherAcademie && <RepartitionAcademies repartition={donnees.parAcademie} />}
 
@@ -162,52 +154,36 @@ export default async function PageTableauDeBord() {
         <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-line px-5 py-4">
           <div>
             <h2 id="titre-retards" className="titre-section">
-              Retards de paiement
+              Factures en retard
             </h2>
             {ind.enRetard.nombre > 0 && (
               <p className="text-xs text-muted">
-                {pluriel(ind.enRetard.nombre, "règlement", "règlements")} · {formatEuros(ind.enRetard.centimes)}
+                {pluriel(ind.enRetard.nombre, "facture")} · {formatEuros(ind.enRetard.centimes)}
+                {ind.enRetard.nombre > donnees.retards.length && ` · les ${donnees.retards.length} plus anciennes échéances`}
               </p>
             )}
           </div>
-          {donnees.retards.length > 0 && (
+          {ind.enRetard.nombre > 0 && (
             <Link href={FACTURES_EN_RETARD} className="btn-lien">
-              Factures en retard
+              Tous les retards
               <IconeFleche className="h-3.5 w-3.5" />
             </Link>
           )}
         </div>
-        {donnees.retardsAvis.length === 0 && donnees.retards.length === 0 ? (
+        {donnees.retards.length > 0 ? (
+          <TableauFactures
+            factures={donnees.retards}
+            variante="retard"
+            afficherAcademie={afficherAcademie}
+            aujourdhui={donnees.aujourdhui}
+          />
+        ) : (
           <div className="flex items-center gap-3 px-5 py-8 text-sm text-muted">
             <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-emerald-700">
               <IconeValide className="h-5 w-5" />
             </span>
-            Aucun retard : tous les règlements attendus sont dans les temps.
+            Aucune facture en retard : tous les règlements attendus sont dans les temps.
           </div>
-        ) : (
-          <>
-            {donnees.retardsAvis.length > 0 && (
-              <>
-                <h3 className="px-5 pt-4 text-xs font-semibold tracking-wide text-muted uppercase">Avis d&apos;échéance</h3>
-                <TableauAvisRetard
-                  echeances={donnees.retardsAvis}
-                  afficherAcademie={afficherAcademie}
-                  aujourdhui={donnees.aujourdhui}
-                />
-              </>
-            )}
-            {donnees.retards.length > 0 && (
-              <>
-                <h3 className="px-5 pt-4 text-xs font-semibold tracking-wide text-muted uppercase">Factures ponctuelles</h3>
-                <TableauFactures
-                  factures={donnees.retards}
-                  variante="retard"
-                  afficherAcademie={afficherAcademie}
-                  aujourdhui={donnees.aujourdhui}
-                />
-              </>
-            )}
-          </>
         )}
       </section>
 

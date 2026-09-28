@@ -16,7 +16,7 @@ import {
 import { exigerUtilisateur } from "@/lib/auth";
 import { emailConfigure } from "@/lib/email";
 import { chargerAcademies, chargerParametres } from "@/lib/facturation/service";
-import { aujourdhuiParis, formatDate, jourDuMois, pluriel } from "@/lib/format";
+import { aujourdhuiParis, formatDate, jourDuMois, numeroFacture, pluriel } from "@/lib/format";
 import type { Academie, Parametres } from "@/lib/types";
 
 export const metadata: Metadata = { title: "Paramètres" };
@@ -38,10 +38,6 @@ function aCompleter(p: Parametres): { libelle: string; ancre: string }[] {
   return manques;
 }
 
-/** Numéro de facture au format de la série : « AD-2026-0042 ». */
-function numeroFacture(prefixe: string, annee: number, sequence: number): string {
-  return `${prefixe}-${annee}-${String(sequence).padStart(4, "0")}`;
-}
 
 export default async function PageParametres() {
   const { supabase, utilisateur } = await exigerUtilisateur();
@@ -62,13 +58,23 @@ export default async function PageParametres() {
 
   let membres: Membre[];
   let compteurs: Compteur[];
+  let dernierNumero: string | null;
   let nbClientsEnvoiAuto: number;
   let nbClientsAutoSansEmail: number;
   let academiesGestion: AcademieGestion[];
   try {
-    const [resMembres, resCompteurs, envoiAuto, autoSansEmail, comptes] = await Promise.all([
+    const [resMembres, resCompteurs, resDerniere, envoiAuto, autoSansEmail, comptes] = await Promise.all([
       supabase.from("membres").select("email, nom, created_at").order("created_at"),
       supabase.from("compteurs_factures").select("annee, dernier_numero").order("annee", { ascending: false }),
+      // Dernier numéro attribué (plus grande année, plus grande séquence).
+      supabase
+        .from("factures")
+        .select("numero")
+        .not("numero", "is", null)
+        .order("annee", { ascending: false })
+        .order("sequence", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
       // Clients actifs en envoi automatique (réglage client par client), dont ceux sans adresse.
       compter(supabase.from("clients").select("id", { count: "exact", head: true }).eq("actif", true).eq("envoi_auto", true)),
       compter(
@@ -99,6 +105,8 @@ export default async function PageParametres() {
     ]);
     if (resMembres.error) throw new Error(resMembres.error.message);
     if (resCompteurs.error) throw new Error(resCompteurs.error.message);
+    if (resDerniere.error) throw new Error(resDerniere.error.message);
+    dernierNumero = (resDerniere.data as { numero: string } | null)?.numero ?? null;
     membres = resMembres.data as Membre[];
     compteurs = resCompteurs.data as Compteur[];
     nbClientsEnvoiAuto = envoiAuto;
@@ -117,12 +125,10 @@ export default async function PageParametres() {
   const aujourdhui = aujourdhuiParis();
   const anneeCourante = Number(aujourdhui.slice(0, 4));
 
-  // Série unique : le préfixe est figé dès qu'un numéro a été attribué.
-  const prefixeVerrouille = compteurs.length > 0;
-  const dernier = compteurs[0];
-  const dernierNumero = dernier ? numeroFacture(parametres.prefixe_facture, dernier.annee, dernier.dernier_numero) : null;
+  // Numérotation F-<référence>-<MM>-<AAAA>-<n°> : compteur global continu par année d'émission.
+  // Prochain numéro : exemple pour l'élève E1 et le mois en cours.
   const compteurAnnee = compteurs.find((c) => c.annee === anneeCourante);
-  const prochainNumero = numeroFacture(parametres.prefixe_facture, anneeCourante, (compteurAnnee?.dernier_numero ?? 0) + 1);
+  const prochainNumero = numeroFacture("E1", aujourdhui, (compteurAnnee?.dernier_numero ?? 0) + 1);
 
   const manques = aCompleter(parametres);
   const academiesActives = academies.filter((a) => a.actif);
@@ -148,8 +154,8 @@ export default async function PageParametres() {
         <div className="min-w-0">
           <h1 className="titre-page">Paramètres</h1>
           <p className="mt-1 max-w-2xl text-sm text-muted">
-            Informations imprimées sur les factures et les avis (Académie Delaveau comme Académie Espoir), année
-            scolaire, académies, envoi des e-mails et accès. Une facture déjà émise conserve les informations du jour de son
+            Informations imprimées sur les factures (Académie Delaveau comme Académie Espoir), facturation mensuelle,
+            académies, envoi des e-mails et accès. Une facture déjà émise conserve les informations du jour de son
             émission.
           </p>
         </div>
@@ -165,14 +171,6 @@ export default async function PageParametres() {
           <IconeLienExterne className="size-3.5 text-muted" />
           <span className="sr-only">(nouvel onglet)</span>
         </a>
-        <div className="flex gap-3 text-xs">
-          <a href="/api/parametres/apercu-pdf?modele=annuelle" target="_blank" rel="noopener noreferrer" className="btn-lien text-xs">
-            Facture annuelle type
-          </a>
-          <a href="/api/parametres/apercu-pdf?modele=avis" target="_blank" rel="noopener noreferrer" className="btn-lien text-xs">
-            Avis d&apos;échéance type
-          </a>
-        </div>
       </div>
 
       {/* État en un coup d'œil */}
@@ -184,15 +182,17 @@ export default async function PageParametres() {
           </span>
         </p>
         <p className="flex items-center gap-2">
-          <span className="text-muted">Avis d&apos;échéance</span>
+          <span className="text-muted">Facturation mensuelle</span>
           <span className="font-medium text-ink">
-            {nbClientsEnvoiAuto > 0 ? `envoi automatique le ${jourDuMois(parametres.jour_generation)}` : "envoi manuel"}
+            {parametres.generation_auto || nbClientsEnvoiAuto > 0
+              ? `automatique, le ${jourDuMois(parametres.jour_generation)}`
+              : "manuelle"}
           </span>
           {nbClientsEnvoiAuto > 0 && (
             <a
               href="#mensuelle"
               className="badge bg-brand-light text-brand-dark"
-              title="Avis d'échéance envoyés sans relecture, le jour d'envoi"
+              title="Factures émises et envoyées sans relecture, le jour de génération"
             >
               Envoi auto : {pluriel(nbClientsEnvoiAuto, "client")}
             </a>
@@ -230,7 +230,6 @@ export default async function PageParametres() {
 
           <FormulaireParametres
             parametres={parametres}
-            prefixeVerrouille={prefixeVerrouille}
             dernierNumero={dernierNumero}
             prochainNumero={prochainNumero}
             aujourdhui={aujourdhui}

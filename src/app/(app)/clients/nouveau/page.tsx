@@ -69,6 +69,7 @@ export default async function PageNouveauClient() {
             jourGeneration={jourGeneration}
             saisonParDefaut={saisonEnCours()}
             referenceSuggeree={referenceSuggeree}
+
           />
         </div>
       )}

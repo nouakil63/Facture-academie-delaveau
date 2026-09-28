@@ -26,6 +26,7 @@ export function RechercheClients({ q, archives }: { q: string; archives: boolean
           defaultValue={q}
           maxLength={100}
           placeholder="Réf., nom, raison sociale, e-mail, cavalier…"
+
           className="champ pl-9"
         />
       </div>

@@ -12,14 +12,11 @@ export function InfosBrouillon({
   objet,
   periode,
   notes,
-  annuelle = false,
 }: {
   factureId: string;
   objet: string | null;
   periode: string | null;
   notes: string | null;
-  /** Facture annuelle : pas de mois facturé (l'année scolaire est fixée). */
-  annuelle?: boolean;
 }) {
   const id = useId();
   const [etat, envoyer, enCours] = useActionState<ResultatAction | null, FormData>(
@@ -52,24 +49,20 @@ export function InfosBrouillon({
             placeholder="Ex. Formation et accompagnement – octobre 2026"
           />
         </div>
-        {annuelle ? (
-          <input type="hidden" name="periode" value="" />
-        ) : (
-          <div>
-            <label htmlFor={`${id}-periode`} className="label">
-              Mois facturé
-            </label>
-            <input
-              id={`${id}-periode`}
-              name="periode"
-              type="month"
-              placeholder="AAAA-MM"
-              pattern="\d{4}-(0[1-9]|1[0-2])"
-              defaultValue={periodeVersMois(periode)}
-              className="champ"
-            />
-          </div>
-        )}
+        <div>
+          <label htmlFor={`${id}-periode`} className="label">
+            Mois facturé
+          </label>
+          <input
+            id={`${id}-periode`}
+            name="periode"
+            type="month"
+            placeholder="AAAA-MM"
+            pattern="\d{4}-(0[1-9]|1[0-2])"
+            defaultValue={periodeVersMois(periode)}
+            className="champ"
+          />
+        </div>
       </div>
       <div>
         <label htmlFor={`${id}-notes`} className="label">

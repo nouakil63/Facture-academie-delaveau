@@ -48,7 +48,7 @@ export function periodeVersMois(periode: string | null | undefined): string {
 }
 
 // -----------------------------------------------------------------------------
-// Académie (facturation de l'année)
+// Académie (facturation mensuelle)
 // -----------------------------------------------------------------------------
 
 /** Valeur du paramètre d'URL `academie` pour « toutes les académies ». */
@@ -106,7 +106,7 @@ export function estFiltreStatut(v: unknown): v is FiltreStatut {
 export const LOT_ENVOI = 10;
 export const LOT_ENVOI_MAX = 20;
 
-/** Résultat de l'envoi d'une facture (ou d'un avis) dans un lot (liste des factures, facturation de l'année). */
+/** Résultat de l'envoi d'une facture dans un lot (liste des factures, facturation mensuelle). */
 export interface ResultatEnvoiFacture {
   id: string;
   /** Numéro après envoi (attribué si le brouillon a été émis), sinon null. */

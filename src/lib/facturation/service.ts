@@ -1,17 +1,7 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { premierDuMois } from "@/lib/format";
-import type {
-  Academie,
-  AvisComplet,
-  Client,
-  Echeance,
-  Facture,
-  FactureComplete,
-  LigneFacture,
-  Parametres,
-  ResultatGeneration,
-} from "@/lib/types";
+import type { Academie, Client, Facture, FactureComplete, LigneFacture, Parametres, ResultatGeneration } from "@/lib/types";
 
 /**
  * Opérations métier sur les factures, partagées par les pages, les Server Actions
@@ -42,14 +32,11 @@ export async function chargerFactureComplete(supabase: SupabaseClient, factureId
   if (error) throw new Error(error.message);
   if (!facture) return null;
 
-  const [lignes, client, academie, parametres, echeances] = await Promise.all([
+  const [lignes, client, academie, parametres] = await Promise.all([
     supabase.from("lignes_facture").select("*").eq("facture_id", factureId).order("ordre").order("created_at"),
     supabase.from("clients").select("*").eq("id", facture.client_id).single<Client>(),
     supabase.from("academies").select("*").eq("id", facture.academie_id).single<Academie>(),
     chargerParametres(supabase),
-    facture.type_facture === "annuelle" && facture.statut !== "brouillon"
-      ? chargerEcheancesFacture(supabase, factureId)
-      : Promise.resolve([] as Echeance[]),
   ]);
   if (lignes.error) throw new Error(lignes.error.message);
   if (client.error) throw new Error(client.error.message);
@@ -68,36 +55,6 @@ export async function chargerFactureComplete(supabase: SupabaseClient, factureId
         : client.data,
     emetteur: emise && facture.emetteur_snapshot ? { ...parametres, ...facture.emetteur_snapshot } : parametres,
     academie: emise && facture.academie_snapshot ? { ...academie.data, ...facture.academie_snapshot } : academie.data,
-    echeances,
-  };
-}
-
-/** Échéances d'une facture annuelle, par rang. */
-export async function chargerEcheancesFacture(supabase: SupabaseClient, factureId: string): Promise<Echeance[]> {
-  const { data, error } = await supabase.from("echeances").select("*").eq("facture_id", factureId).order("rang");
-  if (error) throw new Error(error.message);
-  return (data ?? []) as Echeance[];
-}
-
-/**
- * Charge un avis d'échéance : l'échéance, toutes celles de sa facture annuelle, la facture,
- * le client (coordonnées figées à l'émission, e-mails de la fiche actuelle), l'émetteur figé
- * et l'académie figée. null si introuvable.
- */
-export async function chargerAvisComplet(supabase: SupabaseClient, echeanceId: string): Promise<AvisComplet | null> {
-  const { data: echeance, error } = await supabase.from("echeances").select("*").eq("id", echeanceId).maybeSingle<Echeance>();
-  if (error) throw new Error(error.message);
-  if (!echeance) return null;
-  const complete = await chargerFactureComplete(supabase, echeance.facture_id);
-  if (!complete) return null;
-  const echeances = complete.echeances && complete.echeances.length > 0 ? complete.echeances : [echeance];
-  return {
-    echeance: echeances.find((e) => e.id === echeance.id) ?? echeance,
-    echeances,
-    facture: complete.facture,
-    client: complete.client,
-    emetteur: complete.emetteur,
-    academie: complete.academie,
   };
 }
 
@@ -109,8 +66,6 @@ export async function emettreFacture(supabase: SupabaseClient, factureId: string
 }
 
 /**
- * Ancien modèle (factures mensuelles), conservé mais plus utilisé par l'interface ni par la tâche
- * planifiée : voir genererFacturesAnnuelles.
  * Crée (ou prévisualise avec `apercu: true`) les brouillons mensuels.
  * `periode` : n'importe quel jour du mois à facturer ("AAAA-MM-JJ").
  * `academieId` : limiter à une académie (null/absent = toutes).
@@ -130,29 +85,7 @@ export async function genererBrouillonsMensuels(
   return (data ?? []) as ResultatGeneration[];
 }
 
-/**
- * Crée (ou prévisualise avec `apercu: true`) les brouillons des factures annuelles d'une saison
- * (2026 = septembre 2026 → juin 2027). `academieId` : limiter à une académie (null/absent = toutes).
- * Idempotent : un client qui a déjà sa facture annuelle (non annulée) est renvoyé avec `deja_existante = true`.
- */
-export async function genererFacturesAnnuelles(
-  supabase: SupabaseClient,
-  saison: number,
-  options: { academieId?: string | null; apercu?: boolean } = {},
-): Promise<ResultatGeneration[]> {
-  const { data, error } = await supabase.rpc("generer_factures_annuelles", {
-    p_saison: saison,
-    p_academie_id: options.academieId ?? null,
-    p_dry_run: options.apercu ?? false,
-  });
-  if (error) throw new Error(error.message);
-  return (data ?? []) as ResultatGeneration[];
-}
-
-/**
- * Mois à facturer à une date donnée, selon le réglage (mois courant ou précédent) : mois des
- * avis d'échéance envoyés ce jour-là par la tâche planifiée.
- */
+/** Mois à facturer à une date donnée, selon le réglage (mois courant ou précédent). */
 export function periodeAFacturer(parametres: Pick<Parametres, "mois_facture">, date?: string): string {
   return premierDuMois(date, parametres.mois_facture === "precedent" ? -1 : 0);
 }

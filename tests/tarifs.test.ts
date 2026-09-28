@@ -1,16 +1,7 @@
 import { PGlite } from "@electric-sql/pglite";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import {
-  annuelEstime,
-  arrhesSurSaison,
   bornesMois,
-  dateEcheanceAvis,
-  echeancierAnnuel,
-  moisAvecEcheance,
-  moisSaison,
-  montantsEcheances,
-  nbMoisSurSaison,
-  saisonDePeriode,
   deductionArrhes,
   libelleSaison,
   ligneDeductionArrhes,
@@ -413,130 +404,6 @@ describe("égalité avec la base de données", () => {
           const attendus = s.tarifs.map((t, i) => (prixApplique(t) ?? 0) - (i === detail.ligne ? detail.appliquee : 0));
           expect({ contexte, prix }).toEqual({ contexte, prix: attendus });
         }
-      }
-    } finally {
-      await db.close();
-    }
-  });
-});
-
-describe("année scolaire : facture annuelle et échéances", () => {
-  test("mois de la saison, saison d'un mois, mois avec échéance", () => {
-    expect(moisSaison(2026)).toEqual([
-      "2026-09-01", "2026-10-01", "2026-11-01", "2026-12-01", "2027-01-01",
-      "2027-02-01", "2027-03-01", "2027-04-01", "2027-05-01", "2027-06-01",
-    ]);
-    expect(saisonDePeriode("2026-09-01")).toBe(2026);
-    expect(saisonDePeriode("2026-12-15")).toBe(2026);
-    expect(saisonDePeriode("2027-06-01")).toBe(2026);
-    expect(saisonDePeriode("2027-08-01")).toBe(2026);
-    expect(moisAvecEcheance("2026-07-01")).toBe(false);
-    expect(moisAvecEcheance("2026-08-01")).toBe(false);
-    expect(moisAvecEcheance("2026-09-01")).toBe(true);
-    expect(moisAvecEcheance("2027-06-01")).toBe(true);
-  });
-
-  test("montants des échéances : floor(reste / 10), juin reçoit le reste ; cas réel 924 € × 10", () => {
-    expect(montantsEcheances(924000)).toEqual(Array(10).fill(92400));
-    const reste = montantsEcheances(1000007);
-    expect(reste.slice(0, 9)).toEqual(Array(9).fill(100000));
-    expect(reste[9]).toBe(100007);
-    expect(reste.reduce((s, m) => s + m, 0)).toBe(1000007);
-    expect(montantsEcheances(9)).toEqual([0, 0, 0, 0, 0, 0, 0, 0, 0, 9]);
-    expect(montantsEcheances(0)).toEqual([]);
-    expect(montantsEcheances(-5)).toEqual([]);
-  });
-
-  test("arrhes de la saison seulement ; échéancier annuel (Asma Dos Santos : 13 200 € − 3 960 €)", () => {
-    const arrhes = { arrhes_reglees: true, arrhes_centimes: 396000, arrhes_saison: 2026 };
-    expect(arrhesSurSaison(arrhes, 2026)).toBe(396000);
-    expect(arrhesSurSaison(arrhes, 2027)).toBe(0);
-    expect(arrhesSurSaison({ ...arrhes, arrhes_reglees: false }, 2026)).toBe(0);
-    expect(arrhesSurSaison({ ...arrhes, arrhes_centimes: null }, 2026)).toBe(0);
-    expect(echeancierAnnuel(1320000, arrhes, 2026)).toEqual({ arrhes: 396000, reste: 924000, montants: Array(10).fill(92400) });
-    expect(echeancierAnnuel(1000, { ...arrhes, arrhes_centimes: 5000 }, 2026)).toEqual({ arrhes: 5000, reste: 0, montants: [] });
-  });
-
-  test("prix annuel : prix mensuel × mois de validité sur la saison", () => {
-    expect(nbMoisSurSaison(tarif(), 2026)).toBe(10);
-    expect(nbMoisSurSaison(tarif({ date_debut: "2026-11-15" }), 2026)).toBe(8);
-    expect(nbMoisSurSaison(tarif({ date_fin: "2026-09-01" }), 2026)).toBe(1);
-    expect(nbMoisSurSaison(tarif({ date_fin: "2026-08-31" }), 2026)).toBe(0);
-    expect(nbMoisSurSaison(tarif({ recurrent: false }), 2026)).toBe(0);
-    expect(nbMoisSurSaison(tarif({ actif: false }), 2026)).toBe(0);
-    expect(annuelEstime([tarif({ prix_unitaire_centimes: 132000 })], 2026)).toBe(1320000);
-    expect(annuelEstime([tarif(), tarif({ quantite: 2.5, prix_unitaire_centimes: 3333 })], 2026)).toBe(450000 + 83325);
-  });
-
-  test("date d'échéance d'un avis : jour de génération + délai, jamais avant l'émission", () => {
-    expect(dateEcheanceAvis("2026-09-01", 1, 30, "2026-09-01")).toBe("2026-10-01");
-    expect(dateEcheanceAvis("2026-10-01", 5, 10, "2026-09-01")).toBe("2026-10-15");
-    expect(dateEcheanceAvis("2026-09-01", 1, 30, "2026-11-20")).toBe("2026-12-20");
-    expect(dateEcheanceAvis("2027-06-01", 28, 0, "2026-09-01")).toBe("2027-06-28");
-  });
-
-  test("annuelEstime et échéancier = generer_factures_annuelles puis emettre_facture (Postgres)", async () => {
-    const db = await creerBase();
-    try {
-      const un = async <T>(sql: string, params: unknown[] = []) => (await db.query<T>(sql, params)).rows[0];
-      const academie = (await un<{ id: string }>(`select id from academies order by ordre limit 1`)).id;
-      const pension = (await un<{ id: string }>(`insert into prestations (libelle, prix_unitaire_centimes) values ('Pension', 45000) returning id`)).id;
-      await db.query(`update parametres set jour_generation = 5, delai_paiement_jours = 12`);
-
-      type Scenario = { nom: string; arrhes: number | null; saison: number; tarifs: TarifPourCalcul[] };
-      const scenarios: Scenario[] = [
-        { nom: "Asma", arrhes: 396000, saison: 2026, tarifs: [tarif({ prix_unitaire_centimes: 132000, ordre: 1 })] },
-        {
-          nom: "Arrondis",
-          arrhes: 100007,
-          saison: 2026,
-          tarifs: [
-            tarif({ ordre: 1 }),
-            tarif({ prix_unitaire_centimes: 3333, quantite: 2.5, ordre: 2 }),
-            tarif({ prix_unitaire_centimes: 9999, date_debut: "2027-01-10", ordre: 3 }),
-            tarif({ prix_unitaire_centimes: 777, date_fin: "2026-10-31", ordre: 4 }),
-            tarif({ prix_unitaire_centimes: 5000, recurrent: false, ordre: 5 }),
-          ],
-        },
-        { nom: "Autre saison", arrhes: 45000, saison: 2025, tarifs: [tarif({ quantite: 0.33, ordre: 1 })] },
-      ];
-      const ids = new Map<string, Scenario>();
-      for (const s of scenarios) {
-        const id = (await un<{ id: string }>(
-          `insert into clients (academie_id, nom, arrhes_reglees, arrhes_centimes, arrhes_saison) values ($1, $2, true, $3, $4) returning id`,
-          [academie, s.nom, s.arrhes, s.saison],
-        )).id;
-        ids.set(id, s);
-        for (const t of s.tarifs) {
-          await db.query(
-            `insert into tarifs_clients (client_id, prestation_id, prix_unitaire_centimes, quantite, ordre, date_debut, date_fin, recurrent)
-             values ($1, $2, $3, $4, $5, $6, $7, $8)`,
-            [id, pension, t.prix_unitaire_centimes, t.quantite, t.ordre, t.date_debut, t.date_fin, t.recurrent],
-          );
-        }
-      }
-      const apercu = (await db.query<{ client_id: string; total_ht_centimes: number }>(`select * from generer_factures_annuelles(2026, null, true)`)).rows;
-      const genere = (await db.query<{ client_id: string; facture_id: string; total_ht_centimes: number }>(`select * from generer_factures_annuelles(2026)`)).rows;
-      expect(genere).toHaveLength(scenarios.length);
-      for (const r of genere) {
-        const s = ids.get(r.client_id)!;
-        const attendu = annuelEstime(s.tarifs, 2026);
-        expect({ nom: s.nom, total: r.total_ht_centimes, apercu: apercu.find((a) => a.client_id === r.client_id)?.total_ht_centimes }).toEqual({
-          nom: s.nom,
-          total: attendu,
-          apercu: attendu,
-        });
-        const f = await un<{ total_ttc_centimes: number; date_emission: Date }>(`select * from emettre_facture($1)`, [r.facture_id]);
-        expect(f.total_ttc_centimes).toBe(attendu);
-        const client = { arrhes_reglees: true, arrhes_centimes: s.arrhes, arrhes_saison: s.saison };
-        const prevu = echeancierAnnuel(f.total_ttc_centimes, client, 2026);
-        const emission = f.date_emission.toISOString().slice(0, 10);
-        const echeances = (await db.query<{ periode: Date; montant_centimes: number; date_echeance: Date }>(
-          `select periode, montant_centimes, date_echeance from echeances where facture_id = $1 order by rang`, [r.facture_id])).rows;
-        expect({ nom: s.nom, montants: echeances.map((e) => e.montant_centimes) }).toEqual({ nom: s.nom, montants: prevu.montants });
-        expect(echeances.map((e) => e.date_echeance.toISOString().slice(0, 10))).toEqual(
-          echeances.map((e) => dateEcheanceAvis(e.periode.toISOString().slice(0, 10), 5, 12, emission)),
-        );
       }
     } finally {
       await db.close();

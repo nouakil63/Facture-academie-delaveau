@@ -12,20 +12,19 @@ const {
   envoyerEmail,
   messageErreurEmail,
   remplirModele,
-  remplirModeleAvis,
   texteVersHtml,
   variablesEmailManquantes,
 } = await import("@/lib/email");
-const { avisExemple, donneesAnnuellesExemple, donneesExemple, parametresExemple } = await import("@/lib/pdf/exemple");
+const { donneesExemple, parametresExemple } = await import("@/lib/pdf/exemple");
 const { formatEuros } = await import("@/lib/format");
 
 function factureEmise() {
   return donneesExemple(parametresExemple(), {
     statut: "emise",
     academie: { nom: "Académie Espoir" },
-    client: { prenom: "Marie", nom: "Dupont" },
+    client: { prenom: "Marie", nom: "Dupont", reference: "E7" },
     facture: {
-      numero: "AD-2026-0007",
+      numero: "F-E7-10-2026-0007",
       objet: "Formation et accompagnement – octobre 2026",
       periode: "2026-10-01",
       date_emission: "2026-10-01",
@@ -36,45 +35,14 @@ function factureEmise() {
   });
 }
 
-describe("remplirModeleAvis et facture annuelle", () => {
-  const arrhes = { arrhes_reglees: true, arrhes_centimes: 396000, arrhes_saison: 2026 };
-  const options = {
-    academie: { nom: "Académie Espoir" },
-    client: { prenom: "Asma", nom: "Dos Santos", reference: "E1", ...arrhes },
-    lignes: [{ libelle: "Enseignement – 2026-2027", quantite: 1, prix_unitaire_centimes: 1320000 }],
-  };
-
-  it("modèle par défaut d'un avis : vouvoiement, numéro d'avis, montant de l'échéance, date limite", () => {
-    const avis = avisExemple(parametresExemple(), 2, options);
-    expect(remplirModeleAvis(avis.emetteur.email_avis_objet, avis)).toBe("Avis d'échéance E1-2026-10 – Académie Delaveau");
-    expect(remplirModeleAvis(avis.emetteur.email_avis_corps, avis)).toBe(
-      `Bonjour Asma Dos Santos,\n\nVeuillez trouver ci-joint l'avis d'échéance E1-2026-10 de ${formatEuros(92400)} à régler avant le ${
-        avis.echeance.date_echeance.split("-").reverse().join("/")
-      }.\n\nCordialement,\nAcadémie Delaveau`,
-    );
-  });
-
-  it("variables d'un avis : {facture} {periode} {reference} {academie} ; inconnues laissées telles quelles", () => {
-    const avis = avisExemple(parametresExemple(), 1, options);
-    expect(remplirModeleAvis("{facture} | {periode} | {reference} | {academie} | {objet}", avis)).toBe(
-      "AD-2026-0001 | septembre 2026 | E1 | Académie Espoir | {objet}",
-    );
-  });
-
-  it("facture annuelle : {periode} = année scolaire, {reference} = référence élève", () => {
-    const d = donneesAnnuellesExemple(parametresExemple(), options);
-    expect(remplirModele("{numero} {periode} {reference} {montant}", d)).toBe(`AD-2026-0001 2026-2027 E1 ${formatEuros(1320000)}`);
-  });
-});
-
 describe("remplirModele", () => {
   it("remplace toutes les variables", () => {
     const texte = remplirModele(
-      "{client} | {numero} | {montant} | {echeance} | {periode} | {structure} | {academie} | {objet}",
+      "{client} | {numero} | {montant} | {echeance} | {periode} | {structure} | {academie} | {objet} | {reference}",
       factureEmise(),
     );
     expect(texte).toBe(
-      `Marie Dupont | AD-2026-0007 | ${formatEuros(123450)} | 31/10/2026 | octobre 2026 | Académie Delaveau | Académie Espoir | Formation et accompagnement – octobre 2026`,
+      `Marie Dupont | F-E7-10-2026-0007 | ${formatEuros(123450)} | 31/10/2026 | octobre 2026 | Académie Delaveau | Académie Espoir | Formation et accompagnement – octobre 2026 | E7`,
     );
   });
 
@@ -87,7 +55,7 @@ describe("remplirModele", () => {
 
   it("remplace chaque occurrence et laisse les accolades inconnues", () => {
     expect(remplirModele("{numero} / {numero} {inconnue} {Client}", factureEmise())).toBe(
-      "AD-2026-0007 / AD-2026-0007 {inconnue} {Client}",
+      "F-E7-10-2026-0007 / F-E7-10-2026-0007 {inconnue} {Client}",
     );
   });
 
@@ -111,7 +79,7 @@ describe("remplirModele", () => {
 
   it("remplit les modèles par défaut des paramètres", () => {
     const d = factureEmise();
-    expect(remplirModele(d.emetteur.email_objet, d)).toBe("Facture AD-2026-0007 – Académie Delaveau");
+    expect(remplirModele(d.emetteur.email_objet, d)).toBe("Facture F-E7-10-2026-0007 – Académie Delaveau");
     const corps = remplirModele(d.emetteur.email_corps, d);
     expect(corps).toContain("Bonjour Marie Dupont,");
     expect(corps).toContain("à régler avant le 31/10/2026");

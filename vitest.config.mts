@@ -9,5 +9,6 @@ export default defineConfig({
       "server-only": fileURLToPath(new URL("./tests/server-only.ts", import.meta.url)),
     },
   },
-  test: { include: ["tests/**/*.test.ts"], testTimeout: 30000 },
+  // Tests SQL : chaque base PGlite applique toutes les migrations (plus lent quand les fichiers tournent en parallèle).
+  test: { include: ["tests/**/*.test.ts"], testTimeout: 30000, hookTimeout: 30000 },
 });

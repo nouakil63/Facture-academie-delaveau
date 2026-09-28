@@ -12,18 +12,12 @@ import {
   formaterIban,
   formaterSiren,
   formaterSiret,
-  MOTIF_PREFIXE,
   normaliserBic,
   normaliserCouleur,
   normaliserRna,
   rnaValide,
 } from "@/components/parametres/controles";
-import {
-  variablesInconnues,
-  VARIABLES_AVIS,
-  VARIABLES_EMAIL,
-  type VariableEmail,
-} from "@/components/parametres/modeles-email";
+import { variablesInconnues, VARIABLES_EMAIL } from "@/components/parametres/modeles-email";
 import { COOKIE_ACADEMIE } from "@/lib/academie-selectionnee";
 import { exigerUtilisateur } from "@/lib/auth";
 import { emailConfigure, envoyerEmail, messageErreurEmail } from "@/lib/email";
@@ -69,7 +63,7 @@ function traduireErreur(erreur: ErreurSupabase, siCleEtrangere?: string): string
       if (texte.includes("couleur")) return "Couleur invalide : format #RRGGBB attendu.";
       if (texte.includes("delai_paiement")) return "Le délai de paiement doit être compris entre 0 et 90 jours.";
       if (texte.includes("taux_tva")) return "Le taux de TVA doit être compris entre 0 et 99,99 %.";
-      if (texte.includes("jour_generation")) return "Le jour d'envoi des avis doit être compris entre 1 et 28.";
+      if (texte.includes("jour_generation")) return "Le jour de génération doit être compris entre 1 et 28.";
       if (texte.includes("nom")) return "Le nom est obligatoire.";
       return "Une des valeurs saisies est refusée par la base : vérifier le formulaire.";
     case "23502":
@@ -160,15 +154,15 @@ const emailFacultatif = (libelle: string) =>
     .pipe(z.email({ error: `${libelle} : adresse e-mail invalide.` }).max(254).nullable());
 
 /** Modèle d'e-mail : obligatoire, sans variable inconnue. */
-const modeleEmail = (max: number, libelle: string, variables: readonly VariableEmail[] = VARIABLES_EMAIL) =>
+const modeleEmail = (max: number, libelle: string) =>
   texteObligatoire(max, libelle, `${libelle} : obligatoire.`).superRefine((v, ctx) => {
-    const inconnues = variablesInconnues(v, variables);
+    const inconnues = variablesInconnues(v);
     if (inconnues.length > 0) {
       ctx.addIssue({
         code: "custom",
         message: `${libelle} : variable${inconnues.length > 1 ? "s" : ""} inconnue${
           inconnues.length > 1 ? "s" : ""
-        } ${inconnues.map((n) => `{${n}}`).join(", ")}. Variables disponibles : ${variables.map((x) => `{${x.nom}}`).join(" ")}.`,
+        } ${inconnues.map((n) => `{${n}}`).join(", ")}. Variables disponibles : ${VARIABLES_EMAIL.map((x) => `{${x.nom}}`).join(" ")}.`,
       });
     }
   });
@@ -176,12 +170,6 @@ const modeleEmail = (max: number, libelle: string, variables: readonly VariableE
 const schemaParametres = z
   .object({
     // Charte et numérotation
-    prefixe_facture: z
-      .string()
-      .transform((v) => v.trim().toUpperCase())
-      .refine((v) => v === "" || MOTIF_PREFIXE.test(v), {
-        error: "Préfixe de facture invalide : 1 à 8 lettres majuscules ou chiffres, sans espace ni tiret (ex. AD).",
-      }),
     couleur_primaire: couleur("Couleur principale"),
     couleur_secondaire: couleur("Couleur secondaire"),
     logo_url: z
@@ -267,21 +255,20 @@ const schemaParametres = z
     mentions_legales: texteFacultatif(1500, "Mentions légales"),
     mentions_professionnels: texteFacultatif(1500, "Mentions pour clients professionnels"),
 
-    // Année scolaire et avis (generation_auto n'est plus modifié : ancien modèle mensuel)
+    // Facturation mensuelle
     objet_facture_mensuelle: texteObligatoire(
       150,
-      "Objet des factures annuelles",
-      "L'objet des factures annuelles est obligatoire (ex. « Formation et accompagnement »).",
+      "Objet des factures mensuelles",
+      "L'objet des factures mensuelles est obligatoire (ex. « Formation et accompagnement »).",
     ),
-    jour_generation: entierBorne(1, 28, "Jour d'envoi des avis"),
-    mois_facture: z.enum(["courant", "precedent"], { error: "Choisir le mois des avis envoyés (en cours ou précédent)." }),
+    jour_generation: entierBorne(1, 28, "Jour de génération"),
+    mois_facture: z.enum(["courant", "precedent"], { error: "Choisir le mois facturé (en cours ou précédent)." }),
+    generation_auto: z.boolean(),
 
     // E-mails
     email_objet: modeleEmail(200, "Objet de l'e-mail"),
     email_corps: modeleEmail(5000, "Corps de l'e-mail"),
     email_copie: emailFacultatif("Adresse en copie cachée"),
-    email_avis_objet: modeleEmail(200, "Objet de l'e-mail d'un avis", VARIABLES_AVIS),
-    email_avis_corps: modeleEmail(5000, "Message de l'e-mail d'un avis", VARIABLES_AVIS),
   })
   .refine((e) => e.taux_tva > 0 || Boolean(e.mention_tva), {
     path: ["mention_tva"],
@@ -296,17 +283,20 @@ const schemaParametres = z
   });
 
 const CHAMPS_TEXTE = [
-  "prefixe_facture", "couleur_primaire", "couleur_secondaire", "logo_url",
+  "couleur_primaire", "couleur_secondaire", "logo_url",
   "raison_sociale", "forme_juridique", "siren", "siret", "rna", "numero_tva", "objet_social",
   "adresse_ligne1", "adresse_ligne2", "code_postal", "ville", "pays", "email_contact", "telephone", "site_web",
   "titulaire_compte", "iban", "bic", "conditions_paiement", "delai_paiement_jours",
   "taux_tva", "mention_tva", "mentions_legales", "mentions_professionnels",
   "objet_facture_mensuelle", "jour_generation", "mois_facture",
-  "email_objet", "email_corps", "email_copie", "email_avis_objet", "email_avis_corps",
+  "email_objet", "email_corps", "email_copie",
 ] as const;
 
 function lireFormulaireParametres(formData: FormData) {
-  return Object.fromEntries(CHAMPS_TEXTE.map((n) => [n, champ(formData, n)]));
+  return {
+    ...Object.fromEntries(CHAMPS_TEXTE.map((n) => [n, champ(formData, n)])),
+    generation_auto: formData.get("generation_auto") === "on",
+  };
 }
 
 // -----------------------------------------------------------------------------
@@ -318,11 +308,7 @@ const PARAMETRES_INTROUVABLES: ResultatAction = {
   erreur: "Paramètres introuvables, ou accès refusé : vérifier que les migrations Supabase sont appliquées.",
 };
 
-/**
- * Enregistre les paramètres de l'association (mise à jour de la ligne unique, jamais d'insertion).
- * Le préfixe de facture n'est modifiable que tant qu'aucun numéro n'a été attribué
- * (la série doit rester continue) : contrôlé ici et par un trigger en base.
- */
+/** Enregistre les paramètres de l'association (mise à jour de la ligne unique, jamais d'insertion). */
 export async function enregistrerParametres(
   _precedent: ResultatAction | null,
   formData: FormData,
@@ -331,32 +317,11 @@ export async function enregistrerParametres(
 
   const lecture = schemaParametres.safeParse(lireFormulaireParametres(formData));
   if (!lecture.success) return { ok: false, erreur: messagesValidation(lecture.error) };
-  const { prefixe_facture, ...champs } = lecture.data;
+  // Le préfixe (parametres.prefixe_facture) n'est plus utilisé dans les numéros
+  // (F-<référence>-<MM>-<AAAA>-<n°>) : jamais modifié ici.
+  const modification: Record<string, unknown> = lecture.data;
 
   try {
-    const [actuels, compteurs] = await Promise.all([
-      supabase.from("parametres").select("prefixe_facture").eq("id", true).maybeSingle(),
-      supabase.from("compteurs_factures").select("annee", { count: "exact", head: true }),
-    ]);
-    if (actuels.error) return { ok: false, erreur: traduireErreur(actuels.error) };
-    if (compteurs.error) return { ok: false, erreur: traduireErreur(compteurs.error) };
-    if (!actuels.data) return PARAMETRES_INTROUVABLES;
-    const prefixeActuel = (actuels.data as { prefixe_facture: string }).prefixe_facture;
-
-    let modification: Record<string, unknown> = champs;
-    if ((compteurs.count ?? 0) > 0) {
-      // Champ désactivé dans le formulaire : absent (""), ou identique si envoyé autrement.
-      if (prefixe_facture !== "" && prefixe_facture !== prefixeActuel) {
-        return {
-          ok: false,
-          erreur: `Préfixe bloqué : des factures portent déjà le préfixe « ${prefixeActuel} », et la série doit rester continue.`,
-        };
-      }
-    } else {
-      if (prefixe_facture === "") return { ok: false, erreur: "Le préfixe de facture est obligatoire (ex. AD)." };
-      modification = { ...champs, prefixe_facture };
-    }
-
     const { data, error } = await supabase.from("parametres").update(modification).eq("id", true).select("id");
     if (error) return { ok: false, erreur: traduireErreur(error) };
     if (!data || data.length === 0) return PARAMETRES_INTROUVABLES;
@@ -364,7 +329,7 @@ export async function enregistrerParametres(
     return ERREUR_RESEAU;
   }
 
-  // Raison sociale, couleurs et préfixe apparaissent sur plusieurs pages (tableau de bord, factures…).
+  // Raison sociale et couleurs apparaissent sur plusieurs pages (tableau de bord, factures…).
   revalidatePath("/", "layout");
   return { ok: true, message: "Paramètres enregistrés. Appliqués aux prochaines factures émises." };
 }

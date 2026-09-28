@@ -15,14 +15,11 @@ export function FiltresFactures({
   q,
   mois,
   statut,
-  type,
   filtresActifs,
 }: {
   q: string;
   mois: string;
   statut: string;
-  /** « annuelle », « ponctuelle » ou "" (toutes). */
-  type: string;
   filtresActifs: boolean;
 }) {
   const formulaire = useRef<HTMLFormElement>(null);
@@ -50,25 +47,10 @@ export function FiltresFactures({
             defaultValue={q}
             maxLength={100}
             placeholder="N° de facture, réf. élève, client, cavalier…"
+
             className="champ pl-9"
           />
         </div>
-      </div>
-      <div className="sm:w-40">
-        <label htmlFor="type-factures" className="label">
-          Type
-        </label>
-        <select
-          id="type-factures"
-          name="type"
-          defaultValue={type}
-          className="champ"
-          onChange={() => formulaire.current?.requestSubmit()}
-        >
-          <option value="">Tous</option>
-          <option value="annuelle">Annuelles</option>
-          <option value="ponctuelle">Ponctuelles</option>
-        </select>
       </div>
       <div className="sm:w-48">
         <label htmlFor="mois-factures" className="label">

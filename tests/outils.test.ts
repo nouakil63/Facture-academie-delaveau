@@ -8,6 +8,7 @@ import {
   formatDateLongue,
   jourDuMois,
   nomCourtAcademie,
+  numeroFacture,
   pluriel,
 } from "@/lib/format";
 import { MOTIF_MOIS, moisVersPeriode, moisVoisin, periodeVersMois } from "@/components/factures/outils";
@@ -120,5 +121,16 @@ describe("filtre d'académie (cookie)", () => {
   test("liste déjà limitée aux académies actives (sans champ actif)", () => {
     const menu = [{ id: DELAVEAU.id, nom: DELAVEAU.nom }];
     expect(resoudreAcademie(DELAVEAU.id, menu)).toBe(menu[0]);
+  });
+});
+
+describe("numeroFacture (même règle que emettre_facture)", () => {
+  test("F-<référence>-<MM>-<AAAA>-<n°>, 4 chiffres minimum", () => {
+    expect(numeroFacture("E1", "2026-10-01", 12)).toBe("F-E1-10-2026-0012");
+    expect(numeroFacture("E12", "2027-03-15", 10000)).toBe("F-E12-03-2027-10000");
+  });
+
+  test("sans séquence : numéro prévisionnel d'un brouillon", () => {
+    expect(numeroFacture("E4", "2026-09-28")).toBe("F-E4-09-2026-NNNN");
   });
 });

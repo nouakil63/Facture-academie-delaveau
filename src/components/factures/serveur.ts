@@ -12,7 +12,7 @@ import { MAX_TOTAL_LIGNE_CENTIMES, moisVersPeriode, nomClientFacture, type Resul
 
 /*
  * Outils serveur du module Factures, partagés par les Server Actions de
- * /factures, /factures/[id] et /facturation-annuelle. (Un fichier "use server"
+ * /factures, /factures/[id] et /facturation-mensuelle. (Un fichier "use server"
  * ne peut exporter que des actions : les utilitaires vivent ici.)
  */
 
@@ -36,8 +36,6 @@ export function traduireErreur(erreur: ErreurSupabase, siCleEtrangere?: string):
     case "23505":
       if (texte.includes("factures_mensuelle_unique"))
         return "Une facture mensuelle existe déjà pour ce client et ce mois.";
-      if (texte.includes("factures_annuelle_unique"))
-        return "Une facture annuelle existe déjà pour ce client et cette année scolaire.";
       return "Cet élément existe déjà.";
     case "23514":
       if (texte.includes("quantite")) return "La quantité doit être supérieure à zéro.";
@@ -270,7 +268,7 @@ export async function creerBrouillon(
 }
 
 // -----------------------------------------------------------------------------
-// Envoi d'un lot de factures (liste, facturation de l'année)
+// Envoi d'un lot de factures (liste, facturation mensuelle)
 // -----------------------------------------------------------------------------
 
 export type FactureLot = Pick<

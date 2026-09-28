@@ -49,7 +49,7 @@ export interface OptionsEnvoi {
 
 const DEJA_EMISE = "Ignorée : émise entre-temps. Si elle est restée « Émise », l'envoyer depuis sa fiche.";
 
-export function messageDe(e: unknown): string {
+function messageDe(e: unknown): string {
   if (e instanceof Error) return e.message;
   if (typeof e === "string") return e;
   if (e && typeof e === "object" && "message" in e && typeof e.message === "string") return e.message;
@@ -57,7 +57,7 @@ export function messageDe(e: unknown): string {
 }
 
 /** Adresse(s) en copie cachée (paramètres, archivage) : « a@x.fr » ou « a@x.fr, b@y.fr ». */
-export function adressesCopie(emailCopie: string | null): string[] {
+function adressesCopie(emailCopie: string | null): string[] {
   return (emailCopie ?? "")
     .split(/[,;\s]+/)
     .map((a) => a.trim())
@@ -65,7 +65,7 @@ export function adressesCopie(emailCopie: string | null): string[] {
 }
 
 /** Ligne de pied de l'e-mail : coordonnées de l'association. */
-export function piedEmail(parametres: Parametres, nomFichier: string): string {
+function piedEmail(parametres: Parametres, nomFichier: string): string {
   const adresse = [parametres.adresse_ligne1, [parametres.code_postal, parametres.ville].filter(Boolean).join(" ")]
     .filter(Boolean)
     .join(", ");
@@ -75,12 +75,10 @@ export function piedEmail(parametres: Parametres, nomFichier: string): string {
   return `${coordonnees}\nPièce jointe : ${nomFichier}`;
 }
 
-/** Journal des envois (table envois_email) ; `echeance_id` pour un avis d'échéance. */
-export async function journaliser(
+async function journaliser(
   supabase: SupabaseClient,
   envoi: {
     facture_id: string;
-    echeance_id?: string | null;
     destinataires: string[];
     objet: string;
     succes: boolean;
@@ -90,10 +88,7 @@ export async function journaliser(
 ) {
   const { error } = await supabase.from("envois_email").insert(envoi);
   if (error)
-    console.error(
-      `Journal des envois : enregistrement impossible (facture ${envoi.facture_id}${envoi.echeance_id ? `, échéance ${envoi.echeance_id}` : ""}) :`,
-      error.message,
-    );
+    console.error(`Journal des envois : enregistrement impossible (facture ${envoi.facture_id}) :`, error.message);
 }
 
 /**

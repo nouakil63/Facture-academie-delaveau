@@ -299,9 +299,9 @@ export async function supprimerBrouillon(factureId: string): Promise<ResultatAct
 }
 
 /**
- * « Recalculer depuis les tarifs » : remplace les lignes d'un brouillon généré (facture annuelle,
- * ou ancien brouillon mensuel) par celles calculées à partir des tarifs et réductions actuels du
- * client (fonction SQL recalculer_brouillon). Brouillon uniquement.
+ * « Recalculer depuis les tarifs » : remplace les lignes d'un brouillon mensuel généré par celles
+ * calculées à partir des tarifs, réductions et arrhes actuels du client (fonction SQL
+ * recalculer_brouillon, même règle que la génération mensuelle). Brouillon généré uniquement.
  */
 export async function recalculerBrouillon(factureId: string): Promise<ResultatAction> {
   const { supabase } = await exigerUtilisateur();
@@ -320,6 +320,7 @@ export async function recalculerBrouillon(factureId: string): Promise<ResultatAc
   revaliderFactures();
   return { ok: true, message: `Lignes recalculées depuis les tarifs actuels (${nb} ligne${nb > 1 ? "s" : ""}).` };
 }
+
 
 /** Émet un brouillon sans l'envoyer : numéro définitif, contenu figé. */
 export async function emettreSansEnvoyer(factureId: string): Promise<ResultatAction> {

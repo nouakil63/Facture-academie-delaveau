@@ -1,4 +1,4 @@
-import type { Client, StatutEcheance, StatutFacture, TypeFacture } from "./types";
+import type { Client, StatutFacture } from "./types";
 
 const euros = new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR" });
 
@@ -158,16 +158,16 @@ export const LIBELLES_STATUT: Record<StatutFacture, string> = {
   annulee: "Annulée",
 };
 
-export const LIBELLES_STATUT_ECHEANCE: Record<StatutEcheance, string> = {
-  a_venir: "À envoyer",
-  envoyee: "Avis envoyé",
-  payee: "Payée",
-  annulee: "Annulée",
-};
-
-export const LIBELLES_TYPE_FACTURE: Record<TypeFacture, string> = {
-  annuelle: "Annuelle",
-  ponctuelle: "Ponctuelle",
-};
-
 export const MODES_PAIEMENT = ["Virement", "Chèque", "Prélèvement", "Espèces", "Carte bancaire", "Autre"] as const;
+
+/**
+ * Numéro de facture (même règle que emettre_facture) : `F-<référence>-<MM>-<AAAA>-<n°>`,
+ * MM/AAAA = mois facturé (période) ou, sans période, mois de la date d'émission ; n° = compteur
+ * global continu par année d'émission, sur 4 chiffres minimum. Ex. F-E1-10-2026-0012.
+ * `sequence` absente : « NNNN » (numéro prévisionnel d'un brouillon).
+ */
+export function numeroFacture(reference: string, periodeOuDate: string, sequence?: number | null): string {
+  const [annee, mois] = periodeOuDate.slice(0, 7).split("-");
+  const numero = sequence == null ? "NNNN" : String(sequence).padStart(4, "0");
+  return `F-${reference}-${mois}-${annee}-${numero}`;
+}

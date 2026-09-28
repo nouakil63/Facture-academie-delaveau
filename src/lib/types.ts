@@ -7,9 +7,11 @@
 export type StatutFacture = "brouillon" | "emise" | "envoyee" | "payee" | "annulee";
 export type TypeClient = "particulier" | "professionnel";
 export type MoisFacture = "courant" | "precedent";
-/** annuelle : facture de l'année scolaire (échéances mensuelles) ; ponctuelle : facture classique. */
+/**
+ * annuelle : facture de l'année scolaire (ancien modèle, abandonné ; conservé en base) ;
+ * ponctuelle : facture classique, mensuelle comprise (défaut).
+ */
 export type TypeFacture = "ponctuelle" | "annuelle";
-export type StatutEcheance = "a_venir" | "envoyee" | "payee" | "annulee";
 
 /** Paramètres de la structure émettrice (ligne unique de la table `parametres`). */
 export interface Parametres {
@@ -49,9 +51,6 @@ export interface Parametres {
   email_objet: string;
   email_corps: string;
   email_copie: string | null;
-  /** Modèles de l'e-mail d'un avis d'échéance ({client} {numero} {montant} {echeance} {periode} {structure} {academie} {facture} {reference}). */
-  email_avis_objet: string;
-  email_avis_corps: string;
   created_at: string;
   updated_at: string;
 }
@@ -83,7 +82,7 @@ export interface Prestation {
 export interface Client {
   id: string;
   academie_id: string;
-  /** Référence élève (E1, E2…), unique, attribuée à la création, modifiable. */
+  /** Référence élève (E1, E2…), unique, attribuée à la création, modifiable ; reprise dans le numéro de facture. */
   reference: string;
   type: TypeClient;
   civilite: string | null;
@@ -164,9 +163,9 @@ export interface Facture {
   annulee_le: string | null;
   motif_annulation: string | null;
   generation_auto: boolean;
-  /** annuelle : facture de l'année scolaire ; ponctuelle : facture classique (défaut). */
+  /** « ponctuelle » (défaut, factures mensuelles comprises) ; « annuelle » : ancien modèle, conservé en base. */
   type_facture: TypeFacture;
-  /** Facture annuelle : année de la rentrée (2026 = septembre 2026 → juin 2027) ; null sinon. */
+  /** Ancienne facture annuelle : année de la rentrée ; null sinon. */
   saison: number | null;
   created_by: string | null;
   created_at: string;
@@ -186,57 +185,8 @@ export interface FactureVue extends Facture {
   academie_nom: string;
   academie_couleur: string;
   client_reference: string;
-  /** Facture annuelle : échéances non annulées, dont payées, et reste dû (centimes). 0 sinon. */
-  echeances_actives: number;
-  echeances_payees: number;
-  echeances_reste_centimes: number;
 }
 
-/** Échéance d'une facture annuelle (avis d'échéance mensuel, document non fiscal). */
-export interface Echeance {
-  id: string;
-  facture_id: string;
-  client_id: string;
-  /** 1 (septembre) à 10 (juin). */
-  rang: number;
-  /** 1er jour du mois de l'échéance, "AAAA-MM-01". */
-  periode: string;
-  montant_centimes: number;
-  date_echeance: string;
-  statut: StatutEcheance;
-  /** « E1-2026-09 » : référence élève, année et mois. */
-  numero_avis: string;
-  envoyee_le: string | null;
-  payee_le: string | null;
-  mode_paiement: string | null;
-  reference_paiement: string | null;
-  annulee_le: string | null;
-  created_at: string;
-  updated_at: string;
-}
-
-/** Ligne de la vue `echeances_vue`. */
-export interface EcheanceVue extends Echeance {
-  en_retard: boolean;
-  facture_numero: string | null;
-  saison: number;
-  facture_date_emission: string | null;
-  facture_statut: StatutFacture;
-  facture_total_ttc_centimes: number;
-  academie_id: string;
-  client_type: TypeClient;
-  client_nom: string;
-  client_prenom: string | null;
-  client_raison_sociale: string | null;
-  client_email: string | null;
-  client_emails_cc: string[];
-  client_cavaliers: string | null;
-  client_reference: string;
-  client_actif: boolean;
-  client_envoi_auto: boolean;
-  academie_nom: string;
-  academie_couleur: string;
-}
 
 export interface LigneFacture {
   id: string;
@@ -260,8 +210,6 @@ export interface LigneFacture {
 export interface EnvoiEmail {
   id: string;
   facture_id: string;
-  /** Envoi d'un avis d'échéance (null : envoi de la facture). */
-  echeance_id: string | null;
   destinataires: string[];
   objet: string;
   succes: boolean;
@@ -271,7 +219,7 @@ export interface EnvoiEmail {
   created_at: string;
 }
 
-/** Résultat de generer_brouillons_mensuels() et de generer_factures_annuelles() (même forme). */
+/** Résultat de generer_brouillons_mensuels(). */
 export interface ResultatGeneration {
   client_id: string;
   facture_id: string | null;
@@ -290,22 +238,6 @@ export interface FactureComplete {
    */
   client: Client;
   /** Émetteur (paramètres) : instantané figé si émise, sinon paramètres actuels. */
-  emetteur: Parametres;
-  academie: Academie;
-  /** Facture annuelle émise : ses échéances (par rang). Absent ou vide sinon. */
-  echeances?: Echeance[];
-}
-
-/** Avis d'échéance avec tout ce qu'il faut pour le PDF et l'e-mail. */
-export interface AvisComplet {
-  echeance: Echeance;
-  /** Toutes les échéances de la facture annuelle (rappel : déjà réglé, reste dû). */
-  echeances: Echeance[];
-  /** Facture annuelle émise (numéro, date, total, instantanés). */
-  facture: Facture;
-  /** Coordonnées figées de la facture ; e-mails de la fiche actuelle. */
-  client: Client;
-  /** Émetteur figé de la facture (IBAN, mentions). */
   emetteur: Parametres;
   academie: Academie;
 }
