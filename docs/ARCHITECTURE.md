@@ -38,6 +38,9 @@ d'« entité » dans l'interface.
 | Génération mensuelle : `generer_brouillons_mensuels(periode, academie_id?, dry_run)` crée un brouillon par client actif ayant des tarifs actifs, récurrents et valides sur le mois (toutes académies si `academie_id` null). Idempotente. `dry_run` ne fait que lire (aperçu du tableau de bord et de la facturation mensuelle). Désactiver une académie ne coupe **pas** la facturation de ses clients actifs (archiver les clients pour cela). | SQL |
 | `parametres` : une seule ligne, ni insertion ni suppression ; `select`/`update` seulement | SQL |
 | Envoi automatique **par client** (`clients.envoi_auto`, défaut `false`) : le jour de génération, la tâche planifiée émet et envoie les brouillons mensuels des clients actifs cochés (voir Tâche planifiée). Plus de réglage global (`parametres.envoi_auto` supprimé, migration `20260928000000`) | SQL + cron |
+| **Arrhes par client** (`clients.arrhes_reglees`, `arrhes_centimes`, `arrhes_saison` = année de la rentrée, migration `20260929000000`) : si réglées et > 0, chaque facture **mensuelle** de septembre (saison) à juin (saison + 1) est diminuée de `floor(arrhes / 10)`, juin recevant le reste (`arrhes − 9 × floor(arrhes / 10)`) ; juillet/août et autres saisons : rien. `deduction_arrhes(client, periode)`. La déduction est retirée du **prix unitaire** de la ligne de plus grand total parmi les lignes de quantité 1 (égalité : la première dans l'ordre), si son prix ≥ déduction ; sinon **aucune déduction** (jamais de prix négatif, signalé sur la fiche et la facturation mensuelle). Aucune ligne « arrhes » : la facture montre le net. `total_ht_centimes` renvoyé (aperçu compris) = montant réel. Côté TS : `deductionArrhes`, `ligneDeductionArrhes`, `mensuelDetaille`, `mensuelNet` (`@/lib/tarifs`, même règle, testée contre Postgres) — le « mensuel estimé » affiché est **net** | SQL + `@/lib/tarifs` |
+| **Informations figées sur les lignes générées** : `generer_brouillons_mensuels` renseigne `lignes_facture.prix_catalogue_centimes` (prix de la prestation liée, sinon null), `motif_reduction` (copie de `tarifs_clients.motif_reduction`, motif d'un prix personnalisé inférieur au catalogue) et `deduction_arrhes_centimes` (déduction retirée de cette ligne). Nulles pour les lignes existantes ou saisies à la main ; figées avec la ligne à l'émission | SQL |
+| Rappel imprimé sous l'objet d'une facture **mensuelle** (septembre à juin) : « Enseignement annuel : … · {motif} : −… · Arrhes versées : … · Échéancier sur 10 mois (septembre à juin) » (`texteRappelFacture`, `src/lib/pdf/FacturePdf.tsx`). Arrhes lues dans `client_snapshot` pour une facture émise, sur la fiche pour un brouillon. Informatif : ne change jamais le total | PDF |
 | « En retard » = `emise`/`envoyee` et échéance dépassée → colonne `en_retard` de la vue `factures_vue` | SQL |
 | Accès : utilisateur connecté **et** e-mail présent dans la table `membres` (RLS) | SQL |
 
@@ -167,7 +170,10 @@ src/app/
 ## Tâche planifiée
 Vercel appelle chaque jour à 6 h UTC `GET /api/cron/facturation-mensuelle` avec
 `Authorization: Bearer $CRON_SECRET`. Le jour `jour_generation` (jour du mois, Paris), si
-`parametres.generation_auto` **ou** s'il existe au moins un client actif avec `clients.envoi_auto` :
+`parametres.generation_auto` **ou** s'il existe au moins un client actif avec `clients.envoi_auto`, et si
+le mois à facturer (`periodeAFacturer`) n'est **ni juillet ni août** (sinon réponse `execute: false`,
+`periode`, `raison: "juillet/août : facturation manuelle"` : rien n'est généré ni envoyé ; la génération
+manuelle depuis la page reste possible) :
 1. génère les brouillons du mois pour toutes les académies (`periodeAFacturer`) ;
 2. émet et envoie (`envoyerFactures(…, { exigerBrouillon: true })`) les brouillons **mensuels** de la
    période (`generation_auto`, `periode`, statut `brouillon` — nouveaux ou déjà existants) des seuls
