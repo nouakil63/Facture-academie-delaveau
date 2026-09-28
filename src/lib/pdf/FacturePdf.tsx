@@ -10,6 +10,7 @@ import {
   nomClient,
   sansEspacesSpeciales,
 } from "@/lib/format";
+import { deductionArrhes, type ArrhesClient } from "@/lib/tarifs";
 import type { Academie, Client, Facture, LigneFacture, Parametres } from "@/lib/types";
 
 /*
@@ -84,6 +85,36 @@ function t(valeur: string | number | null | undefined): string {
     .replace(/[​-‍⁠﻿]/g, "")
     .replace(/[‐‑−]/g, "-")
     .replace(/\r\n?/g, "\n");
+}
+
+/**
+ * Rappel de l'échéancier d'une facture MENSUELLE dont la déduction des arrhes s'applique à la
+ * période : « Enseignement annuel : … · Arrhes versées : … · Échéancier sur 10 mois (septembre à
+ * juin) ». Informatif : ni le total ni les lignes ne changent. null s'il n'y a rien à afficher.
+ * Arrhes FIGÉES : instantané client pour une facture émise (rien si l'instantané, antérieur aux
+ * arrhes, n'en contient pas), fiche actuelle pour un brouillon.
+ * Enseignement annuel = (total HT + déduction de la période) × 10 (exact, juin compris).
+ */
+export function texteArrhesFacture(
+  facture: Pick<Facture, "statut" | "generation_auto" | "periode" | "total_ht_centimes" | "client_snapshot">,
+  client: ArrhesClient,
+  lignes: Pick<LigneFacture, "quantite">[],
+): string | null {
+  if (!facture.generation_auto || !facture.periode) return null;
+  const source: Partial<ArrhesClient> | null = facture.statut === "brouillon" ? client : facture.client_snapshot;
+  if (!source || typeof source.arrhes_reglees !== "boolean") return null;
+  const arrhes: ArrhesClient = {
+    arrhes_reglees: source.arrhes_reglees,
+    arrhes_centimes: source.arrhes_centimes ?? null,
+    arrhes_saison: source.arrhes_saison ?? null,
+  };
+  const deduction = deductionArrhes(arrhes, facture.periode);
+  // Sans ligne de quantité 1, la génération n'a pas pu appliquer la déduction.
+  if (deduction <= 0 || !lignes.some((l) => Number(l.quantite) === 1)) return null;
+  const annuel = (Number(facture.total_ht_centimes) + deduction) * 10;
+  return sansEspacesSpeciales(
+    `Enseignement annuel : ${formatEurosPdf(annuel)} · Arrhes versées : ${formatEurosPdf(arrhes.arrhes_centimes ?? 0)} · Échéancier sur 10 mois (septembre à juin)`,
+  );
 }
 
 function rempli(valeur: string | null | undefined): valeur is string {
@@ -286,6 +317,18 @@ function creerStyles(primaire: string, secondaire: string) {
     objetBloc: { marginRight: 26, marginBottom: 7 },
     objetLibelle: { fontSize: 7.5, color: DISCRET, letterSpacing: 0.8 },
     objetValeur: { fontFamily: "Helvetica-Bold", fontSize: 10 },
+    // Rappel de l'échéancier (arrhes) : sur sa propre ligne, sous l'objet et la période.
+    arrhes: {
+      width: "100%",
+      marginBottom: 7,
+      paddingVertical: 4,
+      paddingHorizontal: 7,
+      borderLeftWidth: 2,
+      borderLeftColor: primaire,
+      backgroundColor: teinte(primaire, 0.06),
+      fontSize: 8,
+      color: DISCRET,
+    },
 
     // Tableau des lignes
     tableau: { marginTop: 2 },
@@ -466,6 +509,8 @@ export function FacturePdf({
       ].filter(rempli)
     : [];
   const nomAcademie = academie?.nom?.trim() ?? "";
+  // Facture mensuelle avec arrhes : rappel informatif de l'échéancier (sans effet sur le total).
+  const texteArrhes = texteArrhesFacture(facture, client, lignes);
 
   // --- Pied de page
   const paragraphesPied = [
@@ -631,6 +676,11 @@ export function FacturePdf({
             <View style={s.objetBloc}>
               <Text style={s.objetLibelle}>PÉRIODE</Text>
               <Text style={s.objetValeur}>{t(formatPeriode(facture.periode))}</Text>
+            </View>
+          )}
+          {texteArrhes && (
+            <View style={s.arrhes}>
+              <Text>{t(texteArrhes)}</Text>
             </View>
           )}
         </View>

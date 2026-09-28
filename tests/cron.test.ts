@@ -360,6 +360,46 @@ describe("GET /api/cron/facturation-mensuelle", () => {
     });
   });
 
+  it("juillet et août : ni génération ni envoi (facturation manuelle)", async () => {
+    tables.clients = [client("c1", "Martin", DELAVEAU.id, true)];
+    tables.factures = [facture("f1", "c1", { periode: "2026-07-01" })];
+    for (const date of ["2026-07-05", "2026-08-05"]) {
+      for (const recherche of [`?date=${date}`, `?date=${date}&apercu=1`]) {
+        const reponse = await appel(recherche);
+        expect(reponse.status).toBe(200);
+        expect(await reponse.json()).toMatchObject({
+          ok: true,
+          date,
+          execute: false,
+          periode: `${date.slice(0, 7)}-01`,
+          raison: "juillet/août : facturation manuelle",
+          reglages: { generation_auto: true, clients_envoi_auto: 1 },
+        });
+      }
+    }
+    expect(genererBrouillonsMensuels).not.toHaveBeenCalled();
+    expect(envoyerFactures).not.toHaveBeenCalled();
+    expect(envoyerEmail).not.toHaveBeenCalled();
+  });
+
+  it("juillet/août s'apprécie sur le mois facturé (réglage « mois précédent »)", async () => {
+    chargerParametres.mockResolvedValue(
+      parametresExemple({ generation_auto: true, jour_generation: 5, mois_facture: "precedent" }),
+    );
+    // Le 5 septembre facture août : rien.
+    expect(await (await appel("?date=2026-09-05")).json()).toMatchObject({
+      execute: false,
+      periode: "2026-08-01",
+      raison: "juillet/août : facturation manuelle",
+    });
+    expect(genererBrouillonsMensuels).not.toHaveBeenCalled();
+    // Le 5 juillet facture juin : génération normale.
+    expect(await (await appel("?date=2026-07-05")).json()).toMatchObject({ execute: true, periode: "2026-06-01" });
+    expect(genererBrouillonsMensuels).toHaveBeenCalledWith(admin, "2026-06-01", { apercu: false });
+    // Le 5 octobre facture septembre : génération normale.
+    expect(await (await appel("?date=2026-10-05")).json()).toMatchObject({ execute: true, periode: "2026-09-01" });
+  });
+
   it("répond 500 avec un message clair si la génération échoue", async () => {
     genererBrouillonsMensuels.mockRejectedValue(new Error("Paramètres de facturation absents"));
     const reponse = await appel("?date=2026-10-05");

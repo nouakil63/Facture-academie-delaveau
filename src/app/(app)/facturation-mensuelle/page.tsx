@@ -188,6 +188,7 @@ export default async function PageFacturationMensuelle(props: PageProps<"/factur
             cavaliers: c?.cavaliers ?? null,
             academie: c ? (academiesParId.get(c.academie_id) ?? null) : null,
             sansEmail: c ? destinatairesFacture(c).length === 0 : false,
+            arrhesNonAppliquee: arrhesNonAppliquees.get(r.client_id) ?? null,
           };
         }),
         (l) => l.nom,
@@ -202,6 +203,7 @@ export default async function PageFacturationMensuelle(props: PageProps<"/factur
     nomClient,
   );
   const sansEmail = lignesApercu.filter((l) => l.sansEmail);
+  const sansDeductionArrhes = lignesApercu.filter((l) => l.arrhesNonAppliquee !== null);
   // Répartition des brouillons à générer par académie (vue « Toutes »).
   const repartition = afficherAcademie
     ? academies
@@ -317,6 +319,16 @@ export default async function PageFacturationMensuelle(props: PageProps<"/factur
             Un brouillon par client actif ayant au moins un tarif mensuel valide sur le mois. Objet : «{" "}
             {parametres.objet_facture_mensuelle} – {libelleMois} ».
           </p>
+          {moisHorsEcheancier && (
+            <p className="avertissement mt-3 flex items-start gap-2">
+              <IconeAlerte className="mt-0.5 size-4 shrink-0 text-amber-600" />
+              <span>
+                <span className="font-medium">Juillet et août : facturation manuelle.</span> Mensualités de
+                septembre à juin : aucune génération ni aucun envoi automatique ce mois-ci. La génération manuelle
+                reste possible ci-dessous.
+              </span>
+            </p>
+          )}
         </div>
 
         {!apercu.ok ? (
@@ -434,8 +446,31 @@ export default async function PageFacturationMensuelle(props: PageProps<"/factur
           </>
         )}
 
-        {apercu.ok && (nonFactures.length > 0 || sansEmail.length > 0) && (
+        {apercu.ok && (nonFactures.length > 0 || sansEmail.length > 0 || sansDeductionArrhes.length > 0) && (
           <div className="space-y-3 border-t border-line px-5 py-4">
+            {sansDeductionArrhes.length > 0 && (
+              <div role="alert" className="avertissement">
+                <p className="font-medium">
+                  {sansDeductionArrhes.length === 1
+                    ? "Arrhes non déduites pour 1 client : aucune ligne mensuelle de quantité 1 d'un prix suffisant."
+                    : `Arrhes non déduites pour ${sansDeductionArrhes.length} clients : aucune ligne mensuelle de quantité 1 d'un prix suffisant.`}
+                </p>
+                <ul className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
+                  {sansDeductionArrhes.map((l) => (
+                    <li key={l.client_id}>
+                      <Link href={`/clients/${l.client_id}`} className="underline">
+                        {l.nom}
+                      </Link>{" "}
+                      <span className="text-xs opacity-80">(−{formatEuros(l.arrhesNonAppliquee ?? 0)} prévus)</span>
+                    </li>
+                  ))}
+                </ul>
+                <p className="mt-2 text-xs">
+                  Leur brouillon est généré sans déduction : ajuster leurs tarifs, ou corriger le brouillon avant
+                  l&apos;envoi.
+                </p>
+              </div>
+            )}
             {nonFactures.length > 0 && (
               <details className="avertissement group">
                 <summary className="cursor-pointer font-medium">

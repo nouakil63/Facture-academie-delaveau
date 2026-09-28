@@ -25,6 +25,8 @@ import type { Client, Parametres, ResultatGeneration } from "@/lib/types";
  *   2. émet et envoie les brouillons mensuels de la période (nouveaux ou déjà existants) des
  *      seuls clients actifs en envoi automatique (`clients.envoi_auto`) ; les autres restent
  *      à relire à la main ;
+ *   (mois à facturer en juillet ou en août : rien n'est généré ni envoyé, facturation manuelle ;
+ *   les mensualités, arrhes déduites, vont de septembre à juin)
  *   3. s'il y a eu au moins un envoi tenté, adresse un récapitulatif aux membres (table
  *      `membres`) et à `parametres.email_copie`. Son échec est journalisé, sans faire échouer
  *      la tâche.
@@ -233,6 +235,20 @@ export async function GET(request: NextRequest) {
   }
 
   const periode = periodeAFacturer(parametres, date);
+  // Mensualités de septembre à juin : juillet et août se facturent à la main uniquement.
+  if (["07", "08"].includes(periode.slice(5, 7))) {
+    return json(200, {
+      ok: true,
+      date,
+      jour,
+      apercu,
+      execute: false,
+      periode,
+      raison: "juillet/août : facturation manuelle",
+      reglages,
+    });
+  }
+
   let resultats: ResultatGeneration[];
   try {
     resultats = await genererBrouillonsMensuels(admin, periode, { apercu });
