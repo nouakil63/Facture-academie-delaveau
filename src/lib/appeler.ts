@@ -9,7 +9,7 @@ import type { ResultatAction } from "@/lib/types";
  */
 
 export const MESSAGE_REQUETE_INTERROMPUE =
-  "La requête n'a pas abouti. Vérifiez la connexion, puis rechargez la page pour voir ce qui a été enregistré.";
+  "La requête n'a pas abouti. Vérifie ta connexion internet, puis recharge la page pour voir ce qui a bien été enregistré.";
 
 /**
  * Attend le résultat d'une Server Action ; une exception devient un échec lisible.

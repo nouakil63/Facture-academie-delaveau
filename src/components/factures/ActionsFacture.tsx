@@ -96,7 +96,7 @@ export function ActionsFacture({
   // Raison affichée sous les boutons quand l'envoi est indisponible.
   const raisonEnvoi = !emailConfigure ? (
     <>
-      L&apos;envoi d&apos;e-mails n&apos;est pas configuré (serveur SMTP).{" "}
+      L&apos;envoi d&apos;e-mails n&apos;est pas encore configuré (serveur SMTP).{" "}
       <Link href="/parametres#envoi-emails" className="font-medium underline">
         Paramètres
       </Link>
@@ -208,7 +208,7 @@ export function ActionsFacture({
       </div>
 
       {statut === "brouillon" && sansLignes && (
-        <p className="aide">Ajoutez au moins une ligne pour pouvoir émettre la facture.</p>
+        <p className="aide">Ajoute au moins une ligne pour pouvoir émettre la facture.</p>
       )}
       {statut !== "annulee" && raisonEnvoi && !(statut === "brouillon" && sansLignes) && (
         <p className="aide flex items-start gap-1.5 text-amber-800">
@@ -217,7 +217,7 @@ export function ActionsFacture({
         </p>
       )}
       {statut === "payee" && (
-        <p className="aide">Pour annuler une facture payée, annulez d&apos;abord le paiement.</p>
+        <p className="aide">Pour annuler une facture payée, annule d&apos;abord le paiement.</p>
       )}
 
       {/* Émettre et envoyer (brouillon) */}
@@ -232,8 +232,8 @@ export function ActionsFacture({
       >
         <p>
           La facture de <strong>{nomClient}</strong> d&apos;un montant de <strong>{montant} TTC</strong> recevra son numéro
-          définitif ({prefixe}-AAAA-NNNN) et ne pourra plus être modifiée. Elle sera ensuite envoyée par e-mail avec le PDF
-          en pièce jointe.
+          définitif ({prefixe}-AAAA-NNNN) et on ne pourra plus la modifier. Elle partira ensuite par e-mail avec le PDF en
+          pièce jointe.
         </p>
         {listeDestinataires}
       </ModaleConfirmation>
@@ -252,8 +252,8 @@ export function ActionsFacture({
           pourra <strong>plus être modifiée ni supprimée</strong> (seulement annulée).
         </p>
         <p className="text-muted">
-          Aucun e-mail n&apos;est envoyé : vous pourrez la télécharger pour la remettre en main propre, ou l&apos;envoyer
-          plus tard.
+          Aucun e-mail ne part : tu pourras la télécharger pour la remettre en main propre, ou l&apos;envoyer plus
+          tard.
         </p>
       </ModaleConfirmation>
 
@@ -269,12 +269,12 @@ export function ActionsFacture({
       >
         <p>
           Le brouillon de <strong>{nomClient}</strong> ({montant}) et ses {nbLignes} ligne{nbLignes > 1 ? "s" : ""} seront
-          supprimés. Cette action est irréversible.
+          supprimés. Pas de retour en arrière possible.
         </p>
         {generationAuto && (
           <p className="avertissement">
-            Ce brouillon mensuel sera recréé à la prochaine génération du mois tant que le client a un tarif récurrent
-            actif. Pour ne pas le facturer ce mois-ci, mettez une date de fin au tarif ou archivez le client.
+            Ce brouillon mensuel reviendra à la prochaine génération du mois tant que le client a un tarif récurrent
+            actif. Pour ne pas le facturer ce mois-ci, mets une date de fin au tarif ou archive le client.
           </p>
         )}
       </ModaleConfirmation>
@@ -292,7 +292,7 @@ export function ActionsFacture({
         onSucces={reussite}
       >
         <p>
-          La facture <strong>{libelle}</strong> ({montant} TTC) sera envoyée par e-mail avec le PDF en pièce jointe.
+          La facture <strong>{libelle}</strong> ({montant} TTC) partira par e-mail avec le PDF en pièce jointe.
           {statut === "payee" && " Son statut « Payée » ne change pas."}
           {statut === "envoyee" && envoyeeLe && ` Dernier envoi le ${formatDate(envoyeeLe)}.`}
         </p>
@@ -327,7 +327,7 @@ export function ActionsFacture({
       >
         <p>
           Le paiement enregistré sera effacé et la facture <strong>{libelle}</strong> repassera au statut «{" "}
-          {LIBELLES_STATUT[envoyeeLe ? "envoyee" : "emise"]} ». À utiliser en cas d&apos;erreur de saisie ou de paiement
+          {LIBELLES_STATUT[envoyeeLe ? "envoyee" : "emise"]} ». À faire en cas d&apos;erreur de saisie ou de paiement
           rejeté.
         </p>
       </ModaleConfirmation>
@@ -358,8 +358,8 @@ export function ActionsFacture({
       >
         <p>
           Un nouveau brouillon sera créé pour <strong>{nomClient}</strong> avec les mêmes lignes, le même objet et la même
-          période. Vous pourrez le modifier avant de l&apos;émettre. La facture <strong>{libelle}</strong> n&apos;est pas
-          modifiée.
+          période. Tu pourras le modifier avant de l&apos;émettre. La facture <strong>{libelle}</strong>, elle, ne
+          change pas.
         </p>
       </ModaleConfirmation>
     </section>
@@ -498,13 +498,13 @@ function FormulaireAnnulation({
       <input type="hidden" name="facture_id" value={factureId} />
       <div className="space-y-2 text-sm">
         <p>
-          La facture <strong>{libelle}</strong> ({montant} TTC) passera au statut « Annulée ». Cette opération est{" "}
-          <strong>définitive</strong>.
+          La facture <strong>{libelle}</strong> ({montant} TTC) passera au statut « Annulée ». Pas de retour en
+          arrière : c&apos;est <strong>définitif</strong>.
         </p>
         <p className="text-muted">
-          Une facture émise ne peut pas être supprimée : elle reste dans la numérotation continue, marquée comme annulée,
-          conformément aux règles de facturation. Pour la remplacer, dupliquez-la ensuite en brouillon, corrigez-la puis
-          émettez-la.
+          On ne peut pas supprimer une facture émise : les règles de facturation nous obligent à la garder dans notre
+          numérotation continue, marquée comme annulée. Pour la remplacer, duplique-la ensuite en brouillon, corrige-la
+          puis émets-la.
         </p>
       </div>
       <div>

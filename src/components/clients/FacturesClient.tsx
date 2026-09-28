@@ -61,7 +61,7 @@ export function FacturesClient({
             Nouvelle facture
           </Link>
         ) : (
-          <button type="button" className="btn-secondaire" disabled title="Réactivez le client pour le facturer">
+          <button type="button" className="btn-secondaire" disabled title="Réactive le client pour pouvoir le facturer">
             <IconePlus />
             Nouvelle facture
           </button>
@@ -75,8 +75,8 @@ export function FacturesClient({
           </span>
           <p className="mt-3 font-medium text-ink">Ce client n&apos;a pas encore été facturé</p>
           <p className="mt-1 max-w-md text-sm text-muted">
-            Ses factures mensuelles seront créées lors de la facturation du mois, à partir des tarifs ci-dessus. Vous
-            pouvez aussi créer une facture ponctuelle.
+            Ses factures mensuelles se créeront à la facturation du mois, à partir des tarifs ci-dessus. Tu peux
+            aussi lui faire une facture ponctuelle.
           </p>
         </div>
       ) : (

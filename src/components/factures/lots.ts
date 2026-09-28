@@ -4,7 +4,7 @@ import type { ResultatAction } from "@/lib/types";
 import { LOT_ENVOI, syntheseEnvoi, type ResultatEnvoiFacture } from "./outils";
 
 export const MESSAGE_ENVOI_INTERROMPU =
-  "Envoi interrompu : certaines factures ont pu partir. La liste a été rechargée : vérifiez leur statut avant de relancer.";
+  "Envoi interrompu : certaines factures ont pu partir. La liste a été rechargée : vérifie leur statut avant de relancer.";
 
 /**
  * Envoi groupé côté navigateur : appelle `envoyer` (une Server Action) par lots successifs de

@@ -22,7 +22,7 @@ type ErreurSupabase = { code?: string; message: string; details?: string | null 
 
 const ERREUR_RESEAU: ResultatAction = {
   ok: false,
-  erreur: "Impossible de joindre la base de données. Vérifiez la connexion et réessayez.",
+  erreur: "Impossible de joindre la base de données. Vérifie ta connexion, puis réessaie.",
 };
 
 const PRIX_MAX_CENTIMES = 100_000_000; // 1 000 000 €
@@ -32,24 +32,24 @@ function traduireErreur(erreur: ErreurSupabase, siCleEtrangere?: string): string
   const texte = `${erreur.message} ${erreur.details ?? ""}`;
   switch (erreur.code) {
     case "23503":
-      return siCleEtrangere ?? "Opération impossible : cette prestation est liée à d'autres données.";
+      return siCleEtrangere ?? "Impossible : cette prestation est encore utilisée ailleurs (tarifs, factures…).";
     case "23514":
       if (texte.includes("libelle")) return "Le libellé est obligatoire.";
       if (texte.includes("prix_unitaire")) return "Le prix ne peut pas être négatif.";
-      return "Les données saisies ne respectent pas les règles de la base.";
+      return "Une valeur saisie n'est pas acceptée par la base : vérifie les champs.";
     case "23502":
-      return "Un champ obligatoire est manquant.";
+      return "Il manque un champ obligatoire.";
     case "22003":
-      return "Une valeur numérique est trop grande.";
+      return "Un nombre saisi est trop grand.";
     case "22P02":
-      return "Une valeur saisie n'a pas le bon format.";
+      return "Une valeur saisie n'a pas le bon format : vérifie les champs.";
     case "42501":
-      return "Accès refusé : votre compte n'est pas autorisé à modifier le catalogue.";
+      return "Accès refusé : ton adresse n'est pas dans la table membres de Supabase.";
     case "P0001":
       return erreur.message;
     case "PGRST301":
     case "PGRST303":
-      return "Votre session a expiré : reconnectez-vous.";
+      return "Ta session a expiré : reconnecte-toi.";
     default:
       return `Erreur de la base de données : ${erreur.message}`;
   }
@@ -112,10 +112,10 @@ const schemaPrestation = z
 
     let prix = 0;
     if (p.prix === "") {
-      erreur("Le prix est obligatoire (0 pour une prestation gratuite).");
+      erreur("Indique un prix (0 pour une prestation gratuite).");
     } else {
       const centimes = parseEurosEnCentimes(p.prix);
-      if (centimes === null) erreur("Prix invalide : saisissez un montant en euros (ex. 450 ou 450,50).");
+      if (centimes === null) erreur("Prix invalide : saisis un montant en euros (ex. 450 ou 450,50).");
       else if (centimes > PRIX_MAX_CENTIMES) erreur("Prix trop élevé (1 000 000 € au maximum).");
       else prix = centimes;
     }
@@ -123,10 +123,10 @@ const schemaPrestation = z
     let unite = p.unite;
     if (p.unite === UNITE_AUTRE) {
       unite = p.unite_autre.replace(/^\/\s*/, "").toLowerCase();
-      if (unite === "") erreur("Précisez l'unité (ex. stage, semaine, concours).");
+      if (unite === "") erreur("Précise l'unité (ex. stage, semaine, concours).");
       else if (unite.length > LONGUEUR_MAX_UNITE) erreur(`Unité : ${LONGUEUR_MAX_UNITE} caractères au maximum.`);
     } else if (!estUnitePredefinie(p.unite)) {
-      erreur("Choisissez une unité dans la liste.");
+      erreur("Choisis une unité dans la liste.");
     }
 
     let ordre: number | null = null;
@@ -183,7 +183,7 @@ export async function enregistrerPrestation(
         .select("id");
       if (error) return { ok: false, erreur: traduireErreur(error) };
       if (!data || data.length === 0) {
-        return { ok: false, erreur: "Prestation introuvable : elle a peut-être été supprimée." };
+        return { ok: false, erreur: "Prestation introuvable : elle a peut-être été supprimée entre-temps." };
       }
     } else {
       let position = ordre;
@@ -216,7 +216,7 @@ export async function changerArchivagePrestation(prestationId: string, archiver:
   const { supabase } = await exigerUtilisateur();
 
   const id = schemaId.safeParse(prestationId);
-  if (!id.success || typeof archiver !== "boolean") return { ok: false, erreur: "Requête invalide." };
+  if (!id.success || typeof archiver !== "boolean") return { ok: false, erreur: "Action impossible : recharge la page et réessaie." };
 
   try {
     const { data, error } = await supabase
@@ -250,7 +250,7 @@ export async function supprimerPrestation(prestationId: string): Promise<Resulta
   const refus = (clients: number | null) =>
     `Cette prestation ne peut pas être supprimée : elle figure dans les tarifs ${
       clients ? `de ${pluriel(clients, "client")}` : "de clients"
-    }. Archivez-la plutôt : elle ne sera plus proposée pour de nouveaux tarifs, et les tarifs existants resteront inchangés.`;
+    }. Archive-la plutôt : elle ne sera plus proposée pour de nouveaux tarifs, et les tarifs existants ne bougeront pas.`;
 
   try {
     const u = await utilisations(supabase, id.data);

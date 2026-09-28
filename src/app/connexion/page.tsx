@@ -22,14 +22,14 @@ export default async function PageConnexion({
 
         <div className="carte carte-corps sm:p-8">
           <h1 className="titre-page">Connexion</h1>
-          <p className="mt-1 mb-6 text-sm text-muted">Espace de facturation de l&apos;Académie Delaveau et de l&apos;Académie Espoir.</p>
+          <p className="mt-1 mb-6 text-sm text-muted">Notre espace de facturation, pour l&apos;Académie Delaveau et l&apos;Académie Espoir.</p>
           <FormulaireConnexion suite={cheminSuite} />
         </div>
 
         <p className="mt-6 text-center text-xs text-muted">
-          Accès réservé aux membres de l&apos;académie.
+          Accès réservé à nous deux.
           <br />
-          Pour obtenir un compte, adressez-vous à l&apos;administrateur de l&apos;application.
+          Pour ouvrir un compte, crée l&apos;utilisateur dans Supabase et ajoute son e-mail à la table membres.
         </p>
       </div>
     </main>

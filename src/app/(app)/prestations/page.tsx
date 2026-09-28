@@ -56,7 +56,7 @@ export default async function PagePrestations(props: PageProps<"/prestations">) 
       <div className="space-y-6">
         <h1 className="titre-page">Prestations</h1>
         <p role="alert" className="erreur">
-          Impossible de charger le catalogue : {erreur.message}
+          Impossible de charger le catalogue ({erreur.message}). Recharge la page dans un instant.
         </p>
       </div>
     );
@@ -83,7 +83,7 @@ export default async function PagePrestations(props: PageProps<"/prestations">) 
     <div>
       <h1 className="titre-page">Prestations</h1>
       <p className="mt-1 text-sm text-muted">
-        Catalogue commun à toutes les académies · {pluriel(nbActives, "prestation active", "prestations actives")}
+        Notre catalogue, commun aux deux académies · {pluriel(nbActives, "prestation active", "prestations actives")}
         {nbArchivees > 0 && (
           <>
             {" · "}
@@ -115,12 +115,12 @@ export default async function PagePrestations(props: PageProps<"/prestations">) 
         <div className="space-y-1">
           <p>
             <span className="font-medium text-ink">Prix catalogue et prix personnalisé.</span> Le prix du catalogue
-            s&apos;applique à tous les clients, quelle que soit leur académie, sauf si un prix personnalisé est saisi
-            dans les tarifs de la fiche client. Modifier un prix ici s&apos;applique aux prochaines factures ; les
-            factures déjà créées, brouillons compris, ne sont pas modifiées.
+            vaut pour tous nos clients, quelle que soit leur académie, sauf si tu saisis un prix personnalisé dans les
+            tarifs de sa fiche. Si tu changes un prix ici, il s&apos;applique aux prochaines factures ; celles déjà
+            créées, brouillons compris, ne bougent pas.
           </p>
           <p>
-            Une prestation utilisée par des clients ne peut pas être supprimée : archivez-la pour ne plus la proposer.
+            Une prestation utilisée par des clients ne peut pas être supprimée : archive-la pour ne plus la proposer.
           </p>
         </div>
       </aside>

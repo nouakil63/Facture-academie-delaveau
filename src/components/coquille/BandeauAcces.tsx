@@ -12,8 +12,9 @@ export function BandeauAcces({ etat, email }: { etat: EtatAcces; email: string }
         <div className="space-y-1">
           <p className="font-semibold">La base de données ne répond pas correctement</p>
           <p>
-            Impossible de vérifier les droits de votre compte. Vérifiez que les migrations Supabase ont bien été
-            appliquées (voir le README), puis rechargez la page.
+            Impossible de vérifier les droits de ton compte. Vérifie que toutes les migrations du dossier{" "}
+            <code className="font-mono">supabase/migrations</code> ont été appliquées dans Supabase, puis recharge la
+            page.
           </p>
         </div>
       </div>
@@ -29,11 +30,11 @@ export function BandeauAcces({ etat, email }: { etat: EtatAcces; email: string }
         <p className="font-semibold">Compte non autorisé</p>
         <p>
           Le compte <strong className="break-all">{email || "actuel"}</strong> est bien connecté, mais son adresse ne
-          figure pas dans la table <code className="font-mono">membres</code> : aucune donnée n&apos;est accessible.
+          figure pas dans la table <code className="font-mono">membres</code> : tu ne vois donc aucune donnée.
         </p>
         <p>
-          Pour l&apos;autoriser, ajoutez son e-mail à la table <code className="font-mono">membres</code> depuis
-          l&apos;éditeur SQL de Supabase (voir le README), puis rechargez la page :
+          Pour l&apos;autoriser, lance cette requête dans l&apos;éditeur SQL de Supabase (elle ajoute l&apos;adresse à
+          la table <code className="font-mono">membres</code>), puis recharge la page :
         </p>
         <pre className="overflow-x-auto rounded-md border border-amber-200 bg-white/70 px-3 py-2 font-mono text-xs">
           <code>{`insert into public.membres (email) values ('${adresse}');`}</code>

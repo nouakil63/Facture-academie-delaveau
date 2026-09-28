@@ -95,8 +95,8 @@ export default async function PageClients(props: PageProps<"/clients">) {
         <p className="avertissement flex items-center gap-2">
           <IconeAlerte className="size-4 text-amber-600" />
           {nbSansEmail === 1
-            ? "1 client actif n'a pas d'adresse e-mail : ses factures ne pourront pas être envoyées automatiquement."
-            : `${nbSansEmail} clients actifs n'ont pas d'adresse e-mail : leurs factures ne pourront pas être envoyées automatiquement.`}
+            ? "1 client actif n'a pas d'adresse e-mail : on ne pourra pas lui envoyer ses factures par e-mail."
+            : `${nbSansEmail} clients actifs n'ont pas d'adresse e-mail : on ne pourra pas leur envoyer leurs factures par e-mail.`}
         </p>
       )}
 
@@ -109,8 +109,8 @@ export default async function PageClients(props: PageProps<"/clients">) {
             <>
               <p className="mt-4 font-medium text-ink">Aucun client ne correspond à « {q} »</p>
               <p className="mt-1 text-sm text-muted">
-                Vérifiez l&apos;orthographe ou cherchez par cavalier, e-mail ou raison sociale.
-                {academieFiltree ? ` La recherche est limitée à ${avecArticle(academieFiltree.nom)}.` : ""}
+                Vérifie l&apos;orthographe ou cherche par cavalier, e-mail ou raison sociale.
+                {academieFiltree ? ` On ne cherche ici que dans ${avecArticle(academieFiltree.nom)}.` : ""}
               </p>
               <Link href={archives ? "/clients?archives=1" : "/clients"} className="btn-secondaire mt-5">
                 Effacer la recherche
@@ -122,8 +122,8 @@ export default async function PageClients(props: PageProps<"/clients">) {
                 {academieFiltree ? `Aucun client pour ${avecArticle(academieFiltree.nom)}` : "Aucun client pour l'instant"}
               </p>
               <p className="mt-1 max-w-md text-sm text-muted">
-                Créez la fiche de chaque payeur (parent, entreprise, sponsor), puis ajoutez-lui ses tarifs : la facture
-                mensuelle sera préparée automatiquement.
+                Crée la fiche de chaque payeur (parent, entreprise, sponsor), puis ajoute-lui ses tarifs : sa facture
+                mensuelle se préparera toute seule.
               </p>
               <Link href="/clients/nouveau" className="btn-primaire mt-5">
                 <IconePlus />
@@ -272,7 +272,7 @@ function ErreurChargement({ message }: { message: string }) {
 
 function SansEmail() {
   return (
-    <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-700" title="Factures non envoyables par e-mail">
+    <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-700" title="On ne peut pas lui envoyer ses factures par e-mail">
       <IconeAlerte className="size-3.5" />
       Aucun e-mail
     </span>

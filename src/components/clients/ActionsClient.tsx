@@ -79,10 +79,10 @@ export function ActionsClient({
         onSucces={(r) => r.message && setMessage({ ok: true, texte: r.message })}
       >
         <p>
-          <strong>{nom}</strong> ne sera plus inclus dans la facturation mensuelle et n&apos;apparaîtra plus dans la
-          liste des clients (sauf en affichant les archivés).
+          On ne facturera plus <strong>{nom}</strong> chaque mois, et il disparaîtra de la liste des clients (sauf si
+          tu affiches les archivés).
         </p>
-        <p className="text-muted">Ses factures et ses tarifs sont conservés. Vous pourrez le réactiver à tout moment.</p>
+        <p className="text-muted">On garde ses factures et ses tarifs. Tu pourras le réactiver à tout moment.</p>
       </ModaleConfirmation>
 
       {supprimable ? (
@@ -95,7 +95,7 @@ export function ActionsClient({
           onConfirmer={() => supprimerClient(clientId)}
         >
           <p>
-            La fiche de <strong>{nom}</strong> et tous ses tarifs seront supprimés. Cette action est irréversible.
+            La fiche de <strong>{nom}</strong> et tous ses tarifs seront supprimés. Pas de retour en arrière possible.
           </p>
         </ModaleConfirmation>
       ) : (
@@ -108,13 +108,13 @@ export function ActionsClient({
           onSucces={(r) => r.message && setMessage({ ok: true, texte: r.message })}
         >
           <p>
-            <strong>{nom}</strong> a {nbFactures} facture{nbFactures > 1 ? "s" : ""}. Les factures doivent être
-            conservées : un client facturé ne peut pas être supprimé.
+            <strong>{nom}</strong> a {nbFactures} facture{nbFactures > 1 ? "s" : ""}. On doit conserver nos factures :
+            un client déjà facturé ne peut pas être supprimé.
           </p>
           <p className="text-muted">
             {actif
-              ? "Archivez-le pour le retirer de la liste et de la facturation mensuelle, tout en gardant son historique."
-              : "Ce client est déjà archivé : il n'apparaît plus dans la liste ni dans la facturation mensuelle."}
+              ? "Archive-le pour le retirer de la liste et de la facturation mensuelle : on garde son historique."
+              : "Il est déjà archivé : il n'apparaît plus ni dans la liste ni dans la facturation mensuelle."}
           </p>
         </ModaleConfirmation>
       )}

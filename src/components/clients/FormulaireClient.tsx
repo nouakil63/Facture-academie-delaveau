@@ -67,8 +67,8 @@ export function FormulaireClient({
               </select>
               <p className="aide">
                 {creation
-                  ? "Groupe de l'élève, rappelé sur ses factures. Modifiable à tout moment."
-                  : "Modifiable à tout moment. Les factures déjà émises gardent l'académie d'origine."}
+                  ? "Le groupe de l'élève, rappelé sur ses factures. Tu pourras le changer à tout moment."
+                  : "Tu peux la changer à tout moment : ses factures déjà émises gardent l'académie d'origine."}
               </p>
             </div>
 
@@ -161,7 +161,7 @@ export function FormulaireClient({
                     defaultValue={client?.raison_sociale ?? ""}
                     className="champ"
                   />
-                  <p className="aide">Nom imprimé sur la facture ; le nom et le prénom désignent le contact.</p>
+                  <p className="aide">C&apos;est ce nom qui figure sur la facture ; le nom et le prénom, c&apos;est notre contact.</p>
                 </div>
                 <div className="sm:col-span-3">
                   <label htmlFor="siret" className="label">
@@ -210,7 +210,7 @@ export function FormulaireClient({
                 autoComplete="off"
                 className="champ"
               />
-              <p className="aide">Adresse à laquelle les factures sont envoyées.</p>
+              <p className="aide">On lui envoie ses factures à cette adresse.</p>
             </div>
             <div>
               <label htmlFor="telephone" className="label">
@@ -238,7 +238,7 @@ export function FormulaireClient({
                 autoComplete="off"
                 className="champ"
               />
-              <p className="aide">Séparez les adresses par des virgules. Elles reçoivent aussi chaque facture.</p>
+              <p className="aide">Sépare les adresses par des virgules. Elles reçoivent aussi chaque facture.</p>
             </div>
           </div>
         </Section>
@@ -319,7 +319,7 @@ export function FormulaireClient({
                 placeholder="Ex. Léa et Hugo Martin"
                 className="champ"
               />
-              <p className="aide">Imprimé sur chaque facture de ce client.</p>
+              <p className="aide">Figure sur chacune de ses factures.</p>
             </div>
             <div>
               <label htmlFor="notes" className="label">
@@ -333,7 +333,7 @@ export function FormulaireClient({
                 defaultValue={client?.notes ?? ""}
                 className="champ"
               />
-              <p className="aide">Visibles uniquement dans l&apos;application, jamais imprimées.</p>
+              <p className="aide">Pour nous seulement : jamais imprimées sur les factures.</p>
             </div>
           </div>
         </Section>

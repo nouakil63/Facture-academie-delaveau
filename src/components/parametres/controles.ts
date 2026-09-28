@@ -39,7 +39,7 @@ export function erreurIban(saisie: string): string | null {
     const valeur = c >= "A" && c <= "Z" ? String(c.charCodeAt(0) - 55) : c;
     for (const chiffre of valeur) reste = (reste * 10 + Number(chiffre)) % 97;
   }
-  if (reste !== 1) return "IBAN invalide : la clé de contrôle ne correspond pas. Vérifiez chaque caractère.";
+  if (reste !== 1) return "IBAN invalide : la clé de contrôle ne correspond pas. Relis chaque caractère avec le RIB.";
   return null;
 }
 
@@ -75,7 +75,7 @@ export function chiffresSeuls(saisie: string): string {
 export function erreurSiren(saisie: string): string | null {
   const siren = chiffresSeuls(saisie);
   if (!/^\d{9}$/.test(siren)) return "SIREN invalide : 9 chiffres attendus.";
-  if (!luhnValide(siren)) return "SIREN invalide : la clé de contrôle ne correspond pas. Vérifiez chaque chiffre.";
+  if (!luhnValide(siren)) return "SIREN invalide : la clé de contrôle ne correspond pas. Relis chaque chiffre.";
   return null;
 }
 
@@ -85,7 +85,7 @@ export function erreurSiret(saisie: string): string | null {
   if (!/^\d{14}$/.test(siret)) return "SIRET invalide : 14 chiffres attendus (SIREN + 5 chiffres de l'établissement).";
   // Exception connue : les établissements de La Poste (SIREN 356 000 000) ne suivent pas la clé de Luhn.
   if (!siret.startsWith("356000000") && !luhnValide(siret)) {
-    return "SIRET invalide : la clé de contrôle ne correspond pas. Vérifiez chaque chiffre.";
+    return "SIRET invalide : la clé de contrôle ne correspond pas. Relis chaque chiffre.";
   }
   return null;
 }

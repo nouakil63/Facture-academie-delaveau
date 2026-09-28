@@ -32,7 +32,7 @@ export default async function PageNouveauClient() {
         </Link>
         <h1 className="titre-page mt-2">Nouveau client</h1>
         <p className="mt-1 text-sm text-muted">
-          Le client est le payeur de la facture (parent, entreprise, sponsor). Vous ajouterez ses tarifs juste après.
+          Le client, c&apos;est celui qui paie la facture (parent, entreprise, sponsor). Tu ajouteras ses tarifs juste après.
         </p>
       </div>
 
@@ -42,7 +42,7 @@ export default async function PageNouveauClient() {
         </p>
       ) : academies.length === 0 ? (
         <p className="avertissement">
-          Aucune académie active : activez l&apos;Académie Delaveau ou l&apos;Académie Espoir dans{" "}
+          Aucune académie active : active l&apos;Académie Delaveau ou l&apos;Académie Espoir dans{" "}
           <Link href="/parametres#academies" className="font-medium underline">
             Paramètres
           </Link>{" "}

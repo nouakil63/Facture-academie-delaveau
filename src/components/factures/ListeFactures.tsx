@@ -146,7 +146,7 @@ export function ListeFactures({
               disabled={tropNombreuses || !envoiPossible}
               title={
                 !envoiPossible
-                  ? "L'envoi d'e-mails n'est pas configuré (Paramètres)"
+                  ? "L'envoi d'e-mails n'est pas encore configuré (Paramètres)"
                   : tropNombreuses
                     ? `${MAX_LOT} factures au maximum par envoi`
                     : undefined
@@ -160,7 +160,7 @@ export function ListeFactures({
       )}
       {choisies.length > 0 && !envoiPossible && (
         <p className="avertissement">
-          L&apos;envoi d&apos;e-mails n&apos;est pas configuré (serveur SMTP) : l&apos;envoi groupé est indisponible.{" "}
+          L&apos;envoi d&apos;e-mails n&apos;est pas encore configuré (serveur SMTP) : pas d&apos;envoi groupé pour l&apos;instant.{" "}
           <Link href="/parametres#envoi-emails" className="font-medium underline">
             Paramètres
           </Link>
@@ -168,7 +168,7 @@ export function ListeFactures({
       )}
       {tropNombreuses && (
         <p className="avertissement">
-          {MAX_LOT} factures au maximum par envoi groupé : réduisez la sélection et procédez en plusieurs fois.
+          {MAX_LOT} factures au maximum par envoi groupé : réduis la sélection et fais-le en plusieurs fois.
         </p>
       )}
 
@@ -211,7 +211,7 @@ export function ListeFactures({
                         aria-label={`Sélectionner ${libelleNumero(f.numero)} – ${nomClientFacture(f)}`}
                         checked={choisie}
                         disabled={annulee}
-                        title={annulee ? "Facture annulée : ne peut plus être envoyée" : undefined}
+                        title={annulee ? "Facture annulée : on ne peut plus l'envoyer" : undefined}
                         onChange={() => basculer(f.id)}
                       />
                     </td>
@@ -385,7 +385,7 @@ export function ListeFactures({
           </p>
         )}
         {choisies.length > 10 && (
-          <p className="text-xs text-muted">L&apos;envoi est séquentiel : comptez quelques secondes par facture.</p>
+          <p className="text-xs text-muted">Les factures partent une par une : compte quelques secondes par facture.</p>
         )}
       </ModaleConfirmation>
     </div>

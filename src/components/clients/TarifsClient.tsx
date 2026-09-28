@@ -71,7 +71,7 @@ export function TarifsClient({
           <h2 id="titre-tarifs" className="titre-section">
             Tarifs appliqués
           </h2>
-          <p className="text-sm text-muted">Lignes reprises dans la facture mensuelle, dans cet ordre.</p>
+          <p className="text-sm text-muted">Les lignes de sa facture mensuelle, dans cet ordre.</p>
         </div>
         <button type="button" className="btn-primaire" onClick={() => ouvrir("nouveau")}>
           <IconePlus />
@@ -91,16 +91,16 @@ export function TarifsClient({
         <div className="px-5 py-10 text-center">
           <p className="font-medium text-ink">Aucun tarif pour ce client</p>
           <p className="mx-auto mt-1 max-w-md text-sm text-muted">
-            Ajoutez les prestations facturées chaque mois (pension, coaching, scolarité…), avec un prix
-            personnalisé si besoin. Elles alimenteront automatiquement la facture mensuelle.
+            Ajoute ce qu&apos;on lui facture chaque mois (pension, coaching, scolarité…), avec un prix personnalisé
+            si besoin. Ces lignes rempliront toutes seules sa facture mensuelle.
           </p>
           {prestations.length === 0 && (
             <p className="mx-auto mt-3 max-w-md text-xs text-muted">
-              Le catalogue de prestations est vide :{" "}
+              Notre catalogue est vide :{" "}
               <Link href="/prestations" className="btn-lien text-xs">
-                créer des prestations
+                crée des prestations
               </Link>{" "}
-              ou utiliser une ligne libre.
+              ou utilise une ligne libre.
             </p>
           )}
           <button type="button" className="btn-secondaire mt-5" onClick={() => ouvrir("nouveau")}>
@@ -275,11 +275,11 @@ export function TarifsClient({
       >
         <p>
           La ligne <strong>{aSupprimer ? decrireLigne(aSupprimer, periode).libelle : ""}</strong> ne sera plus
-          proposée pour ce client.
+          facturée à ce client.
         </p>
         <p className="text-muted">
-          Les factures déjà créées ne sont pas modifiées. Pour suspendre la ligne sans la perdre, modifiez-la et
-          décochez « Ligne active ».
+          Ses factures déjà créées ne bougent pas. Pour suspendre la ligne sans la perdre, modifie-la et décoche
+          « Ligne active ».
         </p>
       </ModaleConfirmation>
     </section>

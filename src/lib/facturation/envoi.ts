@@ -47,7 +47,7 @@ export interface OptionsEnvoi {
   exigerBrouillon?: boolean;
 }
 
-const DEJA_EMISE = "Ignorée : déjà émise entre-temps. Si elle est restée « Émise », envoyez-la depuis sa fiche.";
+const DEJA_EMISE = "Ignorée : elle a été émise entre-temps. Si elle est restée « Émise », envoie-la depuis sa fiche.";
 
 function messageDe(e: unknown): string {
   if (e instanceof Error) return e.message;
@@ -108,12 +108,12 @@ export async function envoyerFacture(
   } catch (e) {
     return { ok: false, erreur: `Chargement de la facture impossible : ${messageDe(e)}` };
   }
-  if (!donnees) return { ok: false, erreur: "Facture introuvable : elle a peut-être été supprimée." };
+  if (!donnees) return { ok: false, erreur: "Facture introuvable : elle a peut-être été supprimée entre-temps." };
 
   const statutInitial = donnees.facture.statut;
   if (statutInitial === "annulee") {
     const numero = donnees.facture.numero ? ` ${donnees.facture.numero}` : "";
-    return { ok: false, erreur: `La facture${numero} est annulée : elle ne peut pas être envoyée.` };
+    return { ok: false, erreur: `La facture${numero} est annulée : on ne peut plus l'envoyer.` };
   }
   if (options.exigerBrouillon && statutInitial !== "brouillon") {
     return { ok: false, erreur: DEJA_EMISE, ignoree: true };
@@ -123,13 +123,13 @@ export async function envoyerFacture(
   if (destinatairesFacture(donnees.client).length === 0) {
     return {
       ok: false,
-      erreur: `Aucune adresse e-mail pour ${nomClient(donnees.client)} : complétez la fiche client avant d'envoyer la facture.`,
+      erreur: `Aucune adresse e-mail pour ${nomClient(donnees.client)} : complète sa fiche client avant d'envoyer la facture.`,
     };
   }
   if (!emailConfigure()) {
     return {
       ok: false,
-      erreur: "L'envoi d'e-mails n'est pas configuré (variables SMTP manquantes) : voir les Paramètres.",
+      erreur: "L'envoi d'e-mails n'est pas encore configuré (variables SMTP manquantes) : tout est expliqué dans les Paramètres.",
     };
   }
 
@@ -145,7 +145,7 @@ export async function envoyerFacture(
     if (donnees.lignes.length === 0) {
       return {
         ok: false,
-        erreur: "La facture ne contient aucune ligne : ajoutez au moins une ligne avant de l'envoyer.",
+        erreur: "La facture n'a aucune ligne : ajoutes-en au moins une avant de l'envoyer.",
       };
     }
     try {
@@ -237,7 +237,7 @@ export async function envoyerFacture(
   if (!principaleAcceptee) {
     return {
       ok: false,
-      erreur: `Adresse principale refusée par le serveur d'envoi (${destinataires[0]}) : la facture n'a été reçue qu'en copie (${acceptees.join(", ")}). Corrigez l'adresse sur la fiche client puis renvoyez la facture.`,
+      erreur: `Adresse principale refusée par le serveur d'envoi (${destinataires[0]}) : la facture n'a été reçue qu'en copie (${acceptees.join(", ")}). Corrige l'adresse sur la fiche client, puis renvoie la facture.`,
     };
   }
 

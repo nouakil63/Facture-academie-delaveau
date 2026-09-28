@@ -104,11 +104,11 @@ export function FormulaireTarif({
       {mode === "catalogue" ? (
         prestations.length === 0 ? (
           <p className="avertissement">
-            Le catalogue ne contient aucune prestation active. Créez-en dans{" "}
+            Notre catalogue n&apos;a aucune prestation active. Crées-en dans{" "}
             <Link href="/prestations" className="font-medium underline">
               Prestations
             </Link>{" "}
-            ou ajoutez une ligne libre.
+            ou ajoute une ligne libre.
           </p>
         ) : (
           <div>
@@ -157,7 +157,7 @@ export function FormulaireTarif({
             placeholder={prestation?.libelle ?? (mode === "libre" ? "Ex. Participation aux frais de concours" : "")}
             className="champ"
           />
-          {mode === "catalogue" && <p className="aide">Laisser vide pour reprendre le libellé du catalogue.</p>}
+          {mode === "catalogue" && <p className="aide">Laisse vide pour reprendre le libellé du catalogue.</p>}
         </div>
 
         <div>
@@ -186,8 +186,8 @@ export function FormulaireTarif({
               ? prestation
                 ? personnalise
                   ? `Tarif personnalisé (catalogue : ${formatEuros(prestation.prix_unitaire_centimes)}).`
-                  : "Laisser vide pour suivre le prix du catalogue, y compris s'il évolue."
-                : "Laisser vide pour appliquer le prix du catalogue."
+                  : "Laisse vide pour suivre le prix du catalogue, même s'il change."
+                : "Laisse vide pour appliquer le prix du catalogue."
               : "Montant hors taxes."}
           </p>
         </div>
@@ -242,7 +242,7 @@ export function FormulaireTarif({
           <input id="date_fin" name="date_fin" type="date" defaultValue={tarif?.date_fin ?? ""} className="champ" />
         </div>
         <p className="aide -mt-2 sm:col-span-2">
-          Dates facultatives : une ligne mensuelle est facturée pour chaque mois qui chevauche sa période de validité.
+          Dates facultatives : on facture une ligne mensuelle pour chaque mois qui touche sa période de validité.
         </p>
       </div>
 
@@ -258,7 +258,7 @@ export function FormulaireTarif({
           <span>
             <span className="font-medium">Facturer chaque mois</span>
             <span className="block text-xs text-muted">
-              Décoché : ligne ponctuelle, non reprise dans la facturation mensuelle automatique.
+              Décoché : ligne ponctuelle, qu&apos;on ne reprend pas dans la facturation mensuelle.
             </span>
           </span>
         </label>
@@ -271,7 +271,7 @@ export function FormulaireTarif({
           />
           <span>
             <span className="font-medium">Ligne active</span>
-            <span className="block text-xs text-muted">Décoché : ligne conservée mais suspendue.</span>
+            <span className="block text-xs text-muted">Décoché : on garde la ligne, mais on ne la facture plus.</span>
           </span>
         </label>
       </div>

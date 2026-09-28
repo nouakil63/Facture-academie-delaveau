@@ -222,11 +222,11 @@ export default async function PageFacturationMensuelle(props: PageProps<"/factur
                       , puis <strong className="text-ink">émis et envoyés automatiquement</strong>.
                     </>
                   ) : (
-                    <>, à relire et envoyer depuis cette page.</>
+                    <>, qu&apos;on relit et qu&apos;on envoie depuis cette page.</>
                   )}
                 </>
               ) : (
-                <>génération automatique désactivée : utilisez cette page chaque mois (factures {moisFacture}).</>
+                <>génération automatique désactivée : on passe par cette page chaque mois (factures {moisFacture}).</>
               )}
             </p>
           </div>
@@ -240,11 +240,12 @@ export default async function PageFacturationMensuelle(props: PageProps<"/factur
         <p className="avertissement flex items-start gap-2">
           <IconeAlerte className="mt-0.5 size-4 text-amber-600" />
           <span>
-            L&apos;envoi d&apos;e-mails n&apos;est pas configuré (serveur SMTP) : les factures pourront être générées mais
-            pas envoyées.{" "}
+            L&apos;envoi d&apos;e-mails n&apos;est pas encore configuré (serveur SMTP) : tu peux générer les factures, mais
+            pas les envoyer. Ça se règle dans les{" "}
             <Link href="/parametres#envoi-emails" className="font-medium underline">
               Paramètres
             </Link>
+            .
           </span>
         </p>
       )}
@@ -266,7 +267,7 @@ export default async function PageFacturationMensuelle(props: PageProps<"/factur
             )}
           </div>
           <p className="mt-1 text-xs text-muted">
-            Un brouillon par client actif ayant au moins un tarif mensuel valide sur le mois. Objet : «{" "}
+            Un brouillon pour chaque client actif qui a au moins un tarif mensuel valide sur le mois. Objet : «{" "}
             {parametres.objet_facture_mensuelle} – {libelleMois} ».
           </p>
         </div>
@@ -279,7 +280,7 @@ export default async function PageFacturationMensuelle(props: PageProps<"/factur
           <div className="px-5 py-10 text-center">
             <p className="font-medium text-ink">Aucun client à facturer pour {libelleMois}</p>
             <p className="mx-auto mt-1 max-w-md text-sm text-muted">
-              Ajoutez des tarifs mensuels (récurrents) sur les fiches des clients
+              Ajoute des tarifs mensuels (récurrents) sur les fiches de nos clients
               {academie ? ` de ${avecArticle(academie.nom)}` : ""} : ils apparaîtront ici.
             </p>
             <Link href="/clients" className="btn-secondaire mt-5">
@@ -392,8 +393,8 @@ export default async function PageFacturationMensuelle(props: PageProps<"/factur
               <details className="avertissement group">
                 <summary className="cursor-pointer font-medium">
                   {nonFactures.length === 1
-                    ? "1 client actif ne sera pas facturé : aucun tarif mensuel valide sur ce mois."
-                    : `${nonFactures.length} clients actifs ne seront pas facturés : aucun tarif mensuel valide sur ce mois.`}
+                    ? "1 client actif ne sera pas facturé : il n'a aucun tarif mensuel valide sur ce mois."
+                    : `${nonFactures.length} clients actifs ne seront pas facturés : ils n'ont aucun tarif mensuel valide sur ce mois.`}
                 </summary>
                 <ul className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
                   {nonFactures.map((c) => {
@@ -407,7 +408,7 @@ export default async function PageFacturationMensuelle(props: PageProps<"/factur
                           <span className="text-xs opacity-80">({nomCourtAcademie(academieClient.nom)})</span>
                         )}
                         {destinatairesFacture(c).length === 0 && (
-                          <span className="text-xs opacity-80" title="Aucune adresse e-mail sur la fiche">
+                          <span className="text-xs opacity-80" title="Pas d'adresse e-mail sur sa fiche">
                             · sans e-mail
                           </span>
                         )}
@@ -416,17 +417,17 @@ export default async function PageFacturationMensuelle(props: PageProps<"/factur
                   })}
                 </ul>
                 <p className="mt-2 text-xs">
-                  Ajoutez-leur un tarif récurrent, ou créez une facture ponctuelle depuis leur fiche.
+                  Ajoute-leur un tarif récurrent, ou fais-leur une facture ponctuelle depuis leur fiche.
                 </p>
               </details>
             )}
             {sansEmail.length > 0 && (
               <p className="avertissement">
                 {sansEmail.length === 1
-                  ? `1 client facturé n'a pas d'adresse e-mail (${sansEmail[0].nom}) : sa facture ne pourra pas être envoyée par e-mail.`
+                  ? `1 client facturé n'a pas d'adresse e-mail (${sansEmail[0].nom}) : on ne pourra pas lui envoyer sa facture. Complète sa fiche avant l'envoi.`
                   : `${sansEmail.length} clients facturés n'ont pas d'adresse e-mail (${sansEmail
                       .map((l) => l.nom)
-                      .join(", ")}) : leurs factures ne pourront pas être envoyées par e-mail.`}
+                      .join(", ")}) : on ne pourra pas leur envoyer leur facture. Complète leur fiche avant l'envoi.`}
               </p>
             )}
           </div>
@@ -475,7 +476,7 @@ export default async function PageFacturationMensuelle(props: PageProps<"/factur
             </span>
             <p className="mt-4 font-medium text-ink">Aucune facture générée pour {libelleMois}</p>
             <p className="mx-auto mt-1 max-w-md text-sm text-muted">
-              Générez les brouillons à l&apos;étape 1 : ils apparaîtront ici pour relecture avant l&apos;envoi.
+              Génère les brouillons à l&apos;étape 1 : ils apparaîtront ici pour qu&apos;on les relise avant l&apos;envoi.
             </p>
           </div>
         ) : (
@@ -575,7 +576,7 @@ export default async function PageFacturationMensuelle(props: PageProps<"/factur
               />
             ) : (
               <p className="text-sm text-muted">
-                Configurez l&apos;envoi d&apos;e-mails pour envoyer les brouillons en une fois, ou émettez-les un par un
+                Configure l&apos;envoi d&apos;e-mails pour envoyer les brouillons d&apos;un coup, ou émets-les un par un
                 depuis leur fiche.
               </p>
             )}
@@ -591,8 +592,8 @@ function EnTete() {
     <div>
       <h1 className="titre-page">Facturation mensuelle</h1>
       <p className="mt-1 text-sm text-muted">
-        Préparez les factures du mois à partir des tarifs des clients, relisez-les, puis émettez-les et envoyez-les en une
-        fois.
+        On prépare les factures du mois à partir des tarifs de nos clients, on les relit, puis on les émet et on les
+        envoie d&apos;un coup.
       </p>
     </div>
   );
@@ -601,7 +602,7 @@ function EnTete() {
 /** « Académie Espoir » → « l'Académie Espoir » ; autre nom → « « Nom » ». */
 function SansEmail() {
   return (
-    <span className="mt-0.5 flex items-center gap-1 text-xs font-medium text-amber-700" title="Facture non envoyable par e-mail">
+    <span className="mt-0.5 flex items-center gap-1 text-xs font-medium text-amber-700" title="Pas d'adresse e-mail : on ne peut pas l'envoyer">
       <IconeAlerte className="size-3.5" />
       Aucun e-mail
     </span>

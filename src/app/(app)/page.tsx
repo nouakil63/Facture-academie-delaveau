@@ -38,8 +38,8 @@ function RappelIban() {
     <div role="note" className="avertissement flex flex-col gap-3 sm:flex-row sm:items-center">
       <IconeAlerte className="hidden h-5 w-5 shrink-0 sm:block" />
       <p className="flex-1">
-        <strong className="font-semibold">IBAN non renseigné.</strong> Les factures n&apos;indiquent aucune coordonnée
-        bancaire pour le règlement par virement.
+        <strong className="font-semibold">IBAN non renseigné.</strong> Nos factures n&apos;indiquent pour l&apos;instant
+        aucune coordonnée bancaire pour le virement : ajoute notre IBAN.
       </p>
       <Link href="/parametres#paiement" className="btn-secondaire btn-petit shrink-0">
         Compléter l&apos;IBAN
@@ -71,8 +71,8 @@ export default async function PageTableauDeBord() {
           <p className="font-medium text-ink">Aucune donnée accessible</p>
           <p className="mt-1 text-sm text-muted">
             {acces === "non_membre"
-              ? "Le tableau de bord s'affichera dès que votre compte sera autorisé."
-              : "Le tableau de bord s'affichera dès que la base de données répondra."}
+              ? "Le tableau de bord s'affichera dès que ton compte sera autorisé (voir l'encadré ci-dessus)."
+              : "Le tableau de bord s'affichera dès que la base de données répondra. Recharge la page dans un moment."}
           </p>
         </div>
       </div>
@@ -138,7 +138,7 @@ export default async function PageTableauDeBord() {
         <Indicateur
           libelle="Brouillons à valider"
           valeur={String(ind.brouillons)}
-          detail={ind.brouillons > 0 ? "À vérifier puis émettre" : "Aucun brouillon en attente"}
+          detail={ind.brouillons > 0 ? "À vérifier, puis à émettre" : "Aucun brouillon en attente"}
           icone={<IconeCrayon className="h-5 w-5" />}
           ton={ind.brouillons > 0 ? "attention" : "neutre"}
           href="/factures?statut=brouillon"
@@ -182,7 +182,7 @@ export default async function PageTableauDeBord() {
             <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-emerald-700">
               <IconeValide className="h-5 w-5" />
             </span>
-            Aucune facture en retard : tous les règlements attendus sont dans les délais.
+            Aucune facture en retard : tous les règlements attendus sont dans les temps.
           </div>
         )}
       </section>

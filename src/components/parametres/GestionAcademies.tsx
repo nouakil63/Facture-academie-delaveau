@@ -68,8 +68,8 @@ export function GestionAcademies({ academies }: { academies: AcademieGestion[] }
             {titreSection("academies")}
           </h2>
           <p className="mt-0.5 text-sm text-muted">
-            Chaque client est rattaché à une académie pour distinguer, filtrer et suivre les groupes. Tout le reste est
-            commun : informations légales, IBAN, catalogue, modèles d&apos;e-mail et numérotation.
+            On rattache chaque client à une académie pour distinguer, filtrer et suivre nos deux groupes. Tout le reste
+            est commun : informations légales, IBAN, catalogue, modèles d&apos;e-mail et numérotation.
           </p>
         </div>
         <button type="button" className="btn-secondaire btn-petit shrink-0" onClick={() => ouvrir({ nouvelle: true })}>
@@ -88,7 +88,7 @@ export function GestionAcademies({ academies }: { academies: AcademieGestion[] }
 
       {academies.length === 0 ? (
         <p className="px-5 py-6 text-sm text-muted">
-          Aucune académie : ajoutez-en une pour pouvoir créer des clients.
+          Pas encore d&apos;académie : ajoutes-en une pour pouvoir créer des clients.
         </p>
       ) : (
         <ul className="divide-y divide-line">
@@ -177,8 +177,8 @@ export function GestionAcademies({ academies }: { academies: AcademieGestion[] }
       <p className="flex items-start gap-2 border-t border-line bg-page/60 px-5 py-3 text-xs text-muted">
         <IconeInfo className="mt-0.5 size-4 shrink-0 text-brand" />
         <span>
-          Une académie désactivée n&apos;est plus proposée pour les nouveaux clients ni dans le filtre ; ses clients
-          restent rattachés et continuent d&apos;être facturés tant qu&apos;ils sont actifs. Le nom de l&apos;académie
+          Une académie désactivée n&apos;est plus proposée pour les nouveaux clients ni dans le filtre, mais ses clients
+          y restent rattachés et on continue de les facturer tant qu&apos;ils sont actifs. Le nom de l&apos;académie
           est rappelé sur les factures de ses clients.
         </span>
       </p>
@@ -187,7 +187,7 @@ export function GestionAcademies({ academies }: { academies: AcademieGestion[] }
         ouverte={edition !== null}
         onFermer={() => setEdition(null)}
         titre={academieEditee ? "Modifier l'académie" : "Nouvelle académie"}
-        sousTitre={academieEditee ? academieEditee.nom : "Groupe auquel rattacher des clients"}
+        sousTitre={academieEditee ? academieEditee.nom : "Un groupe auquel rattacher nos clients"}
         verrouillee={enregistrement}
       >
         {edition !== null && (
@@ -305,7 +305,7 @@ function FormulaireAcademie({
           className="champ"
         />
         <p id="academie-nom-aide" className="aide">
-          Affiché dans les listes, le filtre et sur les factures. Sur les pastilles, « Académie » est omis.
+          Il apparaît dans les listes, le filtre et sur les factures. Sur les pastilles, on n&apos;affiche pas « Académie ».
         </p>
       </div>
 
@@ -314,7 +314,7 @@ function FormulaireAcademie({
         libelle="Couleur"
         valeur={couleur}
         onChange={setCouleur}
-        aide="Sert à repérer l'académie dans les listes et le tableau de bord."
+        aide="Pour repérer l'académie d'un coup d'œil dans les listes et le tableau de bord."
       />
 
       <div className="flex flex-wrap items-center gap-2 rounded-lg bg-page px-3 py-2 text-sm text-muted">
@@ -341,8 +341,8 @@ function FormulaireAcademie({
             <span className="font-medium text-ink">Active</span>
             <span className="block text-xs text-muted">
               {derniereActive && academie.actif
-                ? "Seule académie active : elle ne peut pas être désactivée."
-                : "Décochée : l'académie n'est plus proposée pour les nouveaux clients ni dans le filtre."}
+                ? "C'est notre seule académie active : on ne peut pas la désactiver."
+                : "Si tu décoches, l'académie n'est plus proposée pour les nouveaux clients ni dans le filtre."}
             </span>
           </span>
         </label>
@@ -417,13 +417,13 @@ function ConfirmationDesactivation({
             {a.nbClientsActifs > 0 ? (
               <p>
                 Ses {pluriel(a.nbClientsActifs, "client actif", "clients actifs")} restent rattachés et{" "}
-                <strong>continuent d&apos;être facturés</strong>. Pour arrêter de les facturer, archivez-les depuis leur
-                fiche ou rattachez-les à une autre académie.
+                <strong>on continue de les facturer</strong>. Pour arrêter, archive-les depuis leur fiche ou change
+                leur académie.
               </p>
             ) : (
               <p className="text-muted">Aucun client actif n&apos;y est rattaché.</p>
             )}
-            <p className="text-muted">Vous pourrez la réactiver à tout moment.</p>
+            <p className="text-muted">Tu pourras la réactiver quand tu veux.</p>
           </div>
 
           {erreur && (
@@ -498,12 +498,12 @@ function ConfirmationSuppression({
                 </p>
                 {a.nbClients > 0 && (
                   <p className="text-muted">
-                    Pour la supprimer, rattachez d&apos;abord chaque client à une autre académie depuis sa fiche.
+                    Pour la supprimer, change d&apos;abord l&apos;académie de chaque client depuis sa fiche.
                   </p>
                 )}
                 {peutDesactiver ? (
                   <p>
-                    <strong>Désactivez-la plutôt</strong> : elle ne sera plus proposée pour les nouveaux clients ni dans
+                    <strong>Désactive-la plutôt</strong> : elle ne sera plus proposée pour les nouveaux clients ni dans
                     le filtre.
                   </p>
                 ) : !a.actif ? (
@@ -515,7 +515,7 @@ function ConfirmationSuppression({
                 <p>« {a.nom} » sera définitivement supprimée. Aucun client ni aucune facture n&apos;y est rattaché.</p>
                 {a.actif && !peutDesactiver && (
                   <p className="avertissement">
-                    C&apos;est la seule académie active : ajoutez ou réactivez d&apos;abord une autre académie.
+                    C&apos;est notre seule académie active : ajoute ou réactive d&apos;abord une autre académie.
                   </p>
                 )}
               </>

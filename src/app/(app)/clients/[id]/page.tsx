@@ -107,7 +107,7 @@ export default async function PageClient(props: PageProps<"/clients/[id]">) {
               Nouvelle facture
             </Link>
           ) : (
-            <button type="button" className="btn-primaire" disabled title="Réactivez le client pour le facturer">
+            <button type="button" className="btn-primaire" disabled title="Réactive le client pour pouvoir le facturer">
               Nouvelle facture
             </button>
           )}
@@ -117,14 +117,14 @@ export default async function PageClient(props: PageProps<"/clients/[id]">) {
 
       {!client.actif && (
         <p className="avertissement">
-          Ce client est archivé : il n&apos;est plus inclus dans la facturation mensuelle. Réactivez-le pour le facturer
-          de nouveau.
+          Ce client est archivé : on ne le facture plus chaque mois. Réactive-le pour recommencer à le
+          facturer.
         </p>
       )}
       {destinatairesFacture(client).length === 0 && (
         <p className="avertissement flex items-center gap-2">
           <IconeAlerte className="size-4 text-amber-600" />
-          Aucune adresse e-mail : les factures de ce client ne pourront pas lui être envoyées par e-mail.{" "}
+          Pas d&apos;adresse e-mail : on ne pourra pas lui envoyer ses factures par e-mail.{" "}
           <a href="#email" className="font-medium underline">
             Compléter
           </a>
@@ -168,7 +168,7 @@ export default async function PageClient(props: PageProps<"/clients/[id]">) {
             Coordonnées
           </h2>
           <p className="text-sm text-muted">
-            Imprimées sur les prochaines factures. Les factures déjà émises conservent les coordonnées d&apos;origine.
+            Elles figurent sur ses prochaines factures. Celles déjà émises gardent les coordonnées d&apos;origine.
           </p>
         </div>
         <div className="carte-corps sm:p-6">

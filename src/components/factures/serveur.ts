@@ -22,7 +22,7 @@ import { MAX_TOTAL_LIGNE_CENTIMES, moisVersPeriode, nomClientFacture, type Resul
 
 type ErreurSupabase = { code?: string; message: string; details?: string | null; hint?: string | null };
 
-export const MESSAGE_RESEAU = "Impossible de joindre la base de données. Vérifiez la connexion et réessayez.";
+export const MESSAGE_RESEAU = "Impossible de joindre la base de données. Vérifie ta connexion et réessaie.";
 
 /** Traduit une erreur Postgres / PostgREST en message clair pour l'utilisateur. */
 export function traduireErreur(erreur: ErreurSupabase, siCleEtrangere?: string): string {
@@ -32,7 +32,7 @@ export function traduireErreur(erreur: ErreurSupabase, siCleEtrangere?: string):
   }
   switch (erreur.code) {
     case "23503":
-      return siCleEtrangere ?? "Opération impossible : cet élément est lié à d'autres données.";
+      return siCleEtrangere ?? "Impossible : cet élément est lié à d'autres données.";
     case "23505":
       if (texte.includes("factures_mensuelle_unique"))
         return "Une facture mensuelle existe déjà pour ce client et ce mois.";
@@ -50,12 +50,12 @@ export function traduireErreur(erreur: ErreurSupabase, siCleEtrangere?: string):
     case "22008":
       return "Une valeur saisie n'a pas le bon format.";
     case "42501":
-      return "Accès refusé : votre compte n'est pas autorisé à modifier ces données.";
+      return "Accès refusé : ton compte n'a pas le droit de modifier ces données.";
     case "PGRST116":
       return "Facture introuvable : elle a peut-être été supprimée.";
     case "PGRST301":
     case "PGRST303":
-      return "Votre session a expiré : reconnectez-vous.";
+      return "Ta session a expiré : reconnecte-toi.";
     case "P0001":
       // Exceptions levées par les triggers et fonctions SQL : messages déjà rédigés en français.
       return traduireMessageMetier(erreur.message);
@@ -67,13 +67,13 @@ export function traduireErreur(erreur: ErreurSupabase, siCleEtrangere?: string):
 /** Précise les messages métier de la base quand un conseil d'action est utile. */
 function traduireMessageMetier(message: string): string {
   if (message.includes("ne contient aucune ligne"))
-    return "La facture ne contient aucune ligne : ajoutez au moins une ligne avant de l'émettre.";
+    return "La facture n'a aucune ligne : ajoute au moins une ligne pour pouvoir l'émettre.";
   if (message.includes("ne peut pas être supprimée"))
-    return `${message} Une facture émise reste dans la numérotation : utilisez « Annuler la facture ».`;
+    return `${message} Une facture émise doit rester dans notre numérotation : utilise « Annuler la facture ».`;
   if (message.includes("contenu ne peut plus être modifié") || message.includes("ne peuvent pas être modifiées"))
-    return "Cette facture est émise : son contenu ne peut plus être modifié. Dupliquez-la en brouillon pour la corriger.";
+    return "Cette facture est émise : on ne peut plus toucher à son contenu. Duplique-la en brouillon pour la corriger.";
   if (message.includes("Transition de statut interdite"))
-    return "Cette opération n'est pas possible dans le statut actuel de la facture. Rechargez la page.";
+    return "Impossible dans le statut actuel de la facture. Recharge la page.";
   return message;
 }
 
@@ -126,7 +126,7 @@ export const schemaPeriode = z
 export const schemaMoisObligatoire = z
   .string()
   .trim()
-  .refine((v) => moisVersPeriode(v) !== null, { error: "Choisissez un mois valide." })
+  .refine((v) => moisVersPeriode(v) !== null, { error: "Choisis un mois valide." })
   .transform((v) => moisVersPeriode(v) as string);
 
 /** Ligne saisie (montants en texte) → valeurs prêtes pour `lignes_facture`. */
@@ -206,7 +206,7 @@ export async function creerBrouillon(
   if (!resClient.data) return { ok: false, erreur: "Client introuvable : il a peut-être été supprimé." };
   const client = resClient.data as Pick<Client, "id" | "actif">;
   if (!client.actif) {
-    return { ok: false, erreur: "Ce client est archivé : réactivez sa fiche avant de lui créer une facture." };
+    return { ok: false, erreur: "Ce client est archivé : réactive sa fiche avant de lui faire une facture." };
   }
 
   let tauxTva: number;
@@ -300,7 +300,7 @@ export async function envoyerLot(
   options: OptionsEnvoi = {},
 ): Promise<ResultatAction<ResultatEnvoiFacture[]>> {
   if (!emailConfigure()) {
-    return { ok: false, erreur: "L'envoi d'e-mails n'est pas configuré (serveur SMTP) : voir les Paramètres." };
+    return { ok: false, erreur: "L'envoi d'e-mails n'est pas encore configuré (serveur SMTP) : passe par les Paramètres." };
   }
   const resFactures = await supabase
     .from("factures_vue")

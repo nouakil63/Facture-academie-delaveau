@@ -140,7 +140,7 @@ export async function envoyerEmail(msg: MessageEmail): Promise<{ messageId: stri
   const config = lireConfig();
   if (!config) {
     throw new Error(
-      `L'envoi d'e-mails n'est pas configuré : variable(s) manquante(s) ${variablesEmailManquantes().join(", ")}.`,
+      `L'envoi d'e-mails n'est pas encore configuré : il manque ${variablesEmailManquantes().join(", ")} dans Vercel.`,
     );
   }
   const a = nettoyerAdresses(msg.a);
@@ -188,17 +188,17 @@ export function messageErreurEmail(erreur: unknown): string {
   switch (code) {
     case "EAUTH":
     case "ENOAUTH":
-      return "Identifiants refusés par le serveur SMTP : SMTP_USER doit être l'adresse complète de la boîte (ex. contact@academiedelaveau.com) et SMTP_PASSWORD le mot de passe de cette boîte (voir Paramètres → Envoi des e-mails).";
+      return "Identifiants refusés par le serveur SMTP : SMTP_USER doit être l'adresse complète de notre boîte (ex. contact@academiedelaveau.com) et SMTP_PASSWORD son mot de passe (voir Paramètres → Envoi des e-mails).";
     case "ECONNECTION":
     case "ECONNREFUSED":
     case "ETIMEDOUT":
     case "ESOCKET":
     case "EDNS":
-      return `Serveur d'envoi injoignable (${lireVariable("SMTP_HOST") ?? "SMTP_HOST non défini"}) : vérifiez SMTP_HOST et SMTP_PORT, puis réessayez.`;
+      return `Serveur d'envoi injoignable (${lireVariable("SMTP_HOST") ?? "SMTP_HOST non défini"}) : vérifie SMTP_HOST et SMTP_PORT, puis réessaie.`;
     case "ETLS":
-      return "Connexion sécurisée impossible avec le serveur d'envoi : vérifiez SMTP_PORT et SMTP_SECURE (465 → true, 587 → false).";
+      return "Connexion sécurisée impossible avec le serveur d'envoi : vérifie SMTP_PORT et SMTP_SECURE (465 → true, 587 → false).";
     case "EENVELOPE":
-      return `Adresse refusée par le serveur d'envoi : vérifiez l'adresse du destinataire (fiche client) et l'expéditeur (EMAIL_FROM). (${brut})`;
+      return `Adresse refusée par le serveur d'envoi : vérifie l'adresse du destinataire (fiche client) et l'expéditeur (EMAIL_FROM). (${brut})`;
     case "EMESSAGE":
       return `Le serveur d'envoi a refusé le message. (${brut})`;
     default:

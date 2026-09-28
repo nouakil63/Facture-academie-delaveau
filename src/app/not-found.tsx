@@ -14,7 +14,7 @@ export default function PageIntrouvable() {
           <p className="font-display text-5xl font-medium tracking-wide text-brand">404</p>
           <h1 className="titre-page mt-2">Page introuvable</h1>
           <p className="mt-2 text-sm text-muted">
-            La page demandée n&apos;existe pas ou plus. Le lien est peut-être incorrect, ou l&apos;élément a été supprimé.
+            Cette page n&apos;existe pas ou plus : le lien est peut-être faux, ou l&apos;élément a été supprimé.
           </p>
           <div className="mt-6 flex flex-col justify-center gap-2 sm:flex-row">
             <Link href="/" className="btn-primaire">

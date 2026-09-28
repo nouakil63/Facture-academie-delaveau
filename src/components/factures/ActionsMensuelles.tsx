@@ -43,8 +43,8 @@ export function BoutonGenerer({
           </p>
         ) : nombre > 0 ? (
           <p className="text-muted">
-            {pluriel(nombre, "brouillon sera créé", "brouillons seront créés")} pour {libelleMois}. Rien n&apos;est envoyé
-            à cette étape.
+            {pluriel(nombre, "brouillon sera créé", "brouillons seront créés")} pour {libelleMois}. Rien ne part par
+            e-mail à cette étape.
           </p>
         ) : (
           <p className="flex items-center gap-2 text-emerald-700">
@@ -113,7 +113,7 @@ export function EnvoiBrouillons({
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-sm text-muted">
           {n > 0
-            ? "Relisez les brouillons (lien « Relire »), puis émettez-les et envoyez-les en une fois."
+            ? "Relis les brouillons (lien « Relire »), puis émets-les et envoie-les en une fois."
             : "Aucun brouillon à envoyer pour ce mois."}
         </p>
         <button
@@ -132,8 +132,8 @@ export function EnvoiBrouillons({
           <IconeAlerte className="mt-0.5 size-4 text-amber-600" />
           <span>
             {nbSansEmail === 1
-              ? "1 brouillon concerne un client sans adresse e-mail : il n'est pas inclus dans l'envoi groupé. Ouvrez-le pour l'émettre sans envoi (remise en main propre) ou complétez la fiche client."
-              : `${nbSansEmail} brouillons concernent des clients sans adresse e-mail : ils ne sont pas inclus dans l'envoi groupé. Ouvrez-les pour les émettre sans envoi (remise en main propre) ou complétez les fiches clients.`}
+              ? "1 brouillon concerne un client sans adresse e-mail : il ne part pas avec l'envoi groupé. Ouvre-le pour l'émettre sans envoi (remise en main propre) ou complète la fiche client."
+              : `${nbSansEmail} brouillons concernent des clients sans adresse e-mail : ils ne partent pas avec l'envoi groupé. Ouvre-les pour les émettre sans envoi (remise en main propre) ou complète les fiches clients.`}
           </span>
         </p>
       )}
@@ -168,7 +168,7 @@ export function EnvoiBrouillons({
             </li>
           ))}
         </ul>
-        {n > 10 && <p className="text-xs text-muted">L&apos;envoi est séquentiel : comptez quelques secondes par facture.</p>}
+        {n > 10 && <p className="text-xs text-muted">Les factures partent une par une : compte quelques secondes par facture.</p>}
       </ModaleConfirmation>
     </div>
   );

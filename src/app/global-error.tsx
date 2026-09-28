@@ -21,8 +21,8 @@ export default function ErreurGlobale({ error, retry }: { error: Error & { diges
           <div role="alert" className="carte carte-corps w-full max-w-md text-center sm:p-8">
             <h1 className="titre-section">Une erreur est survenue</h1>
             <p className="mt-2 text-sm text-muted">
-              L&apos;application n&apos;a pas pu afficher cette page. Il s&apos;agit peut-être d&apos;une coupure réseau
-              ou d&apos;un service momentanément indisponible. Si vous veniez d&apos;enregistrer, rechargez la page pour
+              Cette page n&apos;a pas pu s&apos;afficher, sans doute à cause d&apos;une coupure réseau ou d&apos;un
+              service momentanément indisponible. Si tu venais d&apos;enregistrer quelque chose, recharge la page pour
               vérifier ce qui a été pris en compte.
             </p>
             {error.digest && (

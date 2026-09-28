@@ -83,7 +83,7 @@ export function FormulaireParametres(props: Omit<Contexte, "onModifie">) {
       const url = new URL(lien.href, window.location.href);
       // Ancres de la page (navigation des sections) : on reste sur le formulaire.
       if (url.origin === window.location.origin && url.pathname === window.location.pathname) return;
-      if (!window.confirm("Des modifications ne sont pas enregistrées. Quitter la page ?")) {
+      if (!window.confirm("Tu as des modifications non enregistrées. Quitter quand même ?")) {
         e.preventDefault();
         e.stopPropagation();
       }
@@ -174,7 +174,7 @@ function SectionCharte({ parametres, prefixeVerrouille, dernierNumero, prochainN
     <Section
       id="charte"
       titre={titreSection("charte")}
-      description="Numérotation des factures, couleurs et logo. Une seule série de numéros pour toutes les académies."
+      description="Numérotation de nos factures, couleurs et logo. Une seule série de numéros pour nos deux académies."
     >
       <div className="grid gap-4 sm:grid-cols-2">
         <div>
@@ -206,11 +206,11 @@ function SectionCharte({ parametres, prefixeVerrouille, dernierNumero, prochainN
           <p id="prefixe-aide" className="aide">
             {prefixeVerrouille ? (
               <>
-                Non modifiable : des factures ont déjà été numérotées avec ce préfixe. La série de numérotation doit
-                rester continue, sans trou ni doublon.
+                Bloqué : on a déjà numéroté des factures avec ce préfixe, et la série doit rester continue, sans trou
+                ni doublon.
               </>
             ) : (
-              <>1 à 8 lettres ou chiffres, sans espace ni tiret. Il sera figé dès la première facture émise.</>
+              <>1 à 8 lettres ou chiffres, sans espace ni tiret. Choisis bien : il sera bloqué dès notre première facture émise.</>
             )}
           </p>
         </div>
@@ -224,7 +224,7 @@ function SectionCharte({ parametres, prefixeVerrouille, dernierNumero, prochainN
             <dd className="font-mono text-ink">{dernierNumero ?? <span className="font-sans text-muted">aucun</span>}</dd>
           </dl>
           <p className="mt-2 text-xs text-muted">
-            Série continue par année, commune à l&apos;Académie Delaveau et à l&apos;Académie Espoir.
+            Une série continue par année, commune à l&apos;Académie Delaveau et à l&apos;Académie Espoir.
           </p>
         </div>
 
@@ -235,9 +235,9 @@ function SectionCharte({ parametres, prefixeVerrouille, dernierNumero, prochainN
           onChange={setPrimaire}
           aide={
             peuContrastee ? (
-              <span className="text-amber-800">Couleur claire : le texte blanc des en-têtes sera peu lisible.</span>
+              <span className="text-amber-800">Couleur trop claire : le texte blanc des en-têtes sera difficile à lire.</span>
             ) : (
-              "Titres et en-têtes de tableau de la facture."
+              "Pour les titres et les en-têtes de tableau de nos factures."
             )
           }
         />
@@ -246,7 +246,7 @@ function SectionCharte({ parametres, prefixeVerrouille, dernierNumero, prochainN
           libelle="Couleur secondaire"
           valeur={secondaire}
           onChange={setSecondaire}
-          aide="Filets et fonds discrets."
+          aide="Pour les filets et les fonds discrets."
         />
       </div>
 
@@ -286,7 +286,7 @@ function SectionCharte({ parametres, prefixeVerrouille, dernierNumero, prochainN
             className="champ"
           />
           <p id="logo-aide" className="aide">
-            Facultatif. Image PNG ou JPEG accessible publiquement. Laissez vide pour utiliser le logo de l&apos;Académie
+            Facultatif. Une image PNG ou JPEG accessible publiquement. Laisse vide pour garder notre logo Académie
             Delaveau intégré.
           </p>
         </div>
@@ -319,7 +319,7 @@ function SectionLegale({ parametres }: Contexte) {
     <Section
       id="legal"
       titre={titreSection("legal")}
-      description="Imprimées en en-tête et en pied de chaque facture, quelle que soit l'académie du client."
+      description="Imprimées en haut et en bas de chacune de nos factures, quelle que soit l'académie du client."
     >
       <div className="grid gap-4 sm:grid-cols-2">
         <Champ
@@ -328,7 +328,7 @@ function SectionLegale({ parametres }: Contexte) {
           defaut={parametres.raison_sociale}
           obligatoire
           maxLength={200}
-          aide="Nom juridique de l'association qui facture."
+          aide="Le nom officiel de notre association, tel que déclaré."
         />
         <Champ
           nom="forme_juridique"
@@ -353,7 +353,7 @@ function SectionLegale({ parametres }: Contexte) {
           placeholder="853 472 298"
           inputMode="numeric"
           maxLength={15}
-          aide="9 chiffres."
+          aide="9 chiffres, sur notre avis de situation Insee."
         />
         <ChampControle
           nom="siret"
@@ -364,17 +364,17 @@ function SectionLegale({ parametres }: Contexte) {
           placeholder="853 472 298 00019"
           inputMode="numeric"
           maxLength={20}
-          aide="14 chiffres : SIREN + établissement."
+          aide="14 chiffres : notre SIREN + le numéro d'établissement."
         />
         <ChampControle
           nom="rna"
           libelle="N° RNA"
           defaut={parametres.rna}
-          controle={(v) => (rnaValide(v) ? null : "Numéro RNA invalide : « W » suivi de 9 caractères.")}
+          controle={(v) => (rnaValide(v) ? null : "Numéro RNA invalide : c'est un « W » suivi de 9 caractères.")}
           formater={normaliserRna}
           placeholder="W143007272"
           maxLength={12}
-          aide="Répertoire national des associations (commence par W)."
+          aide="Notre numéro au Répertoire national des associations (il commence par W)."
         />
         <Champ
           nom="numero_tva"
@@ -384,7 +384,7 @@ function SectionLegale({ parametres }: Contexte) {
           placeholder="FR12853472298"
           spellCheck={false}
           className="font-mono tracking-wide uppercase"
-          aide="Uniquement si l'association est assujettie à la TVA."
+          aide="Seulement si on est assujettis à la TVA. Sinon, laisse vide."
         />
         <ZoneTexte
           nom="objet_social"
@@ -405,7 +405,7 @@ function SectionLegale({ parametres }: Contexte) {
 
 function SectionCoordonnees({ parametres }: Contexte) {
   return (
-    <Section id="coordonnees" titre={titreSection("coordonnees")} description="Adresse et contacts imprimés sur les factures.">
+    <Section id="coordonnees" titre={titreSection("coordonnees")} description="Notre adresse et nos contacts, imprimés sur les factures.">
       <div className="grid gap-4 sm:grid-cols-6">
         <Champ
           nom="adresse_ligne1"
@@ -458,7 +458,7 @@ function SectionCoordonnees({ parametres }: Contexte) {
           autoComplete="email"
           placeholder="contact@academiedelaveau.com"
           classeConteneur="sm:col-span-3"
-          aide="Imprimé sur la facture, pour les questions des clients."
+          aide="Imprimé sur la facture : c'est là que les familles nous écrivent en cas de question."
         />
         <Champ
           nom="telephone"
@@ -492,13 +492,13 @@ function SectionPaiement({ parametres }: Contexte) {
     <Section
       id="paiement"
       titre={titreSection("paiement")}
-      description="Coordonnées bancaires et conditions de règlement, communes à toutes les académies."
+      description="Nos coordonnées bancaires et nos conditions de règlement, les mêmes pour les deux académies."
     >
       {/* L'IBAN est l'information la plus importante pour être payé : mis en avant. */}
       <div className="space-y-4 rounded-lg border-2 border-brand/30 bg-brand-light/50 p-4">
         <p className="flex flex-wrap items-center gap-2 text-sm font-medium text-brand-dark">
           <span className="badge bg-brand text-white">Important</span>
-          IBAN imprimé sur toutes les factures
+          Notre IBAN est imprimé sur toutes les factures
         </p>
         <ChampControle
           nom="iban"
@@ -510,13 +510,13 @@ function SectionPaiement({ parametres }: Contexte) {
           maxLength={50}
           classeChamp="py-2.5 text-base"
           messageValide="IBAN valide (clé de contrôle vérifiée)."
-          aide="Espaces facultatifs : l'IBAN est vérifié puis regroupé par 4 caractères. Relisez-le avec le RIB de la banque."
+          aide="Colle ici notre IBAN, avec ou sans espaces : il est vérifié puis regroupé par 4. Relis-le avec le RIB de la banque."
         />
         {!parametres.iban && (
           <p className="avertissement flex items-start gap-2">
             <IconeAlerte className="mt-0.5 size-4 shrink-0" />
             <span>
-              Aucun IBAN enregistré : les factures n&apos;indiqueront pas où effectuer le virement.
+              Pas encore d&apos;IBAN : nos factures n&apos;indiqueront pas aux familles où faire le virement.
             </span>
           </p>
         )}
@@ -528,13 +528,13 @@ function SectionPaiement({ parametres }: Contexte) {
             maxLength={200}
             placeholder={parametres.raison_sociale}
             classeConteneur="sm:col-span-4"
-            aide="Imprimé avec l'IBAN (ex. Académie Delaveau). Facultatif."
+            aide="Facultatif. Imprimé avec l'IBAN (ex. Académie Delaveau)."
           />
           <ChampControle
             nom="bic"
             libelle="BIC"
             defaut={parametres.bic}
-            controle={(v) => (bicValide(v) ? null : "BIC invalide : 8 ou 11 caractères (ex. AGRIFRPP866).")}
+            controle={(v) => (bicValide(v) ? null : "BIC invalide : il fait 8 ou 11 caractères (ex. AGRIFRPP866).")}
             formater={normaliserBic}
             placeholder="AGRIFRPP866"
             maxLength={15}
@@ -553,7 +553,7 @@ function SectionPaiement({ parametres }: Contexte) {
           maxLength={500}
           rows={2}
           classeConteneur="sm:col-span-4"
-          aide="Ex. « Paiement par virement bancaire au plus tard à la date d'échéance. »"
+          aide="Par exemple : « Paiement par virement bancaire au plus tard à la date d'échéance. »"
         />
         <Champ
           nom="delai_paiement_jours"
@@ -566,7 +566,7 @@ function SectionPaiement({ parametres }: Contexte) {
           defaut={parametres.delai_paiement_jours}
           obligatoire
           classeConteneur="sm:col-span-2"
-          aide="Échéance = émission + délai. 0 = à réception."
+          aide="Échéance = date d'émission + ce délai. Mets 0 pour « à réception »."
         />
       </div>
     </Section>
@@ -589,7 +589,7 @@ function SectionTva({ parametres, onModifie }: Contexte) {
     <Section
       id="tva"
       titre={titreSection("tva")}
-      description="Régime de TVA et mentions obligatoires imprimées sur la facture."
+      description="Notre régime de TVA et les mentions obligatoires imprimées sur la facture."
     >
       <div className="grid gap-4 sm:grid-cols-6">
         <div className="sm:col-span-2">
@@ -613,7 +613,7 @@ function SectionTva({ parametres, onModifie }: Contexte) {
             />
             <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm text-muted">%</span>
           </div>
-          <p className="aide">0 = TVA non facturée (association non assujettie).</p>
+          <p className="aide">Mets 0 si on ne facture pas de TVA (association non assujettie).</p>
         </div>
 
         <div className="sm:col-span-4">
@@ -653,18 +653,19 @@ function SectionTva({ parametres, onModifie }: Contexte) {
       <p className="flex items-start gap-2 rounded-lg bg-page px-3 py-2 text-xs text-muted">
         <IconeInfo className="mt-0.5 size-4 shrink-0 text-brand" />
         <span>
-          Pour une association non assujettie à la TVA, faites valider la mention exacte par votre comptable. Par
+          Si on n&apos;est pas assujettis à la TVA, fais valider la mention exacte par notre comptable. Par
           exemple : « TVA non applicable, art. 293 B du CGI » (franchise en base) ou « Exonération de TVA, art. 261-7-1°
           du CGI » (activités d&apos;une association à but non lucratif).
         </span>
       </p>
 
       {sansTva && mention.trim() === "" && (
-        <p className="avertissement">Sans TVA, la facture doit porter une mention qui en indique la raison.</p>
+        <p className="avertissement">Sans TVA, la facture doit porter une mention qui explique pourquoi : choisis-en une ci-dessus.</p>
       )}
       {!sansTva && tauxNombre > 0 && mentionExoneration && (
         <p className="avertissement">
-          La mention indique une exonération alors qu&apos;un taux de {taux.trim()} % est appliqué : vérifiez la cohérence.
+          La mention parle d&apos;exonération alors qu&apos;on applique un taux de {taux.trim()} % : il faut choisir l&apos;un ou
+          l&apos;autre.
         </p>
       )}
 
@@ -674,7 +675,7 @@ function SectionTva({ parametres, onModifie }: Contexte) {
         defaut={parametres.mentions_legales}
         maxLength={1500}
         rows={2}
-        aide="Texte libre imprimé en bas de chaque facture (ex. assurance, agrément, numéro de déclaration)."
+        aide="Texte libre imprimé en bas de chaque facture (ex. notre assurance, un agrément, un numéro de déclaration)."
       />
       <ZoneTexte
         nom="mentions_professionnels"
@@ -682,7 +683,7 @@ function SectionTva({ parametres, onModifie }: Contexte) {
         defaut={parametres.mentions_professionnels}
         maxLength={1500}
         rows={3}
-        aide="Imprimées uniquement sur les factures des clients professionnels. Obligatoires entre professionnels : taux des pénalités de retard et indemnité forfaitaire de 40 € pour frais de recouvrement."
+        aide="Imprimées seulement sur les factures de nos clients professionnels. Obligatoires entre pros : le taux des pénalités de retard et l'indemnité forfaitaire de 40 € pour frais de recouvrement."
       />
     </Section>
   );
@@ -709,7 +710,7 @@ function SectionMensuelle({ parametres, aujourdhui, smtpConfigure, nbClientsSans
     <Section
       id="mensuelle"
       titre={titreSection("mensuelle")}
-      description="Préparation des factures récurrentes à partir des tarifs de chaque client, pour toutes les académies."
+      description="On prépare les factures du mois à partir des tarifs de chaque client, pour nos deux académies."
     >
       <div>
         <label htmlFor="objet_facture_mensuelle" className="label">
@@ -727,7 +728,7 @@ function SectionMensuelle({ parametres, aujourdhui, smtpConfigure, nbClientsSans
           className="champ"
         />
         <p className="aide">
-          Le mois est ajouté automatiquement : <span className="font-medium text-ink">« {objetExemple} »</span>
+          Le mois s&apos;ajoute tout seul : <span className="font-medium text-ink">« {objetExemple} »</span>
         </p>
       </div>
 
@@ -750,7 +751,7 @@ function SectionMensuelle({ parametres, aujourdhui, smtpConfigure, nbClientsSans
             onChange={(e) => setJour(e.target.value)}
             className="champ"
           />
-          <p className="aide">Du 1 au 28 (existe tous les mois).</p>
+          <p className="aide">Entre le 1 et le 28, pour que le jour existe tous les mois.</p>
         </div>
 
         <fieldset className="sm:col-span-2">
@@ -800,7 +801,7 @@ function SectionMensuelle({ parametres, aujourdhui, smtpConfigure, nbClientsSans
             <span className="font-medium text-ink">Générer automatiquement les brouillons</span>
             <span className="block text-muted">
               Chaque mois, le jour choisi (vers 7 h – 8 h, heure de Paris), un brouillon est préparé pour chaque client
-              actif ayant des tarifs mensuels, dans les deux académies. Vous les relisez puis les envoyez depuis
+              actif qui a des tarifs mensuels, dans nos deux académies. On les relit, puis on les envoie depuis
               « Facturation mensuelle ».
             </span>
           </span>
@@ -823,8 +824,8 @@ function SectionMensuelle({ parametres, aujourdhui, smtpConfigure, nbClientsSans
             <span className="font-medium text-ink">Émettre et envoyer automatiquement</span>
             <span className="block text-muted">
               {generationAuto
-                ? "Les brouillons générés sont aussitôt émis (numéro définitif) et envoyés par e-mail aux clients."
-                : "Nécessite la génération automatique des brouillons."}
+                ? "Les brouillons sont aussitôt émis (numéro définitif) et partent par e-mail aux familles, sans qu'on les relise."
+                : "Coche d'abord « Générer automatiquement les brouillons »."}
             </span>
           </span>
         </label>
@@ -833,19 +834,19 @@ function SectionMensuelle({ parametres, aujourdhui, smtpConfigure, nbClientsSans
           <div role="alert" className="flex items-start gap-2 rounded-lg border border-red-300 bg-red-50 px-3 py-2.5 text-sm text-red-800">
             <IconeAlerte className="mt-0.5 size-4 shrink-0 text-red-600" />
             <div className="space-y-1">
-              <p className="font-semibold">Attention : les factures seront émises et envoyées sans relecture.</p>
+              <p className="font-semibold">Attention : nos factures partiront sans qu&apos;on les relise.</p>
               <p>
-                Une facture émise ne peut plus être modifiée ni supprimée : en cas d&apos;erreur, il faudra l&apos;annuler
-                et en émettre une nouvelle. Vérifiez les tarifs de chaque client avant le jour de génération.
+                Une facture émise ne se modifie plus et ne se supprime plus : en cas d&apos;erreur, il faudra l&apos;annuler
+                et en refaire une. Vérifie bien les tarifs de chaque client avant le jour de génération.
               </p>
               {!smtpConfigure && (
-                <p className="font-medium">L&apos;envoi d&apos;e-mails n&apos;est pas configuré : les factures ne pourront pas partir.</p>
+                <p className="font-medium">L&apos;envoi d&apos;e-mails n&apos;est pas encore configuré : nos factures ne pourront pas partir.</p>
               )}
               {nbClientsSansEmail > 0 && (
                 <p>
                   {nbClientsSansEmail > 1
-                    ? `${nbClientsSansEmail} clients actifs n'ont pas d'adresse e-mail : leurs factures seront émises mais non envoyées.`
-                    : "1 client actif n'a pas d'adresse e-mail : sa facture sera émise mais non envoyée."}
+                    ? `${nbClientsSansEmail} clients actifs n'ont pas d'adresse e-mail : leurs factures seront émises mais pas envoyées. Complète leur fiche avant.`
+                    : "1 client actif n'a pas d'adresse e-mail : sa facture sera émise mais pas envoyée. Complète sa fiche avant."}
                 </p>
               )}
             </div>
@@ -917,7 +918,7 @@ function SectionEmails({ parametres, aujourdhui, prochainNumero, academies, onMo
     <Section
       id="emails"
       titre={titreSection("emails")}
-      description="Message envoyé avec chaque facture (le PDF est joint automatiquement). Commun à toutes les académies."
+      description="Le message qui part avec chaque facture (le PDF est joint tout seul). Le même pour nos deux académies."
     >
       <div>
         <label htmlFor="email_objet" className="label">
@@ -965,7 +966,7 @@ function SectionEmails({ parametres, aujourdhui, prochainNumero, academies, onMo
       <div className="rounded-lg border border-line bg-page/60 p-3">
         <p className="text-xs font-semibold tracking-wide text-muted uppercase">Variables disponibles</p>
         <p className="mt-0.5 text-xs text-muted">
-          Cliquez pour insérer à l&apos;emplacement du curseur. Elles sont remplacées à l&apos;envoi de chaque facture.
+          Clique pour en insérer une là où se trouve le curseur. Elles sont remplacées à l&apos;envoi de chaque facture.
         </p>
         <ul className="mt-2 grid gap-1.5 sm:grid-cols-2">
           {VARIABLES_EMAIL.map((v) => (
@@ -1019,7 +1020,7 @@ function SectionEmails({ parametres, aujourdhui, prochainNumero, academies, onMo
             Pièce jointe : Facture-{exemples.numero}.pdf
           </div>
         </div>
-        <p className="aide">Exemple avec des valeurs fictives.</p>
+        <p className="aide">Exemple avec des valeurs inventées.</p>
       </div>
 
       <Champ
@@ -1029,7 +1030,7 @@ function SectionEmails({ parametres, aujourdhui, prochainNumero, academies, onMo
         defaut={parametres.email_copie}
         maxLength={254}
         placeholder="contact@academiedelaveau.com"
-        aide="Facultatif. Reçoit une copie cachée de chaque facture envoyée, pour garder une trace."
+        aide="Facultatif. Cette adresse reçoit en copie cachée chaque facture envoyée : pratique pour garder une trace dans notre boîte mail."
       />
     </Section>
   );
@@ -1039,7 +1040,7 @@ function VariablesInconnues({ noms }: { noms: string[] }) {
   return (
     <p className="mt-1 text-xs text-red-700">
       Variable{noms.length > 1 ? "s" : ""} inconnue{noms.length > 1 ? "s" : ""} : {noms.map((n) => `{${n}}`).join(", ")}
-      . Utilisez celles de la liste ci-dessous.
+      . Utilise celles de la liste ci-dessous.
     </p>
   );
 }

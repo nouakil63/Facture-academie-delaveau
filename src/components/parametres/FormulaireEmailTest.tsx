@@ -45,8 +45,8 @@ export function FormulaireEmailTest({ adresseParDefaut, actif }: { adresseParDef
         </div>
         <p className="aide">
           {actif
-            ? "Un court message est envoyé avec la configuration actuelle. L'envoi peut prendre quelques secondes."
-            : "Disponible une fois les variables SMTP définies."}
+            ? "On envoie un petit message avec la configuration actuelle. Ça peut prendre quelques secondes."
+            : "Possible dès que les variables SMTP sont ajoutées dans Vercel."}
         </p>
       </div>
 

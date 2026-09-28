@@ -11,9 +11,9 @@ const schemaConnexion = z.object({
   email: z
     .string()
     .trim()
-    .min(1, "Saisissez votre adresse e-mail.")
-    .pipe(z.email("Cette adresse e-mail n'est pas valide.")),
-  motDePasse: z.string().min(1, "Saisissez votre mot de passe."),
+    .min(1, "Saisis ton adresse e-mail.")
+    .pipe(z.email("Cette adresse e-mail n'est pas valide : vérifie-la.")),
+  motDePasse: z.string().min(1, "Saisis ton mot de passe."),
   suite: z.string(),
 });
 
@@ -23,18 +23,18 @@ function messageErreurConnexion(erreur: { code?: string; status?: number; name?:
     return "E-mail ou mot de passe incorrect.";
   }
   if (erreur.code === "email_not_confirmed") {
-    return "Cette adresse e-mail n'a pas encore été confirmée. Confirmez-la depuis le tableau de bord Supabase (Authentication → Users) puis réessayez.";
+    return "Cette adresse e-mail n'est pas encore confirmée. Confirme-la dans Supabase (Authentication → Users), puis réessaie.";
   }
   if (erreur.code === "user_banned") {
-    return "Ce compte est désactivé. Contactez l'administrateur de l'application.";
+    return "Ce compte est bloqué. Débloque-le dans Supabase (Authentication → Users), puis réessaie.";
   }
   if (erreur.status === 429 || erreur.code?.startsWith("over_")) {
-    return "Trop de tentatives de connexion. Patientez quelques minutes avant de réessayer.";
+    return "Trop de tentatives de connexion. Attends quelques minutes avant de réessayer.";
   }
   if (erreur.name === "AuthRetryableFetchError" || erreur.status === 0) {
-    return "Le service de connexion est injoignable. Vérifiez votre connexion Internet puis réessayez.";
+    return "Le service de connexion ne répond pas. Vérifie ta connexion Internet, puis réessaie.";
   }
-  return "Connexion impossible pour le moment. Réessayez dans un instant.";
+  return "Connexion impossible pour le moment. Réessaie dans un instant.";
 }
 
 /**
@@ -53,7 +53,7 @@ export async function seConnecter(etatPrecedent: ResultatAction | null, formData
     suite: texte("suite"),
   });
   if (!saisie.success) {
-    return { ok: false, erreur: saisie.error.issues[0]?.message ?? "Formulaire incomplet." };
+    return { ok: false, erreur: saisie.error.issues[0]?.message ?? "Remplis l'e-mail et le mot de passe." };
   }
 
   try {
@@ -68,7 +68,7 @@ export async function seConnecter(etatPrecedent: ResultatAction | null, formData
     }
   } catch (e) {
     console.error("Connexion :", e);
-    return { ok: false, erreur: "Connexion impossible : l'application n'est pas correctement configurée (voir le README)." };
+    return { ok: false, erreur: "Connexion impossible : l'application est mal configurée. Vérifie les variables Supabase (URL et clé) dans Vercel." };
   }
 
   // redirect() lève une exception de contrôle : il doit rester hors du try/catch.

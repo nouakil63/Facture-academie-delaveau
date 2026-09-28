@@ -71,7 +71,7 @@ export function FormulairePrestation({
           autoFocus={!prestation}
           className="champ"
         />
-        <p className="aide">Imprimé tel quel sur les lignes de facture.</p>
+        <p className="aide">Imprimé tel quel sur les lignes de nos factures.</p>
       </div>
 
       <div>
@@ -84,7 +84,7 @@ export function FormulairePrestation({
           rows={2}
           maxLength={1000}
           defaultValue={prestation?.description ?? ""}
-          placeholder="Détail facultatif, imprimé sous le libellé"
+          placeholder="Détail facultatif, imprimé sous le libellé sur la facture"
           className="champ"
         />
       </div>
@@ -111,9 +111,9 @@ export function FormulairePrestation({
           </div>
           <p id="prestation-prix-aide" className="aide">
             {prix.trim() !== "" && centimes === null ? (
-              <span className="text-red-700">Montant invalide (ex. 450 ou 450,50).</span>
+              <span className="text-red-700">Montant invalide : saisis par exemple 450 ou 450,50.</span>
             ) : (
-              "Prix catalogue, personnalisable pour chaque client."
+              "Prix catalogue : tu pourras le personnaliser pour chaque client."
             )}
           </p>
         </div>
@@ -163,7 +163,7 @@ export function FormulairePrestation({
         <p className="avertissement">
           Le nouveau prix s&apos;appliquera aux prochaines factures{" "}
           {nbClientsPrixCatalogue > 1 ? "des" : "du"} {pluriel(nbClientsPrixCatalogue, "client")} au prix catalogue
-          (toutes académies confondues). Les clients au prix personnalisé et les factures déjà créées ne changent pas.
+          (des deux académies). Les clients au prix personnalisé et les factures déjà créées ne bougent pas.
         </p>
       )}
 
@@ -173,13 +173,13 @@ export function FormulairePrestation({
           nom="recurrente"
           defaut={prestation?.recurrente ?? true}
           titre="Facturée chaque mois"
-          detail="Proposée comme ligne récurrente de la facture mensuelle lorsqu'on l'ajoute aux tarifs d'un client."
+          detail="Quand tu l'ajoutes aux tarifs d'un client, elle revient chaque mois sur sa facture mensuelle."
         />
         <Case
           nom="actif"
           defaut={prestation?.actif ?? true}
           titre="Active"
-          detail="Décochée : la prestation est archivée et n'est plus proposée pour de nouveaux tarifs."
+          detail="Décoche pour archiver la prestation : elle ne sera plus proposée pour de nouveaux tarifs."
         />
       </fieldset>
 
@@ -199,7 +199,7 @@ export function FormulairePrestation({
           placeholder="À la fin"
           className="champ"
         />
-        <p className="aide">Les plus petits numéros apparaissent en premier.</p>
+        <p className="aide">Les plus petits numéros passent en premier.</p>
       </div>
 
       {etat && !etat.ok && (

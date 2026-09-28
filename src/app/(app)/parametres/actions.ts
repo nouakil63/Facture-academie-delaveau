@@ -44,7 +44,7 @@ type ErreurSupabase = { code?: string; message: string; details?: string | null 
 
 const ERREUR_RESEAU: ResultatAction = {
   ok: false,
-  erreur: "Impossible de joindre la base de données. Vérifiez la connexion et réessayez.",
+  erreur: "Impossible de joindre la base de données. Vérifie ta connexion internet et réessaie.",
 };
 
 /** Message de la base lorsque le préfixe est modifié après la première émission (trigger proteger_parametres). */
@@ -55,9 +55,9 @@ function traduireErreur(erreur: ErreurSupabase, siCleEtrangere?: string): string
   const texte = `${erreur.message} ${erreur.details ?? ""}`;
   switch (erreur.code) {
     case "23503":
-      return siCleEtrangere ?? "Opération impossible : cet élément est lié à d'autres données.";
+      return siCleEtrangere ?? "Impossible : cet élément est lié à d'autres données.";
     case "23505":
-      if (texte.includes("academies_nom")) return "Une académie porte déjà ce nom : choisissez-en un autre.";
+      if (texte.includes("academies_nom")) return "On a déjà une académie avec ce nom : choisis-en un autre.";
       return "Cette valeur est déjà utilisée.";
     case "23514":
       if (texte.includes("prefixe_facture")) return "Préfixe de facture invalide : 1 à 8 lettres majuscules ou chiffres.";
@@ -66,7 +66,7 @@ function traduireErreur(erreur: ErreurSupabase, siCleEtrangere?: string): string
       if (texte.includes("taux_tva")) return "Le taux de TVA doit être compris entre 0 et 99,99 %.";
       if (texte.includes("jour_generation")) return "Le jour de génération doit être compris entre 1 et 28.";
       if (texte.includes("nom")) return "Le nom est obligatoire.";
-      return "Les données saisies ne respectent pas les règles de la base.";
+      return "Une des valeurs saisies n'est pas acceptée par la base : relis le formulaire.";
     case "23502":
       return "Un champ obligatoire est manquant.";
     case "22003":
@@ -74,15 +74,15 @@ function traduireErreur(erreur: ErreurSupabase, siCleEtrangere?: string): string
     case "22P02":
       return "Une valeur saisie n'a pas le bon format.";
     case "42501":
-      return "Accès refusé : votre compte n'est pas autorisé à modifier les paramètres.";
+      return "Accès refusé : ton compte n'a pas le droit de modifier les paramètres (vérifie la table membres).";
     case "P0001":
       if (erreur.message.includes(MESSAGE_PREFIXE_FIGE)) {
-        return "Le préfixe ne peut plus être modifié : des factures ont déjà été numérotées avec lui. La série de numérotation doit rester continue, sans trou ni doublon.";
+        return "Le préfixe est bloqué : on a déjà numéroté des factures avec lui, et la série doit rester continue, sans trou ni doublon.";
       }
       return erreur.message;
     case "PGRST301":
     case "PGRST303":
-      return "Votre session a expiré : reconnectez-vous.";
+      return "Ta session a expiré : reconnecte-toi.";
     default:
       return `Erreur de la base de données : ${erreur.message}`;
   }
@@ -193,7 +193,7 @@ const schemaParametres = z
             return false;
           }
         },
-        { error: "URL du logo invalide : adresse complète attendue (https://…), ou laissez vide pour le logo Delaveau." },
+        { error: "URL du logo invalide : mets l'adresse complète (https://…), ou laisse vide pour garder notre logo Delaveau." },
       )
       .transform((v) => (v === "" ? null : v)),
 
@@ -269,7 +269,7 @@ const schemaParametres = z
       "L'objet des factures mensuelles est obligatoire (ex. « Formation et accompagnement »).",
     ),
     jour_generation: entierBorne(1, 28, "Jour de génération"),
-    mois_facture: z.enum(["courant", "precedent"], { error: "Choisissez le mois facturé (courant ou précédent)." }),
+    mois_facture: z.enum(["courant", "precedent"], { error: "Choisis le mois facturé (en cours ou précédent)." }),
     generation_auto: z.boolean(),
     envoi_auto: z.boolean(),
 
@@ -286,7 +286,7 @@ const schemaParametres = z
   })
   .refine((e) => !e.envoi_auto || e.generation_auto, {
     path: ["envoi_auto"],
-    error: "L'envoi automatique nécessite la génération automatique des brouillons : cochez les deux, ou aucun.",
+    error: "Pour l'envoi automatique, il faut aussi la génération automatique des brouillons : coche les deux, ou aucun.",
     when: (p) => !p.issues.some((i) => i.path?.[0] === "envoi_auto" || i.path?.[0] === "generation_auto"),
   })
   .refine((e) => !e.siren || !e.siret || chiffresSeuls(e.siret).startsWith(chiffresSeuls(e.siren)), {
@@ -319,7 +319,7 @@ function lireFormulaireParametres(formData: FormData) {
 
 const PARAMETRES_INTROUVABLES: ResultatAction = {
   ok: false,
-  erreur: "Paramètres introuvables, ou accès refusé : vérifiez que les migrations ont été appliquées.",
+  erreur: "Paramètres introuvables, ou accès refusé : vérifie que les migrations Supabase sont bien appliquées.",
 };
 
 /**
@@ -353,7 +353,7 @@ export async function enregistrerParametres(
       if (prefixe_facture !== "" && prefixe_facture !== prefixeActuel) {
         return {
           ok: false,
-          erreur: `Le préfixe ne peut plus être modifié : des factures ont déjà été numérotées avec « ${prefixeActuel} ». La série de numérotation doit rester continue.`,
+          erreur: `Le préfixe est bloqué : on a déjà numéroté des factures avec « ${prefixeActuel} », et la série doit rester continue.`,
         };
       }
     } else {
@@ -370,7 +370,7 @@ export async function enregistrerParametres(
 
   // Raison sociale, couleurs et préfixe apparaissent sur plusieurs pages (tableau de bord, factures…).
   revalidatePath("/", "layout");
-  return { ok: true, message: "Paramètres enregistrés. Ils s'appliquent aux prochaines factures émises." };
+  return { ok: true, message: "C'est enregistré. Ça s'appliquera à nos prochaines factures émises." };
 }
 
 // -----------------------------------------------------------------------------
@@ -411,7 +411,7 @@ async function autresAcademiesActives(
 }
 
 const DERNIERE_ACTIVE =
-  "Au moins une académie doit rester active : les nouveaux clients doivent pouvoir y être rattachés. Activez ou ajoutez d'abord une autre académie.";
+  "Il faut garder au moins une académie active, pour pouvoir y rattacher les nouveaux clients. Active ou ajoute d'abord une autre académie.";
 
 /** Création (id vide) ou modification (nom, couleur, active) d'une académie. */
 export async function enregistrerAcademie(
@@ -442,7 +442,7 @@ export async function enregistrerAcademie(
         .eq("id", id)
         .select("id");
       if (error) return { ok: false, erreur: traduireErreur(error) };
-      if (!data || data.length === 0) return { ok: false, erreur: "Académie introuvable : elle a peut-être été supprimée." };
+      if (!data || data.length === 0) return { ok: false, erreur: "Académie introuvable : elle a peut-être été supprimée entre-temps." };
     } else {
       // Nouvelle académie : active, placée après les autres.
       const derniere = await supabase.from("academies").select("ordre").order("ordre", { ascending: false }).limit(1);
@@ -459,7 +459,7 @@ export async function enregistrerAcademie(
   revalidatePath("/", "layout");
   return {
     ok: true,
-    message: id ? `Académie « ${nom} » enregistrée.` : `Académie « ${nom} » ajoutée : vous pouvez y rattacher des clients.`,
+    message: id ? `Académie « ${nom} » enregistrée.` : `Académie « ${nom} » ajoutée : tu peux maintenant y rattacher des clients.`,
   };
 }
 
@@ -490,7 +490,7 @@ export async function changerActivationAcademie(academieId: string, activer: boo
       ok: true,
       message: activer
         ? `« ${nom} » est de nouveau active : elle est proposée pour les nouveaux clients et dans le filtre.`
-        : `« ${nom} » est désactivée. Ses clients restent rattachés et continuent d'être facturés s'ils sont actifs.`,
+        : `« ${nom} » est désactivée. Ses clients y restent rattachés et on continue de les facturer tant qu'ils sont actifs.`,
     };
   } catch {
     return ERREUR_RESEAU;
@@ -508,7 +508,7 @@ export async function supprimerAcademie(academieId: string): Promise<ResultatAct
   if (!id.success) return { ok: false, erreur: "Académie introuvable." };
 
   const refus =
-    "Cette académie ne peut pas être supprimée : des clients ou des factures y sont rattachés. Rattachez les clients à une autre académie depuis leur fiche, ou désactivez-la plutôt.";
+    "Impossible de supprimer cette académie : des clients ou des factures y sont rattachés. Change l'académie de ces clients depuis leur fiche, ou désactive-la plutôt.";
 
   try {
     const [academie, clients, factures, autres] = await Promise.all([
@@ -531,7 +531,7 @@ export async function supprimerAcademie(academieId: string): Promise<ResultatAct
         ok: false,
         erreur: `« ${nom} » ne peut pas être supprimée : ${
           nbClients > 1 ? `${nbClients} clients y sont rattachés` : "1 client y est rattaché"
-        } (clients archivés compris). Rattachez-les à une autre académie depuis leur fiche, ou désactivez plutôt l'académie.`,
+        } (clients archivés compris). Change leur académie depuis leur fiche, ou désactive plutôt celle-ci.`,
       };
     }
     if (nbFactures > 0) {
@@ -539,7 +539,7 @@ export async function supprimerAcademie(academieId: string): Promise<ResultatAct
         ok: false,
         erreur: `« ${nom} » ne peut pas être supprimée : ${
           nbFactures > 1 ? `${nbFactures} factures y sont rattachées` : "1 facture y est rattachée"
-        } (historique de facturation). Désactivez-la plutôt.`,
+        } (on doit garder l'historique). Désactive-la plutôt.`,
       };
     }
     if ((academie.data as AcademieLue).actif && autres.nombre === 0) return { ok: false, erreur: DERNIERE_ACTIVE };
@@ -578,7 +578,7 @@ export async function envoyerEmailTest(_precedent: ResultatAction | null, formDa
   if (!emailConfigure()) {
     return {
       ok: false,
-      erreur: "L'envoi d'e-mails n'est pas configuré : définissez les variables SMTP dans Vercel (voir l'aide ci-dessus), puis redéployez.",
+      erreur: "L'envoi d'e-mails n'est pas encore configuré : ajoute les variables SMTP dans Vercel (voir l'aide juste au-dessus), puis redéploie.",
     };
   }
 
@@ -587,7 +587,7 @@ export async function envoyerEmailTest(_precedent: ResultatAction | null, formDa
     const membre = await supabase.from("membres").select("email").limit(1);
     if (membre.error) return { ok: false, erreur: traduireErreur(membre.error) };
     if (!membre.data || membre.data.length === 0) {
-      return { ok: false, erreur: "Accès refusé : votre adresse ne figure pas parmi les utilisateurs autorisés." };
+      return { ok: false, erreur: "Accès refusé : ton adresse ne fait pas partie des utilisateurs autorisés (table membres)." };
     }
   } catch {
     return ERREUR_RESEAU;
@@ -601,7 +601,7 @@ export async function envoyerEmailTest(_precedent: ResultatAction | null, formDa
       utilisateur.email ? `, par ${utilisateur.email}` : ""
     }.`,
     "",
-    "Si vous le recevez, la configuration SMTP fonctionne : les factures pourront être envoyées aux clients.",
+    "Si tu le reçois, c'est que la configuration SMTP marche : on peut envoyer nos factures aux familles.",
     "",
     "— Facturation Académie Delaveau / Académie Espoir",
   ].join("\n");
@@ -618,6 +618,6 @@ export async function envoyerEmailTest(_precedent: ResultatAction | null, formDa
 
   return {
     ok: true,
-    message: `E-mail de test envoyé à ${destinataire.data}. Vérifiez la boîte de réception (et le dossier des indésirables).`,
+    message: `E-mail de test envoyé à ${destinataire.data}. Regarde la boîte de réception (et les indésirables, au cas où).`,
   };
 }
