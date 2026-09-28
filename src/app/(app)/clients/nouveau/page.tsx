@@ -57,7 +57,12 @@ export default async function PageNouveauClient() {
         </p>
       ) : (
         <div className="carte carte-corps sm:p-6">
-          <FormulaireClient academies={academies} academieParDefaut={academieParDefaut} jourGeneration={jourGeneration} />
+          <FormulaireClient
+            academies={academies}
+            academieParDefaut={academieParDefaut}
+            jourGeneration={jourGeneration}
+            saisonParDefaut={saisonEnCours()}
+          />
         </div>
       )}
     </div>

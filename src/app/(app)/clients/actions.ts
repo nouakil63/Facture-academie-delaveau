@@ -34,6 +34,7 @@ function traduireErreur(erreur: ErreurSupabase, siCleEtrangere?: string): string
     case "23514":
       if (texte.includes("clients_pro_raison_sociale"))
         return "La raison sociale est obligatoire pour un client professionnel.";
+      if (texte.includes("clients_arrhes")) return "Arrhes : montant ou saison invalide.";
       if (texte.includes("tarifs_ligne_libre")) return "Une ligne libre doit avoir un libellé et un prix.";
       if (texte.includes("tarifs_dates"))
         return "La date de fin doit être postérieure ou égale à la date de début.";
@@ -163,6 +164,40 @@ const schemaClient = z
     cavaliers: texteFacultatif(300, "Cavalier(s)"),
     notes: texteFacultatif(4000, "Notes internes"),
     envoi_auto: z.boolean({ error: "Envoi automatique : valeur invalide." }),
+    arrhes_reglees: z.boolean({ error: "Arrhes réglées : valeur invalide." }),
+    // Saisi en euros (« 450 », « 450,50 ») ; "" → null.
+    arrhes_centimes: z.string().transform((v, ctx) => {
+      if (v.trim() === "") return null;
+      const centimes = parseEurosEnCentimes(v);
+      if (centimes === null) {
+        ctx.addIssue({ code: "custom", message: "Arrhes : montant invalide (ex. 450 ou 450,50)." });
+        return z.NEVER;
+      }
+      if (centimes > 100_000_000) {
+        ctx.addIssue({ code: "custom", message: "Arrhes : montant trop élevé." });
+        return z.NEVER;
+      }
+      return centimes;
+    }),
+    arrhes_saison: z
+      .string()
+      .trim()
+      .refine((v) => v === "" || (/^\d{4}$/.test(v) && Number(v) >= 2000 && Number(v) <= 2100), {
+        error: "Arrhes : saison invalide.",
+      })
+      .transform((v) => (v === "" ? null : Number(v))),
+  })
+  .refine((c) => !c.arrhes_reglees || (c.arrhes_centimes ?? 0) > 0, {
+    path: ["arrhes_centimes"],
+    error: "Arrhes réglées : saisir leur montant.",
+    when: (payload) =>
+      !payload.issues.some((i) => ["arrhes_reglees", "arrhes_centimes"].includes(String(i.path?.[0]))),
+  })
+  .refine((c) => !c.arrhes_reglees || c.arrhes_saison !== null, {
+    path: ["arrhes_saison"],
+    error: "Arrhes réglées : choisir la saison.",
+    when: (payload) =>
+      !payload.issues.some((i) => ["arrhes_reglees", "arrhes_saison"].includes(String(i.path?.[0]))),
   })
   .refine((c) => c.type !== "professionnel" || Boolean(c.raison_sociale), {
     path: ["raison_sociale"],
@@ -176,20 +211,24 @@ const schemaClient = z
     when: (payload) =>
       !payload.issues.some((i) => ["type", "adresse_ligne1", "code_postal", "ville"].includes(String(i.path?.[0]))),
   })
-  .transform((c) =>
+  .transform((c) => {
     // Un particulier n'a ni raison sociale, ni SIRET, ni numéro de TVA.
-    c.type === "particulier" ? { ...c, raison_sociale: null, siret: null, numero_tva: null } : c,
-  );
+    const client = c.type === "particulier" ? { ...c, raison_sociale: null, siret: null, numero_tva: null } : c;
+    // Sans arrhes (ni réglées ni saisies), la saison n'a pas d'objet.
+    return !client.arrhes_reglees && client.arrhes_centimes === null ? { ...client, arrhes_saison: null } : client;
+  });
 
 function lireFormulaireClient(formData: FormData) {
   const noms = [
     "academie_id", "type", "civilite", "nom", "prenom", "raison_sociale", "email", "emails_cc",
     "telephone", "adresse_ligne1", "adresse_ligne2", "code_postal", "ville", "pays", "siret",
-    "numero_tva", "cavaliers", "notes",
+    "numero_tva", "cavaliers", "notes", "arrhes_saison",
   ];
   return {
     ...Object.fromEntries(noms.map((n) => [n, champ(formData, n)])),
     envoi_auto: formData.get("envoi_auto") === "on",
+    arrhes_reglees: formData.get("arrhes_reglees") === "on",
+    arrhes_centimes: champ(formData, "arrhes_montant"),
   };
 }
 

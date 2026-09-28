@@ -97,6 +97,12 @@ export interface Client {
   actif: boolean;
   /** Le jour de génération, sa facture mensuelle est émise et envoyée sans relecture (tâche planifiée). */
   envoi_auto: boolean;
+  /** Arrhes réglées : déduites des factures mensuelles de septembre à juin de `arrhes_saison`. */
+  arrhes_reglees: boolean;
+  /** Montant des arrhes (centimes), réparti sur 10 mensualités. */
+  arrhes_centimes: number | null;
+  /** Année de la rentrée : 2026 = septembre 2026 → juin 2027. */
+  arrhes_saison: number | null;
   created_at: string;
   updated_at: string;
 }

@@ -6,7 +6,8 @@ import { startTransition, useActionState, useEffect, useState } from "react";
 import { creerClient, modifierClient } from "@/app/(app)/clients/actions";
 import { IconeAlerte } from "@/components/Icones";
 import { appeler } from "@/lib/appeler";
-import { jourDuMois } from "@/lib/format";
+import { centimesVersSaisie, formatEuros, jourDuMois, parseEurosEnCentimes } from "@/lib/format";
+import { libelleSaison, mensualiteArrhes } from "@/lib/tarifs";
 import type { Academie, Client, ResultatAction, TypeClient } from "@/lib/types";
 
 const CIVILITES = ["Mme", "M.", "M. et Mme"];
@@ -23,6 +24,7 @@ export function FormulaireClient({
   academies,
   academieParDefaut,
   jourGeneration,
+  saisonParDefaut,
 }: {
   /** Absent → création. */
   client?: Client;
@@ -32,6 +34,8 @@ export function FormulaireClient({
   academieParDefaut?: string | null;
   /** Jour de génération mensuelle (paramètres) : jour de l'envoi automatique. */
   jourGeneration: number;
+  /** Saison des arrhes proposée par défaut : la saison en cours (heure de Paris), calculée côté serveur. */
+  saisonParDefaut: number;
 }) {
   const creation = !client;
   const router = useRouter();
@@ -54,6 +58,16 @@ export function FormulaireClient({
   const [copies, setCopies] = useState(client?.emails_cc?.join(", ") ?? "");
   const [envoiAuto, setEnvoiAuto] = useState(client?.envoi_auto ?? false);
   const sansDestinataire = email.trim() === "" && copies.trim() === "";
+  // Arrhes : déduction mensuelle calculée en direct.
+  const [arrhesReglees, setArrhesReglees] = useState(client?.arrhes_reglees ?? false);
+  const [arrhesSaisie, setArrhesSaisie] = useState(centimesVersSaisie(client?.arrhes_centimes));
+  const arrhesCentimes = parseEurosEnCentimes(arrhesSaisie);
+  const juinArrhes = arrhesCentimes === null ? 0 : arrhesCentimes - 9 * mensualiteArrhes(arrhesCentimes);
+  const saisons = [saisonParDefaut - 1, saisonParDefaut, saisonParDefaut + 1];
+  if (client?.arrhes_saison != null && !saisons.includes(client.arrhes_saison)) {
+    saisons.push(client.arrhes_saison);
+    saisons.sort((a, b) => a - b);
+  }
 
   const academieInitiale = client?.academie_id ?? academieParDefaut ?? academies[0]?.id ?? "";
   const civilites =
@@ -387,6 +401,77 @@ export function FormulaireClient({
                 <p className="aide">Client archivé : pas de facture mensuelle, donc aucun envoi automatique.</p>
               )}
             </div>
+          </div>
+        </Section>
+
+        <Section titre="Arrhes">
+          <div className="grid gap-4 sm:grid-cols-6">
+            <label
+              className={`flex cursor-pointer items-start gap-3 rounded-lg border px-3 py-3 hover:bg-page sm:col-span-6 ${
+                arrhesReglees ? "border-brand bg-brand-light/40" : "border-line"
+              }`}
+            >
+              <input
+                type="checkbox"
+                name="arrhes_reglees"
+                defaultChecked={client?.arrhes_reglees ?? false}
+                onChange={(e) => setArrhesReglees(e.target.checked)}
+                className="mt-0.5 size-4 shrink-0 accent-brand"
+              />
+              <span className="text-sm">
+                <span className="font-medium text-ink">Arrhes réglées</span>
+                <span className="block text-muted">
+                  Déduites des factures mensuelles de septembre à juin ; la facture n&apos;affiche que le montant net.
+                </span>
+              </span>
+            </label>
+            <div className="sm:col-span-3">
+              <label htmlFor="arrhes_montant" className="label">
+                Montant des arrhes (€) {arrhesReglees && <Obligatoire />}
+              </label>
+              <input
+                id="arrhes_montant"
+                name="arrhes_montant"
+                inputMode="decimal"
+                required={arrhesReglees}
+                maxLength={20}
+                placeholder="Ex. 450"
+                defaultValue={centimesVersSaisie(client?.arrhes_centimes)}
+                onChange={(e) => setArrhesSaisie(e.target.value)}
+                autoComplete="off"
+                className="champ"
+              />
+            </div>
+            <div className="sm:col-span-3">
+              <label htmlFor="arrhes_saison" className="label">
+                Saison
+              </label>
+              <select
+                id="arrhes_saison"
+                name="arrhes_saison"
+                defaultValue={String(client?.arrhes_saison ?? saisonParDefaut)}
+                className="champ"
+              >
+                {saisons.map((s) => (
+                  <option key={s} value={s}>
+                    {libelleSaison(s)}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <p className="aide sm:col-span-6" aria-live="polite">
+              {arrhesCentimes !== null && arrhesCentimes > 0 ? (
+                <>
+                  Déduites des mensualités de septembre à juin : −{formatEuros(mensualiteArrhes(arrhesCentimes))} par
+                  mois.
+                  {juinArrhes !== mensualiteArrhes(arrhesCentimes) && <> Juin : −{formatEuros(juinArrhes)}.</>}
+                </>
+              ) : arrhesSaisie.trim() !== "" ? (
+                "Montant invalide : saisir un montant en euros (ex. 450 ou 450,50)."
+              ) : (
+                "Déduites des mensualités de septembre à juin, par dixièmes. Juillet et août : facturation manuelle."
+              )}
+            </p>
           </div>
         </Section>
       </div>
