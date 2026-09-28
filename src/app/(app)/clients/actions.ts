@@ -379,6 +379,7 @@ const schemaTarif = z
     actif: z.boolean(),
     date_debut: dateFacultative("Date de début"),
     date_fin: dateFacultative("Date de fin"),
+    motif_reduction: texteFacultatif(120, "Motif de la réduction"),
   })
   .transform((t, ctx) => {
     const erreur = (message: string) => ctx.addIssue({ code: "custom", message });
@@ -418,6 +419,9 @@ const schemaTarif = z
         actif: t.actif,
         date_debut: t.date_debut,
         date_fin: t.date_fin,
+        // Motif : seulement pour un prix personnalisé d'une prestation du catalogue (comparé au
+        // prix catalogue à l'enregistrement).
+        motif_reduction: t.mode === "catalogue" && prix !== null ? t.motif_reduction : null,
       },
     };
   });
@@ -439,11 +443,26 @@ export async function enregistrerTarif(_precedent: ResultatAction | null, formDa
     actif: formData.get("actif") === "on",
     date_debut: champ(formData, "date_debut"),
     date_fin: champ(formData, "date_fin"),
+    motif_reduction: champ(formData, "motif_reduction"),
   });
   if (!lecture.success) return { ok: false, erreur: messagesValidation(lecture.error) };
   const { client_id, tarif_id, ligne } = lecture.data;
 
   try {
+    // Un motif n'a de sens que pour un prix inférieur au catalogue : sinon, il est retiré.
+    if (ligne.motif_reduction && ligne.prestation_id) {
+      const catalogue = await supabase
+        .from("prestations")
+        .select("prix_unitaire_centimes")
+        .eq("id", ligne.prestation_id)
+        .maybeSingle();
+      if (catalogue.error) return { ok: false, erreur: traduireErreur(catalogue.error) };
+      const prixCatalogue = (catalogue.data as { prix_unitaire_centimes: number } | null)?.prix_unitaire_centimes;
+      if (prixCatalogue == null || ligne.prix_unitaire_centimes == null || ligne.prix_unitaire_centimes >= prixCatalogue) {
+        ligne.motif_reduction = null;
+      }
+    }
+
     if (tarif_id) {
       const { data, error } = await supabase
         .from("tarifs_clients")

@@ -181,6 +181,14 @@ export function TarifsClient({
                             <span className="badge bg-brand-light text-brand-dark">Tarif personnalisé</span>
                           </span>
                         )}
+                        {l.personnalise && t.motif_reduction && (
+                          <span className="mt-1 block max-w-48 text-xs whitespace-normal text-muted">{t.motif_reduction}</span>
+                        )}
+                        {i === detail.ligne && detail.appliquee > 0 && (
+                          <span className="mt-1 block text-xs text-emerald-700">
+                            Arrhes : −{formatEuros(detail.appliquee)}
+                          </span>
+                        )}
                       </td>
                       <td className="text-right tabular-nums">{formatQuantite(t.quantite)}</td>
                       <td className="text-right font-medium whitespace-nowrap tabular-nums">
@@ -226,6 +234,12 @@ export function TarifsClient({
                     {formatQuantite(t.quantite)} × {l.prix != null ? formatEuros(l.prix) : "—"}
                     {l.personnalise && t.prestation && (
                       <span className="text-muted"> (catalogue : {formatEuros(t.prestation.prix_unitaire_centimes)})</span>
+                    )}
+                    {l.personnalise && t.motif_reduction && (
+                      <span className="block text-xs text-muted">{t.motif_reduction}</span>
+                    )}
+                    {i === detail.ligne && detail.appliquee > 0 && (
+                      <span className="block text-xs text-emerald-700">Arrhes : −{formatEuros(detail.appliquee)}</span>
                     )}
                   </div>
                   <div className="flex flex-wrap items-center gap-1.5">

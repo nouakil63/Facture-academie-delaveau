@@ -438,6 +438,318 @@ describe("envoi automatique par client", () => {
   });
 });
 
+describe("arrhes par client", () => {
+  const MIGRATION = "20260929000000_arrhes_clients.sql";
+
+  /** Client avec arrhes réglées (saison 2026 : septembre 2026 → juin 2027). */
+  async function clientArrhes(montant: number | null, nom = "Martin", reglees = true, saison: number | null = 2026) {
+    const id = await client(ad, nom);
+    await db.query(
+      `update clients set arrhes_reglees = $2, arrhes_centimes = $3, arrhes_saison = $4 where id = $1`,
+      [id, reglees, montant, saison],
+    );
+    return id;
+  }
+
+  async function tarifLibre(clientId: string, libelle: string, prix: number, quantite = 1, ordre = 0) {
+    await db.query(
+      `insert into tarifs_clients (client_id, libelle, prix_unitaire_centimes, quantite, ordre) values ($1, $2, $3, $4, $5)`,
+      [clientId, libelle, prix, quantite, ordre],
+    );
+  }
+
+  async function generer(periode: string, clientId: string, apercu = false) {
+    return un<{ facture_id: string | null; total_ht_centimes: number; deja_existante: boolean }>(
+      `select * from generer_brouillons_mensuels($1, null, $2) where client_id = $3`,
+      [periode, apercu, clientId],
+    );
+  }
+
+  async function lignes(factureId: string) {
+    return (await db.query<{ libelle: string; prix_unitaire_centimes: number; total_centimes: number }>(
+      `select libelle, prix_unitaire_centimes, total_centimes from lignes_facture where facture_id = $1 order by ordre`,
+      [factureId],
+    )).rows.map((l) => [l.libelle, l.prix_unitaire_centimes]);
+  }
+
+  async function totalFacture(factureId: string) {
+    return (await un<{ total_ht_centimes: number }>(`select total_ht_centimes from factures where id = $1`, [factureId]))
+      .total_ht_centimes;
+  }
+
+  test("colonnes, défauts neutres et contrôles", async () => {
+    const colonnes = (await db.query<{ column_name: string; is_nullable: string; column_default: string | null; data_type: string }>(
+      `select column_name, is_nullable, column_default, data_type from information_schema.columns
+        where table_schema = 'public' and table_name = 'clients' and column_name like 'arrhes%' order by column_name`,
+    )).rows;
+    expect(colonnes).toEqual([
+      { column_name: "arrhes_centimes", is_nullable: "YES", column_default: null, data_type: "integer" },
+      { column_name: "arrhes_reglees", is_nullable: "NO", column_default: "false", data_type: "boolean" },
+      { column_name: "arrhes_saison", is_nullable: "YES", column_default: null, data_type: "integer" },
+    ]);
+    const c = await client(ad);
+    expect(await un(`select arrhes_reglees, arrhes_centimes, arrhes_saison from clients where id = $1`, [c])).toEqual({
+      arrhes_reglees: false,
+      arrhes_centimes: null,
+      arrhes_saison: null,
+    });
+    await expect(db.query(`update clients set arrhes_centimes = -1 where id = $1`, [c])).rejects.toThrow(/clients_arrhes_montant/);
+    await expect(db.query(`update clients set arrhes_saison = 1999 where id = $1`, [c])).rejects.toThrow(/clients_arrhes_saison/);
+    await expect(db.query(`update clients set arrhes_saison = 2101 where id = $1`, [c])).rejects.toThrow(/clients_arrhes_saison/);
+    await expect(db.query(`update clients set arrhes_reglees = null where id = $1`, [c])).rejects.toThrow(/null/);
+    await db.query(`update clients set arrhes_reglees = true, arrhes_centimes = 0, arrhes_saison = 2100 where id = $1`, [c]);
+  });
+
+  test("génération : déduction sur la ligne de quantité 1 la plus chère ; client sans arrhes inchangé", async () => {
+    const avec = await clientArrhes(396000); // 3 960 € → 396 € par mois
+    await tarifLibre(avec, "Enseignement", 132000, 1, 1);
+    await tarifLibre(avec, "Cours", 4000, 4, 2);
+    await tarifLibre(avec, "Licence", 2000, 1, 3);
+    const sans = await client(ad, "Durand");
+    await tarifLibre(sans, "Enseignement", 132000, 1, 1);
+
+    const f = (await generer("2026-10-15", avec)).facture_id!;
+    expect(await lignes(f)).toEqual([["Enseignement", 132000 - 39600], ["Cours", 4000], ["Licence", 2000]]);
+    expect(await totalFacture(f)).toBe(132000 - 39600 + 16000 + 2000);
+    const objet = await un<{ objet: string; generation_auto: boolean }>(`select objet, generation_auto from factures where id = $1`, [f]);
+    expect(objet).toEqual({ objet: "Formation et accompagnement – octobre 2026", generation_auto: true });
+
+    const g = (await generer("2026-10-15", sans)).facture_id!;
+    expect(await lignes(g)).toEqual([["Enseignement", 132000]]);
+    expect(await totalFacture(g)).toBe(132000);
+  });
+
+  test("juin reçoit le reste : total déduit exact sur 10 mois", async () => {
+    const c = await clientArrhes(100007); // 10 000 par mois, 10 007 en juin
+    await tarifLibre(c, "Enseignement", 50000);
+    let deduit = 0;
+    for (const mois of ["2026-09", "2026-10", "2026-11", "2026-12", "2027-01", "2027-02", "2027-03", "2027-04", "2027-05", "2027-06"]) {
+      const f = (await generer(`${mois}-01`, c)).facture_id!;
+      deduit += 50000 - (await totalFacture(f));
+    }
+    expect(deduit).toBe(100007);
+    const juin = (await generer("2027-06-01", c)).facture_id!;
+    expect(await totalFacture(juin)).toBe(50000 - 10007);
+  });
+
+  test("hors saison (juillet, août, autre saison) ou arrhes non réglées : aucune déduction", async () => {
+    const c = await clientArrhes(45000);
+    await tarifLibre(c, "Enseignement", 50000);
+    for (const periode of ["2026-07-01", "2026-08-01", "2027-07-01", "2027-08-01", "2027-09-01", "2026-06-01"]) {
+      const r = await generer(periode, c);
+      expect({ periode, total: await totalFacture(r.facture_id!) }).toEqual({ periode, total: 50000 });
+    }
+    const nonReglees = await clientArrhes(45000, "Durand", false);
+    await tarifLibre(nonReglees, "Enseignement", 50000);
+    expect(await totalFacture((await generer("2026-10-01", nonReglees)).facture_id!)).toBe(50000);
+    const sansSaison = await clientArrhes(45000, "Petit", true, null);
+    await tarifLibre(sansSaison, "Enseignement", 50000);
+    expect(await totalFacture((await generer("2026-10-01", sansSaison)).facture_id!)).toBe(50000);
+  });
+
+  test("une ligne de quantité 4 n'absorbe jamais la déduction ; égalité : la première dans l'ordre", async () => {
+    const c = await clientArrhes(45000);
+    await tarifLibre(c, "Cours", 90000, 4, 1); // plus grand total, mais quantité 4
+    await tarifLibre(c, "Pension A", 30000, 1, 2);
+    await tarifLibre(c, "Pension B", 30000, 1, 3);
+    const f = (await generer("2026-10-01", c)).facture_id!;
+    expect(await lignes(f)).toEqual([["Cours", 90000], ["Pension A", 30000 - 4500], ["Pension B", 30000]]);
+  });
+
+  test("aucune ligne adéquate : pas de déduction (jamais de prix négatif)", async () => {
+    const c = await clientArrhes(450000); // 45 000 par mois
+    await tarifLibre(c, "Cours", 90000, 4, 1); // quantité 4
+    await tarifLibre(c, "Licence", 40000, 1, 2); // prix < déduction
+    const apercu = await generer("2026-10-01", c, true);
+    expect(apercu.total_ht_centimes).toBe(360000 + 40000);
+    const f = (await generer("2026-10-01", c)).facture_id!;
+    expect(await lignes(f)).toEqual([["Cours", 90000], ["Licence", 40000]]);
+    expect(await totalFacture(f)).toBe(400000);
+    // Prix égal à la déduction : ligne à 0, jamais négative.
+    const d = await clientArrhes(450000, "Durand");
+    await tarifLibre(d, "Enseignement", 45000);
+    expect(await lignes((await generer("2026-10-01", d)).facture_id!)).toEqual([["Enseignement", 0]]);
+  });
+
+  test("l'aperçu donne le montant réel (déjà générée comprise)", async () => {
+    const c = await clientArrhes(396000);
+    await tarifLibre(c, "Enseignement", 132000, 1, 1);
+    await tarifLibre(c, "Cours", 3333, 2.5, 2);
+    const apercu = await generer("2026-11-01", c, true);
+    expect(apercu.facture_id).toBeNull();
+    const f = (await generer("2026-11-01", c)).facture_id!;
+    expect(apercu.total_ht_centimes).toBe(await totalFacture(f));
+    expect(apercu.total_ht_centimes).toBe(132000 - 39600 + 8333);
+    const deja = await generer("2026-11-01", c, true);
+    expect(deja).toMatchObject({ facture_id: f, deja_existante: true, total_ht_centimes: 132000 - 39600 + 8333 });
+  });
+
+  test("idempotence conservée : relancer ne crée ni doublon ni seconde déduction", async () => {
+    const c = await clientArrhes(45000);
+    await tarifLibre(c, "Enseignement", 50000);
+    const f = (await generer("2026-10-01", c)).facture_id!;
+    const r = await generer("2026-10-01", c);
+    expect(r).toMatchObject({ facture_id: f, deja_existante: true, total_ht_centimes: 45500 });
+    expect((await un<{ n: number }>(`select count(*)::int as n from factures`)).n).toBe(1);
+    expect(await lignes(f)).toEqual([["Enseignement", 45500]]);
+  });
+
+  test("l'émission fige les arrhes dans l'instantané client", async () => {
+    const c = await clientArrhes(45000);
+    await tarifLibre(c, "Enseignement", 50000);
+    const f = (await generer("2026-10-01", c)).facture_id!;
+    await db.query(`select emettre_facture($1)`, [f]);
+    await db.query(`update clients set arrhes_reglees = false, arrhes_centimes = null where id = $1`, [c]);
+    const row = await un<{ client_snapshot: Record<string, unknown> }>(`select client_snapshot from factures where id = $1`, [f]);
+    expect(row.client_snapshot).toMatchObject({ arrhes_reglees: true, arrhes_centimes: 45000, arrhes_saison: 2026 });
+  });
+
+  test("migration : brouillons et factures existants inchangés, génération identique sans arrhes", async () => {
+    const ancienne = await creerBase({ arreterAvant: MIGRATION });
+    try {
+      const q = async <T>(sql: string, params: unknown[] = []) => (await ancienne.query<T>(sql, params)).rows;
+      const idAcademie = (await q<{ id: string }>(`select id from academies order by ordre limit 1`))[0].id;
+      const [martin] = await q<{ id: string }>(`insert into clients (academie_id, nom) values ($1, 'Martin') returning id`, [idAcademie]);
+      const [durand] = await q<{ id: string }>(`insert into clients (academie_id, nom) values ($1, 'Durand') returning id`, [idAcademie]);
+      for (const c of [martin.id, durand.id]) {
+        await q(`insert into tarifs_clients (client_id, libelle, prix_unitaire_centimes, ordre) values ($1, 'Enseignement', 132000, 1)`, [c]);
+        await q(`insert into tarifs_clients (client_id, libelle, prix_unitaire_centimes, quantite, ordre) values ($1, 'Cours', 4000, 4, 2)`, [c]);
+      }
+      const [emise] = await q<{ facture_id: string }>(`select * from generer_brouillons_mensuels('2026-09-01') where client_id = $1`, [martin.id]);
+      await q(`select emettre_facture($1)`, [emise.facture_id]);
+      await q(`select * from generer_brouillons_mensuels('2026-10-01')`);
+      const avantMensuel = await q(`select * from generer_brouillons_mensuels('2026-11-01', null, true) order by client_id`);
+
+      // Colonnes ajoutées par la migration : nulles sur l'existant, le reste strictement identique.
+      const NOUVELLES = ["prix_catalogue_centimes", "motif_reduction", "deduction_arrhes_centimes"];
+      const anciennes = (rows: Record<string, unknown>[]) =>
+        rows.map((r) => Object.fromEntries(Object.entries(r).filter(([k]) => !NOUVELLES.includes(k))));
+      const instantane = async () => ({
+        factures: await q<Record<string, unknown>>(`select * from factures order by id`),
+        lignes: anciennes(await q<Record<string, unknown>>(`select * from lignes_facture order by id`)),
+        tarifs: anciennes(await q<Record<string, unknown>>(`select * from tarifs_clients order by id`)),
+      });
+      const avant = await instantane();
+      expect(avant.lignes.length).toBeGreaterThan(0);
+      await appliquerMigration(ancienne, MIGRATION);
+      expect(await instantane()).toEqual(avant);
+      expect(await q(`select distinct prix_catalogue_centimes, motif_reduction, deduction_arrhes_centimes from lignes_facture`)).toEqual([
+        { prix_catalogue_centimes: null, motif_reduction: null, deduction_arrhes_centimes: null },
+      ]);
+      expect(await q(`select distinct motif_reduction from tarifs_clients`)).toEqual([{ motif_reduction: null }]);
+
+      const clients = await q(`select arrhes_reglees, arrhes_centimes, arrhes_saison from clients`);
+      expect(clients).toEqual([
+        { arrhes_reglees: false, arrhes_centimes: null, arrhes_saison: null },
+        { arrhes_reglees: false, arrhes_centimes: null, arrhes_saison: null },
+      ]);
+      // Même aperçu et mêmes lignes qu'avant la migration pour des clients sans arrhes.
+      expect(await q(`select * from generer_brouillons_mensuels('2026-11-01', null, true) order by client_id`)).toEqual(avantMensuel);
+      const [nov] = await q<{ facture_id: string }>(`select * from generer_brouillons_mensuels('2026-11-01') where client_id = $1`, [martin.id]);
+      expect(
+        (await q<{ libelle: string; prix_unitaire_centimes: number }>(
+          `select libelle, prix_unitaire_centimes from lignes_facture where facture_id = $1 order by ordre`, [nov.facture_id],
+        )).map((l) => [l.libelle, l.prix_unitaire_centimes]),
+      ).toEqual([["Enseignement", 132000], ["Cours", 4000]]);
+      // Droits inchangés : pas d'accès anonyme.
+      await ancienne.exec(`set role anon`);
+      await expect(ancienne.query(`select * from generer_brouillons_mensuels('2026-10-01', null, true)`)).rejects.toThrow(/permission/);
+      await ancienne.exec(`reset role`);
+    } finally {
+      await ancienne.close();
+    }
+  });
+});
+
+describe("réduction motivée et informations figées sur les lignes générées", () => {
+  test("colonnes nulles par défaut et contrôles", async () => {
+    const colonnes = (await db.query<{ table_name: string; column_name: string; is_nullable: string; data_type: string }>(
+      `select table_name, column_name, is_nullable, data_type from information_schema.columns
+        where table_schema = 'public'
+          and ((table_name = 'tarifs_clients' and column_name = 'motif_reduction')
+            or (table_name = 'lignes_facture' and column_name in ('prix_catalogue_centimes', 'motif_reduction', 'deduction_arrhes_centimes')))
+        order by table_name, column_name`,
+    )).rows;
+    expect(colonnes).toEqual([
+      { table_name: "lignes_facture", column_name: "deduction_arrhes_centimes", is_nullable: "YES", data_type: "integer" },
+      { table_name: "lignes_facture", column_name: "motif_reduction", is_nullable: "YES", data_type: "text" },
+      { table_name: "lignes_facture", column_name: "prix_catalogue_centimes", is_nullable: "YES", data_type: "integer" },
+      { table_name: "tarifs_clients", column_name: "motif_reduction", is_nullable: "YES", data_type: "text" },
+    ]);
+    const c = await client(ad);
+    const f = await brouillon(c, [["A", 1, 100]]);
+    const l = await un<Record<string, unknown>>(`select * from lignes_facture where facture_id = $1`, [f]);
+    expect(l).toMatchObject({ prix_catalogue_centimes: null, motif_reduction: null, deduction_arrhes_centimes: null });
+    await expect(db.query(`update lignes_facture set prix_catalogue_centimes = -1 where facture_id = $1`, [f]))
+      .rejects.toThrow(/lignes_facture_prix_catalogue/);
+    await expect(db.query(`update lignes_facture set deduction_arrhes_centimes = -1 where facture_id = $1`, [f]))
+      .rejects.toThrow(/lignes_facture_deduction_arrhes/);
+  });
+
+  test("la génération recopie prix catalogue, motif et déduction d'arrhes sur chaque ligne", async () => {
+    const academicien = await prestation(240000, "Académicien Delaveau");
+    const licence = await prestation(2000, "Licence");
+    const c = await client(ad);
+    await db.query(`update clients set arrhes_reglees = true, arrhes_centimes = 396000, arrhes_saison = 2026 where id = $1`, [c]);
+    await db.query(
+      `insert into tarifs_clients (client_id, prestation_id, prix_unitaire_centimes, motif_reduction, ordre)
+       values ($1, $2, 210000, 'Prise en charge 50 % location cheval', 1)`,
+      [c, academicien],
+    );
+    await db.query(`insert into tarifs_clients (client_id, prestation_id, ordre) values ($1, $2, 2)`, [c, licence]);
+    await db.query(
+      `insert into tarifs_clients (client_id, libelle, prix_unitaire_centimes, quantite, ordre) values ($1, 'Cours', 4000, 2, 3)`,
+      [c],
+    );
+    const [r] = (await db.query<{ facture_id: string; total_ht_centimes: number }>(
+      `select * from generer_brouillons_mensuels('2026-10-01')`)).rows;
+    const lignes = (await db.query(
+      `select libelle, prix_unitaire_centimes, prix_catalogue_centimes, motif_reduction, deduction_arrhes_centimes
+         from lignes_facture where facture_id = $1 order by ordre`,
+      [r.facture_id],
+    )).rows;
+    expect(lignes).toEqual([
+      {
+        libelle: "Académicien Delaveau",
+        prix_unitaire_centimes: 210000 - 39600,
+        prix_catalogue_centimes: 240000,
+        motif_reduction: "Prise en charge 50 % location cheval",
+        deduction_arrhes_centimes: 39600,
+      },
+      { libelle: "Licence", prix_unitaire_centimes: 2000, prix_catalogue_centimes: 2000, motif_reduction: null, deduction_arrhes_centimes: null },
+      { libelle: "Cours", prix_unitaire_centimes: 4000, prix_catalogue_centimes: null, motif_reduction: null, deduction_arrhes_centimes: null },
+    ]);
+    // Le total ne dépend que des lignes.
+    expect(r.total_ht_centimes).toBe(210000 - 39600 + 2000 + 8000);
+    expect((await un<{ total_ht_centimes: number }>(`select total_ht_centimes from factures where id = $1`, [r.facture_id]))
+      .total_ht_centimes).toBe(r.total_ht_centimes);
+  });
+
+  test("immutabilité conservée : lignes émises figées, suppression d'une prestation toujours possible", async () => {
+    const p = await prestation(240000, "Académicien Delaveau");
+    const c = await client(ad);
+    await db.query(`update clients set arrhes_reglees = true, arrhes_centimes = 396000, arrhes_saison = 2026 where id = $1`, [c]);
+    await db.query(
+      `insert into tarifs_clients (client_id, prestation_id, prix_unitaire_centimes, motif_reduction) values ($1, $2, 210000, 'Motif')`,
+      [c, p],
+    );
+    const [r] = (await db.query<{ facture_id: string }>(`select * from generer_brouillons_mensuels('2026-10-01')`)).rows;
+    await db.query(`select emettre_facture($1)`, [r.facture_id]);
+    for (const maj of ["motif_reduction = 'Autre'", "prix_catalogue_centimes = 1", "deduction_arrhes_centimes = 0"]) {
+      await expect(db.query(`update lignes_facture set ${maj} where facture_id = $1`, [r.facture_id])).rejects.toThrow(/émise/);
+    }
+    await db.query(`delete from tarifs_clients where client_id = $1`, [c]);
+    await db.query(`delete from prestations where id = $1`, [p]);
+    const l = await un<Record<string, unknown>>(`select * from lignes_facture where facture_id = $1`, [r.facture_id]);
+    expect(l).toMatchObject({
+      prestation_id: null,
+      prix_catalogue_centimes: 240000,
+      motif_reduction: "Motif",
+      deduction_arrhes_centimes: 39600,
+    });
+  });
+});
+
 describe("sécurité (RLS)", () => {
   test("un membre voit et modifie les données", async () => {
     const n = await commeUtilisateur(db, MEMBRE, async () => {

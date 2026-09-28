@@ -60,6 +60,9 @@ export function FormulaireTarif({
   const quantiteSaisie = parseQuantite(quantite);
   const apercu = prixEffectif != null && quantiteSaisie != null ? totalLigneCentimes(quantiteSaisie, prixEffectif) : null;
   const personnalise = prestation != null && prixSaisi != null && prixSaisi !== prestation.prix_unitaire_centimes;
+  // Réduction : prix personnalisé inférieur au catalogue → motif possible (rappelé sur la facture).
+  const reduction = prestation != null && prixSaisi != null && prixSaisi < prestation.prix_unitaire_centimes;
+  const [motif, setMotif] = useState(tarif?.motif_reduction ?? "");
 
   function choisirPrestation(id: string) {
     setPrestationId(id);
@@ -208,6 +211,29 @@ export function FormulaireTarif({
           />
           <p className="aide">{prestation ? `En ${prestation.unite}. ` : ""}Décimales acceptées (ex. 2,5).</p>
         </div>
+
+        {reduction && prestation && (
+          <div className="sm:col-span-2">
+            <label htmlFor="motif_reduction" className="label">
+              Motif de la réduction <span className="font-normal text-muted">(facultatif)</span>
+            </label>
+            <input
+              id="motif_reduction"
+              name="motif_reduction"
+              maxLength={120}
+              autoComplete="off"
+              value={motif}
+              onChange={(e) => setMotif(e.target.value)}
+              placeholder="Ex. Prise en charge 50 % location cheval"
+              className="champ"
+            />
+            <p className="aide">
+              Imprimé sur la facture en rappel, ex. Prise en charge 50 % location cheval (réduction de{" "}
+              {formatEuros(prestation.prix_unitaire_centimes - (prixSaisi ?? 0))} par{" "}
+              {prestation.unite === "mois" ? "mois" : "unité"}).
+            </p>
+          </div>
+        )}
 
         <div className="sm:col-span-2">
           <label htmlFor="description" className="label">

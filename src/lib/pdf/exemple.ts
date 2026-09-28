@@ -11,6 +11,9 @@ export interface LigneExemple {
   description?: string | null;
   quantite?: number;
   prix_unitaire_centimes: number;
+  prix_catalogue_centimes?: number | null;
+  motif_reduction?: string | null;
+  deduction_arrhes_centimes?: number | null;
 }
 
 export const LIGNES_EXEMPLE: LigneExemple[] = [
@@ -115,6 +118,9 @@ export function donneesExemple(emetteur: Parametres, options: OptionsExemple = {
       prix_unitaire_centimes: l.prix_unitaire_centimes,
       total_centimes: Math.round(quantite * l.prix_unitaire_centimes),
       prestation_id: null,
+      prix_catalogue_centimes: l.prix_catalogue_centimes ?? null,
+      motif_reduction: l.motif_reduction ?? null,
+      deduction_arrhes_centimes: l.deduction_arrhes_centimes ?? null,
       created_at: maintenant,
     };
   });

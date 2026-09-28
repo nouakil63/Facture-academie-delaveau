@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { genererPdfFacture, nomFichierFacture } from "@/lib/pdf";
 import { donneesExemple, parametresExemple } from "@/lib/pdf/exemple";
-import { texteArrhesFacture } from "@/lib/pdf/FacturePdf";
+import { texteRappelFacture } from "@/lib/pdf/FacturePdf";
 import type { Client, Parametres } from "@/lib/types";
 
 /**
@@ -165,7 +165,10 @@ describe("PDF de facture", () => {
     const arrhes = { arrhes_reglees: true, arrhes_centimes: 396000, arrhes_saison: 2026 };
     const donnees = donneesExemple(PARAMETRES, {
       statut: "emise",
-      lignes: [{ libelle: "Enseignement et pension", quantite: 1, prix_unitaire_centimes: 92400 }],
+      lignes: [
+        { libelle: "Enseignement et pension", quantite: 1, prix_unitaire_centimes: 92400, deduction_arrhes_centimes: 39600 },
+        { libelle: "Cours particuliers", quantite: 2, prix_unitaire_centimes: 4500 },
+      ],
       client: { prenom: "Marie", nom: "Dupont", cavaliers: "Léa Dupont", arrhes_reglees: false },
       facture: {
         numero: "AD-2026-0050",
@@ -178,9 +181,9 @@ describe("PDF de facture", () => {
     });
     // Arrhes figées à l'émission (la fiche actuelle, sans arrhes, ne compte pas).
     donnees.facture.client_snapshot = { ...donnees.client, ...arrhes };
-    expect(donnees.facture.total_ht_centimes).toBe(92400);
-    expect(texteArrhesFacture(donnees.facture, donnees.client, donnees.lignes)).toBe(
-      "Enseignement annuel : 13 200,00 € · Arrhes versées : 3 960,00 € · Échéancier sur 10 mois (septembre à juin)",
+    expect(donnees.facture.total_ht_centimes).toBe(92400 + 9000); // total inchangé : lignes seules
+    expect(texteRappelFacture(donnees.facture, donnees.client, donnees.lignes)).toBe(
+      "Enseignement annuel : 14 100,00 € · Arrhes versées : 3 960,00 € · Échéancier sur 10 mois (septembre à juin)",
     );
 
     const pdf = await genererPdfFacture(donnees);
@@ -188,9 +191,44 @@ describe("PDF de facture", () => {
     ecrireApercu("apercu-facture-arrhes.pdf", pdf);
   });
 
-  it("rappel des arrhes : seulement pour une facture mensuelle dont la déduction s'applique", () => {
+  it("rend une facture mensuelle avec réduction motivée et arrhes", async () => {
+    // Catalogue 2 400 €, prix personnalisé 2 100 € (motif), arrhes 3 960 € → 1 704 € facturés.
     const arrhes = { arrhes_reglees: true, arrhes_centimes: 396000, arrhes_saison: 2026 };
-    const lignes = [{ quantite: 1 }];
+    const donnees = donneesExemple(PARAMETRES, {
+      statut: "brouillon",
+      lignes: [
+        {
+          libelle: "Académicien Delaveau – enseignement et pension",
+          quantite: 1,
+          prix_unitaire_centimes: 210000 - 39600,
+          prix_catalogue_centimes: 240000,
+          motif_reduction: "Prise en charge 50 % location cheval",
+          deduction_arrhes_centimes: 39600,
+        },
+      ],
+      client: { prenom: "Paul", nom: "Leroy", cavaliers: "Tom Leroy", ...arrhes },
+      facture: { generation_auto: true, objet: "Formation et accompagnement – octobre 2026", periode: "2026-10-01" },
+    });
+    expect(donnees.facture.total_ht_centimes).toBe(170400);
+    expect(texteRappelFacture(donnees.facture, donnees.client, donnees.lignes)).toBe(
+      "Enseignement annuel : 24 000,00 € · Prise en charge 50 % location cheval : −3 000,00 € · Arrhes versées : 3 960,00 € · Échéancier sur 10 mois (septembre à juin)",
+    );
+    const pdf = await genererPdfFacture(donnees);
+    expect(nombrePages(pdf)).toBe(1);
+    ecrireApercu("apercu-facture-reduction-arrhes.pdf", pdf);
+  });
+
+  it("rappel : arrhes figées, réduction motivée, rien pour une facture non concernée", () => {
+    const arrhes = { arrhes_reglees: true, arrhes_centimes: 396000, arrhes_saison: 2026 };
+    const ligne = (modifs: Partial<Parameters<typeof texteRappelFacture>[2][number]> = {}) => ({
+      quantite: 1,
+      prix_unitaire_centimes: 92400,
+      prix_catalogue_centimes: null,
+      motif_reduction: null,
+      deduction_arrhes_centimes: 39600,
+      ...modifs,
+    });
+    const lignes = [ligne()];
     const mensuelle = {
       statut: "brouillon" as const,
       generation_auto: true,
@@ -198,31 +236,52 @@ describe("PDF de facture", () => {
       total_ht_centimes: 92400,
       client_snapshot: null,
     };
+    const sansArrhes = { arrhes_reglees: false, arrhes_centimes: null, arrhes_saison: null };
     // Brouillon : fiche actuelle.
-    expect(texteArrhesFacture(mensuelle, arrhes, lignes)).toContain("Enseignement annuel : 13 200,00 €");
-    // Juin : la déduction est le reste (396,00 € ici aussi) ; montant annuel exact.
+    expect(texteRappelFacture(mensuelle, arrhes, lignes)).toContain("Enseignement annuel : 13 200,00 €");
+    // Juin : la déduction est le reste ; montant annuel exact.
     const reste = { ...arrhes, arrhes_centimes: 396005 }; // 39 600 × 9 + 39 605
     expect(
-      texteArrhesFacture({ ...mensuelle, periode: "2027-06-01", total_ht_centimes: 132000 - 39605 }, reste, lignes),
+      texteRappelFacture(
+        { ...mensuelle, periode: "2027-06-01", total_ht_centimes: 132000 - 39605 },
+        reste,
+        [ligne({ prix_unitaire_centimes: 132000 - 39605, deduction_arrhes_centimes: 39605 })],
+      ),
     ).toContain("Enseignement annuel : 13 200,00 € · Arrhes versées : 3 960,05 €");
-    // Rien à afficher :
-    expect(texteArrhesFacture({ ...mensuelle, generation_auto: false }, arrhes, lignes)).toBeNull(); // facture manuelle
-    expect(texteArrhesFacture({ ...mensuelle, periode: "2027-07-01" }, arrhes, lignes)).toBeNull(); // juillet
-    expect(texteArrhesFacture({ ...mensuelle, periode: "2026-08-01" }, arrhes, lignes)).toBeNull(); // hors saison
-    expect(texteArrhesFacture(mensuelle, { ...arrhes, arrhes_reglees: false }, lignes)).toBeNull(); // non réglées
-    expect(texteArrhesFacture(mensuelle, arrhes, [{ quantite: 4 }])).toBeNull(); // déduction non appliquée
-    // Facture émise : l'instantané fait foi ; un instantané antérieur aux arrhes → rien.
-    const emise = { ...mensuelle, statut: "emise" as const };
-    expect(texteArrhesFacture(emise, arrhes, lignes)).toBeNull();
+    // Réduction motivée sans arrhes : pas de segment arrhes.
+    const reduite = [
+      ligne({ prix_unitaire_centimes: 210000, prix_catalogue_centimes: 240000, motif_reduction: " Prise en charge 50 % location cheval ", deduction_arrhes_centimes: null }),
+      ligne({ prix_unitaire_centimes: 2000, prix_catalogue_centimes: 2000, deduction_arrhes_centimes: null }),
+    ];
+    expect(texteRappelFacture({ ...mensuelle, total_ht_centimes: 212000 }, sansArrhes, reduite)).toBe(
+      "Enseignement annuel : 24 000,00 € · Prise en charge 50 % location cheval : −3 000,00 € · Échéancier sur 10 mois (septembre à juin)",
+    );
+    // Réduction sans motif, ou prix au catalogue : rien (sans arrhes).
     expect(
-      texteArrhesFacture({ ...emise, client_snapshot: { nom: "Dupont" } as unknown as Client }, arrhes, lignes),
+      texteRappelFacture(mensuelle, sansArrhes, [ligne({ prix_catalogue_centimes: 240000, deduction_arrhes_centimes: null })]),
     ).toBeNull();
     expect(
-      texteArrhesFacture(
-        { ...emise, client_snapshot: arrhes as unknown as Client },
-        { arrhes_reglees: false, arrhes_centimes: null, arrhes_saison: null },
-        lignes,
-      ),
+      texteRappelFacture(mensuelle, sansArrhes, [
+        ligne({ prix_catalogue_centimes: 92400, motif_reduction: "Motif", deduction_arrhes_centimes: null }),
+      ]),
+    ).toBeNull();
+    // Réduction sans motif mais arrhes : annuel = (total + déduction) × 10.
+    expect(texteRappelFacture(mensuelle, arrhes, [ligne({ prix_catalogue_centimes: 240000 })])).toBe(
+      "Enseignement annuel : 13 200,00 € · Arrhes versées : 3 960,00 € · Échéancier sur 10 mois (septembre à juin)",
+    );
+    // Rien à afficher :
+    expect(texteRappelFacture({ ...mensuelle, generation_auto: false }, arrhes, lignes)).toBeNull(); // facture manuelle
+    expect(texteRappelFacture({ ...mensuelle, periode: "2027-07-01" }, arrhes, lignes)).toBeNull(); // juillet
+    expect(texteRappelFacture({ ...mensuelle, periode: "2026-08-01" }, arrhes, reduite)).toBeNull(); // août
+    expect(texteRappelFacture({ ...mensuelle, periode: "2027-09-01" }, arrhes, lignes)).toBeNull(); // autre saison
+    expect(texteRappelFacture(mensuelle, { ...arrhes, arrhes_reglees: false }, lignes)).toBeNull(); // non réglées
+    expect(texteRappelFacture(mensuelle, arrhes, [ligne({ deduction_arrhes_centimes: null })])).toBeNull(); // non appliquée
+    // Facture émise : l'instantané fait foi ; un instantané antérieur aux arrhes → rien.
+    const emise = { ...mensuelle, statut: "emise" as const };
+    expect(texteRappelFacture(emise, arrhes, lignes)).toBeNull();
+    expect(texteRappelFacture({ ...emise, client_snapshot: { nom: "Dupont" } as unknown as Client }, arrhes, lignes)).toBeNull();
+    expect(
+      texteRappelFacture({ ...emise, client_snapshot: arrhes as unknown as Client }, sansArrhes, lignes),
     ).toContain("Arrhes versées : 3 960,00 €");
   });
 

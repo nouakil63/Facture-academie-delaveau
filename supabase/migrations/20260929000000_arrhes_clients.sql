@@ -13,8 +13,14 @@
 -- l'ordre des lignes), à condition que son prix soit ≥ à la déduction. Sinon, aucune
 -- déduction (un prix ne devient jamais négatif) : l'interface le signale.
 --
--- Reprise de l'existant : défauts neutres (arrhes non réglées), aucune donnée ne change.
--- Les brouillons et factures déjà créés ne sont pas modifiés.
+-- Réduction motivée : un tarif à prix personnalisé inférieur au catalogue peut porter un motif
+-- (« Prise en charge 50 % location cheval »). La génération mensuelle recopie sur chaque ligne
+-- le prix catalogue, le motif et la déduction d'arrhes appliquée : figés avec la ligne (les
+-- lignes d'une facture émise sont immuables), ils alimentent le rappel imprimé sous l'objet
+-- de la facture (« Enseignement annuel … »). Ils ne changent jamais le total.
+--
+-- Reprise de l'existant : défauts neutres (arrhes non réglées, colonnes nulles), aucune
+-- donnée ne change. Les brouillons et factures déjà créés ne sont pas modifiés.
 
 alter table public.clients
   add column arrhes_reglees boolean not null default false,
@@ -29,6 +35,29 @@ comment on column public.clients.arrhes_centimes is
   'Montant des arrhes (centimes), réparti sur 10 mensualités (septembre → juin).';
 comment on column public.clients.arrhes_saison is
   'Année de la rentrée : 2026 = septembre 2026 → juin 2027.';
+
+-- Réduction motivée sur un tarif (prix personnalisé inférieur au catalogue).
+alter table public.tarifs_clients add column motif_reduction text;
+
+comment on column public.tarifs_clients.motif_reduction is
+  'Motif d''un prix personnalisé inférieur au catalogue, rappelé sur la facture mensuelle.';
+
+-- Informations figées sur chaque ligne générée (nulles pour les lignes existantes et saisies à la main).
+-- Le trigger proteger_lignes_facture compare les lignes entières : ces colonnes, jamais modifiées
+-- sur une facture émise, ne changent rien à l'exception « prestation supprimée » (on delete set null).
+alter table public.lignes_facture
+  add column prix_catalogue_centimes integer
+    constraint lignes_facture_prix_catalogue check (prix_catalogue_centimes is null or prix_catalogue_centimes >= 0),
+  add column motif_reduction text,
+  add column deduction_arrhes_centimes integer
+    constraint lignes_facture_deduction_arrhes check (deduction_arrhes_centimes is null or deduction_arrhes_centimes >= 0);
+
+comment on column public.lignes_facture.prix_catalogue_centimes is
+  'Prix catalogue de la prestation au moment de la génération (null : ligne libre ou saisie à la main).';
+comment on column public.lignes_facture.motif_reduction is
+  'Motif de la réduction du tarif (copie de tarifs_clients.motif_reduction à la génération).';
+comment on column public.lignes_facture.deduction_arrhes_centimes is
+  'Déduction des arrhes retirée du prix unitaire de cette ligne à la génération (null : aucune).';
 
 -- -----------------------------------------------------------------------------
 -- Déduction des arrhes sur la facture mensuelle du mois de p_periode (centimes, ≥ 0).
@@ -157,7 +186,8 @@ begin
             v_debut, p.taux_tva, true)
     returning id into v_facture;
 
-    insert into public.lignes_facture (facture_id, ordre, libelle, description, quantite, prix_unitaire_centimes, prestation_id)
+    insert into public.lignes_facture (facture_id, ordre, libelle, description, quantite, prix_unitaire_centimes,
+                                       prestation_id, prix_catalogue_centimes, motif_reduction, deduction_arrhes_centimes)
     with lignes as (
       select t.id as tarif_id,
              row_number() over (order by t.ordre, t.created_at)::integer as rang,
@@ -165,7 +195,9 @@ begin
              coalesce(t.description, pr.description) as description_ligne,
              t.quantite as quantite_ligne,
              coalesce(t.prix_unitaire_centimes, pr.prix_unitaire_centimes) as prix_ligne,
-             t.prestation_id as prestation_ligne
+             t.prestation_id as prestation_ligne,
+             pr.prix_unitaire_centimes as catalogue_ligne,
+             t.motif_reduction as motif_ligne
         from public.tarifs_clients t
         left join public.prestations pr on pr.id = t.prestation_id
        where t.client_id = r.cid
@@ -191,7 +223,10 @@ begin
            l.description_ligne,
            l.quantite_ligne,
            l.prix_ligne - case when l.tarif_id = (select cible.tarif_id from cible) then v_deduction else 0 end,
-           l.prestation_ligne
+           l.prestation_ligne,
+           l.catalogue_ligne,
+           l.motif_ligne,
+           case when l.tarif_id = (select cible.tarif_id from cible) then v_deduction end
       from lignes l;
 
     client_id := r.cid; facture_id := v_facture; nb_lignes := r.nb;

@@ -10,7 +10,7 @@ import {
   nomClient,
   sansEspacesSpeciales,
 } from "@/lib/format";
-import { deductionArrhes, type ArrhesClient } from "@/lib/tarifs";
+import { deductionArrhes, totalLigneCentimes, type ArrhesClient } from "@/lib/tarifs";
 import type { Academie, Client, Facture, LigneFacture, Parametres } from "@/lib/types";
 
 /*
@@ -87,34 +87,72 @@ function t(valeur: string | number | null | undefined): string {
     .replace(/\r\n?/g, "\n");
 }
 
+type LigneRappel = Pick<
+  LigneFacture,
+  "quantite" | "prix_unitaire_centimes" | "prix_catalogue_centimes" | "motif_reduction" | "deduction_arrhes_centimes"
+>;
+
 /**
- * Rappel de l'échéancier d'une facture MENSUELLE dont la déduction des arrhes s'applique à la
- * période : « Enseignement annuel : … · Arrhes versées : … · Échéancier sur 10 mois (septembre à
- * juin) ». Informatif : ni le total ni les lignes ne changent. null s'il n'y a rien à afficher.
- * Arrhes FIGÉES : instantané client pour une facture émise (rien si l'instantané, antérieur aux
- * arrhes, n'en contient pas), fiche actuelle pour un brouillon.
- * Enseignement annuel = (total HT + déduction de la période) × 10 (exact, juin compris).
+ * Rappel de l'échéancier d'une facture MENSUELLE (septembre à juin), imprimé sous l'objet :
+ *   « Enseignement annuel : 24 000,00 € · Prise en charge 50 % location cheval : −3 000,00 € ·
+ *     Arrhes versées : 3 960,00 € · Échéancier sur 10 mois (septembre à juin) »
+ * Informatif : ni le total ni les lignes ne changent. null s'il n'y a rien à afficher.
+ *
+ * - Arrhes : affichées si la déduction s'applique à la période (deductionArrhes sur les arrhes
+ *   FIGÉES : instantané client pour une facture émise — rien si l'instantané, antérieur aux
+ *   arrhes, n'en contient pas —, fiche actuelle pour un brouillon) ET si la génération l'a
+ *   effectivement retirée d'une ligne (`deduction_arrhes_centimes`).
+ * - Ligne principale : celle qui porte la déduction, sinon celle de plus grand total parmi les
+ *   lignes de quantité 1 (la première en cas d'égalité). Son prix brut = prix + déduction.
+ * - Réduction motivée (prix catalogue > prix brut et motif renseigné, figés sur la ligne) :
+ *   annuel = catalogue × quantité × 10, réduction = (catalogue − brut) × quantité × 10.
+ * - Sinon, avec arrhes : annuel = (total HT + déduction) × 10 (exact, juin compris).
  */
-export function texteArrhesFacture(
+export function texteRappelFacture(
   facture: Pick<Facture, "statut" | "generation_auto" | "periode" | "total_ht_centimes" | "client_snapshot">,
   client: ArrhesClient,
-  lignes: Pick<LigneFacture, "quantite">[],
+  lignes: LigneRappel[],
 ): string | null {
   if (!facture.generation_auto || !facture.periode) return null;
+  // Juillet et août : hors échéancier.
+  if (["07", "08"].includes(facture.periode.slice(5, 7))) return null;
+
+  // Arrhes figées.
   const source: Partial<ArrhesClient> | null = facture.statut === "brouillon" ? client : facture.client_snapshot;
-  if (!source || typeof source.arrhes_reglees !== "boolean") return null;
-  const arrhes: ArrhesClient = {
-    arrhes_reglees: source.arrhes_reglees,
-    arrhes_centimes: source.arrhes_centimes ?? null,
-    arrhes_saison: source.arrhes_saison ?? null,
-  };
-  const deduction = deductionArrhes(arrhes, facture.periode);
-  // Sans ligne de quantité 1, la génération n'a pas pu appliquer la déduction.
-  if (deduction <= 0 || !lignes.some((l) => Number(l.quantite) === 1)) return null;
-  const annuel = (Number(facture.total_ht_centimes) + deduction) * 10;
-  return sansEspacesSpeciales(
-    `Enseignement annuel : ${formatEurosPdf(annuel)} · Arrhes versées : ${formatEurosPdf(arrhes.arrhes_centimes ?? 0)} · Échéancier sur 10 mois (septembre à juin)`,
-  );
+  const arrhes: ArrhesClient | null =
+    source && typeof source.arrhes_reglees === "boolean"
+      ? {
+          arrhes_reglees: source.arrhes_reglees,
+          arrhes_centimes: source.arrhes_centimes ?? null,
+          arrhes_saison: source.arrhes_saison ?? null,
+        }
+      : null;
+  const ligneArrhes = lignes.find((l) => (l.deduction_arrhes_centimes ?? 0) > 0) ?? null;
+  const avecArrhes = arrhes !== null && ligneArrhes !== null && deductionArrhes(arrhes, facture.periode) > 0;
+  const deduction = avecArrhes ? (ligneArrhes.deduction_arrhes_centimes ?? 0) : 0;
+
+  // Ligne principale et réduction motivée.
+  const principale =
+    (avecArrhes ? ligneArrhes : null) ??
+    lignes
+      .filter((l) => Number(l.quantite) === 1)
+      .reduce<LigneRappel | null>((max, l) => (max === null || l.prix_unitaire_centimes > max.prix_unitaire_centimes ? l : max), null);
+  const brut = principale ? principale.prix_unitaire_centimes + (principale === ligneArrhes ? deduction : 0) : 0;
+  const motif = principale?.motif_reduction?.trim() ?? "";
+  const catalogue = principale?.prix_catalogue_centimes ?? null;
+  const reduction = principale !== null && catalogue !== null && catalogue > brut && motif !== "";
+
+  if (!reduction && !avecArrhes) return null;
+  const segments: string[] = [];
+  if (reduction) {
+    segments.push(`Enseignement annuel : ${formatEurosPdf(totalLigneCentimes(principale.quantite, catalogue) * 10)}`);
+    segments.push(`${motif} : −${formatEurosPdf(totalLigneCentimes(principale.quantite, catalogue - brut) * 10)}`);
+  } else {
+    segments.push(`Enseignement annuel : ${formatEurosPdf((Number(facture.total_ht_centimes) + deduction) * 10)}`);
+  }
+  if (avecArrhes) segments.push(`Arrhes versées : ${formatEurosPdf(arrhes.arrhes_centimes ?? 0)}`);
+  segments.push("Échéancier sur 10 mois (septembre à juin)");
+  return sansEspacesSpeciales(segments.join(" · "));
 }
 
 function rempli(valeur: string | null | undefined): valeur is string {
@@ -509,8 +547,8 @@ export function FacturePdf({
       ].filter(rempli)
     : [];
   const nomAcademie = academie?.nom?.trim() ?? "";
-  // Facture mensuelle avec arrhes : rappel informatif de l'échéancier (sans effet sur le total).
-  const texteArrhes = texteArrhesFacture(facture, client, lignes);
+  // Facture mensuelle avec arrhes ou réduction motivée : rappel informatif (sans effet sur le total).
+  const texteArrhes = texteRappelFacture(facture, client, lignes);
 
   // --- Pied de page
   const paragraphesPied = [

@@ -121,6 +121,8 @@ export interface TarifClient {
   actif: boolean;
   ordre: number;
   notes: string | null;
+  /** Motif d'un prix personnalisé inférieur au catalogue, rappelé sur la facture mensuelle. */
+  motif_reduction: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -183,6 +185,12 @@ export interface LigneFacture {
   prix_unitaire_centimes: number;
   total_centimes: number;
   prestation_id: string | null;
+  /** Prix catalogue à la génération mensuelle (null : ligne libre ou saisie à la main). */
+  prix_catalogue_centimes: number | null;
+  /** Motif de la réduction du tarif, copié à la génération mensuelle. */
+  motif_reduction: string | null;
+  /** Déduction des arrhes retirée du prix unitaire de cette ligne à la génération (null : aucune). */
+  deduction_arrhes_centimes: number | null;
   created_at: string;
 }
 
