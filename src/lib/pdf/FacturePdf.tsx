@@ -106,7 +106,8 @@ type LigneRappel = Pick<
  *   lignes de quantité 1 (la première en cas d'égalité). Son prix brut = prix + déduction.
  * - Réduction motivée (prix catalogue > prix brut et motif renseigné, figés sur la ligne) :
  *   annuel = catalogue × quantité × 10, réduction = (catalogue − brut) × quantité × 10.
- * - Sinon, avec arrhes : annuel = (total HT + déduction) × 10 (exact, juin compris).
+ * - Sinon, avec arrhes : annuel = prix brut de la ligne principale × quantité × 10 (les autres
+ *   lignes du mois — licences, engagements… — n'entrent pas dans l'annuel).
  */
 export function texteRappelFacture(
   facture: Pick<Facture, "statut" | "generation_auto" | "periode" | "total_ht_centimes" | "client_snapshot">,
@@ -147,8 +148,10 @@ export function texteRappelFacture(
   if (reduction) {
     segments.push(`Enseignement annuel : ${formatEurosPdf(totalLigneCentimes(principale.quantite, catalogue) * 10)}`);
     segments.push(`${motif} : −${formatEurosPdf(totalLigneCentimes(principale.quantite, catalogue - brut) * 10)}`);
-  } else {
-    segments.push(`Enseignement annuel : ${formatEurosPdf((Number(facture.total_ht_centimes) + deduction) * 10)}`);
+  } else if (principale) {
+    // Annuel = ligne principale seule (prix brut × 10) : les lignes ajoutées au mois (licences,
+    // engagements, stages…) n'entrent pas dans l'enseignement annuel.
+    segments.push(`Enseignement annuel : ${formatEurosPdf(totalLigneCentimes(principale.quantite, brut) * 10)}`);
   }
   if (avecArrhes) segments.push(`Arrhes versées : ${formatEurosPdf(arrhes.arrhes_centimes ?? 0)}`);
   segments.push("Échéancier sur 10 mois (septembre à juin)");

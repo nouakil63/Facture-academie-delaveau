@@ -182,8 +182,9 @@ describe("PDF de facture", () => {
     // Arrhes figées à l'émission (la fiche actuelle, sans arrhes, ne compte pas).
     donnees.facture.client_snapshot = { ...donnees.client, ...arrhes };
     expect(donnees.facture.total_ht_centimes).toBe(92400 + 9000); // total inchangé : lignes seules
+    // Annuel = ligne principale seule (1 320 € brut × 10) : les cours ajoutés au mois n'y entrent pas.
     expect(texteRappelFacture(donnees.facture, donnees.client, donnees.lignes)).toBe(
-      "Enseignement annuel : 14 100,00 € · Arrhes versées : 3 960,00 € · Échéancier sur 10 mois (septembre à juin)",
+      "Enseignement annuel : 13 200,00 € · Arrhes versées : 3 960,00 € · Échéancier sur 10 mois (septembre à juin)",
     );
 
     const pdf = await genererPdfFacture(donnees);
