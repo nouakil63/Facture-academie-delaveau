@@ -23,6 +23,11 @@
 -- toutes ses échéances non annulées sont payées, et revient à « envoyée »/« émise » si un
 -- paiement d'échéance est annulé. Annuler la facture annule ses échéances non payées.
 --
+-- Arrhes : lues sur la fiche client AU MOMENT DE L'ÉMISSION (échéancier calculé à l'émission) ;
+-- modifier les arrhes après la préparation du brouillon suffit, sans rien refaire.
+-- « Recalculer depuis les tarifs » (recalculer_brouillon) : remplace les lignes d'un brouillon
+-- généré (annuel, ou ancien brouillon mensuel) par celles des tarifs et réductions actuels.
+--
 -- Reprise de l'existant (additive, sans perte) :
 --   * clients existants : référence E1, E2… dans l'ordre de création (created_at, puis id) ;
 --   * factures existantes : type « ponctuelle », sans saison, contenu inchangé (les brouillons
@@ -511,16 +516,127 @@ end;
 $$;
 
 -- -----------------------------------------------------------------------------
--- 6. Génération des brouillons de factures annuelles
+-- 6. Lignes calculées depuis les tarifs, génération des brouillons annuels, recalcul
+-- -----------------------------------------------------------------------------
+
+-- Lignes de la facture annuelle d'un client pour une saison : une ligne par tarif actif et
+-- récurrent valide sur au moins un mois de la saison ; prix unitaire annuel = prix mensuel
+-- appliqué × nombre de mois de validité (10 pour un tarif valide toute l'année), prix catalogue
+-- × même nombre de mois, motif de réduction recopié. Libellé : « <libellé> – 2026-2027 »
+-- (« (8 mois) » ajouté si le tarif ne couvre pas toute la saison).
+create or replace function public.lignes_annuelles_client(p_client_id uuid, p_saison integer)
+returns table (
+  ordre integer,
+  libelle text,
+  description text,
+  quantite numeric,
+  prix_unitaire_centimes integer,
+  prestation_id uuid,
+  prix_catalogue_centimes integer,
+  motif_reduction text
+)
+language sql
+stable
+set search_path = public
+as $$
+  select (row_number() over (order by t.ordre, t.created_at))::integer,
+         coalesce(t.libelle, pr.libelle) || ' – ' || p_saison || '-' || (p_saison + 1)
+           || case when m.nb_mois < 10 then ' (' || m.nb_mois || ' mois)' else '' end,
+         coalesce(t.description, pr.description),
+         t.quantite,
+         coalesce(t.prix_unitaire_centimes, pr.prix_unitaire_centimes) * m.nb_mois,
+         t.prestation_id,
+         pr.prix_unitaire_centimes * m.nb_mois,
+         t.motif_reduction
+    from public.tarifs_clients t
+    left join public.prestations pr on pr.id = t.prestation_id
+    cross join lateral (
+      select count(*)::integer as nb_mois
+        from generate_series(0, 9) as k
+       where (t.date_debut is null or t.date_debut < (make_date(p_saison, 9, 1) + make_interval(months => k + 1))::date)
+         and (t.date_fin is null or t.date_fin >= (make_date(p_saison, 9, 1) + make_interval(months => k))::date)
+    ) m
+   where t.client_id = p_client_id
+     and t.actif
+     and t.recurrent
+     and m.nb_mois > 0
+   order by t.ordre, t.created_at;
+$$;
+
+-- Lignes d'une facture MENSUELLE (ancien modèle) d'un client : même règle exacte que
+-- generer_brouillons_mensuels (migration 20260929000000), arrhes déduites du prix unitaire de
+-- la ligne de quantité 1 la plus chère (égalité : la première), si son prix le permet.
+create or replace function public.lignes_mensuelles_client(p_client_id uuid, p_periode date)
+returns table (
+  ordre integer,
+  libelle text,
+  description text,
+  quantite numeric,
+  prix_unitaire_centimes integer,
+  prestation_id uuid,
+  prix_catalogue_centimes integer,
+  motif_reduction text,
+  deduction_arrhes_centimes integer
+)
+language sql
+stable
+set search_path = public
+as $$
+  with bornes as (
+    select date_trunc('month', p_periode)::date as debut,
+           (date_trunc('month', p_periode) + interval '1 month - 1 day')::date as fin
+  ),
+  lignes as (
+    select t.id as tarif_id,
+           (row_number() over (order by t.ordre, t.created_at))::integer as rang,
+           coalesce(t.libelle, pr.libelle) as libelle_ligne,
+           coalesce(t.description, pr.description) as description_ligne,
+           t.quantite as quantite_ligne,
+           coalesce(t.prix_unitaire_centimes, pr.prix_unitaire_centimes) as prix_ligne,
+           t.prestation_id as prestation_ligne,
+           pr.prix_unitaire_centimes as catalogue_ligne,
+           t.motif_reduction as motif_ligne
+      from public.tarifs_clients t
+      left join public.prestations pr on pr.id = t.prestation_id
+     cross join bornes b
+     where t.client_id = p_client_id
+       and t.actif
+       and t.recurrent
+       and (t.date_debut is null or t.date_debut <= b.fin)
+       and (t.date_fin is null or t.date_fin >= b.debut)
+  ),
+  deduction as (
+    select coalesce((select public.deduction_arrhes(c, b.debut) from public.clients c cross join bornes b where c.id = p_client_id), 0) as montant
+  ),
+  cible as (
+    select l.tarif_id
+      from lignes l cross join deduction d
+     where d.montant > 0
+       and l.quantite_ligne = 1
+       and l.prix_ligne >= d.montant
+     order by l.prix_ligne desc, l.rang
+     limit 1
+  )
+  select l.rang,
+         l.libelle_ligne,
+         l.description_ligne,
+         l.quantite_ligne,
+         l.prix_ligne - case when l.tarif_id = (select cible.tarif_id from cible) then (select d.montant from deduction d) else 0 end,
+         l.prestation_ligne,
+         l.catalogue_ligne,
+         l.motif_ligne,
+         case when l.tarif_id = (select cible.tarif_id from cible) then (select d.montant from deduction d) end
+    from lignes l
+   order by l.rang;
+$$;
+
+-- Génération des brouillons de factures annuelles
 --   p_saison      : année de la rentrée (2026 = septembre 2026 → juin 2027)
 --   p_academie_id : null → toutes les académies
 --   p_dry_run     : true → aperçu sans rien créer
--- Un brouillon par client actif ayant des tarifs actifs, récurrents et valides sur au moins
--- un mois de la saison ; une ligne par tarif : prix unitaire annuel = prix mensuel appliqué ×
--- nombre de mois de validité sur la saison (10 pour un tarif valide toute l'année), prix
--- catalogue × même nombre de mois, motif de réduction recopié. Idempotente : un client qui a
--- déjà une facture annuelle non annulée pour la saison est renvoyé avec deja_existante.
--- -----------------------------------------------------------------------------
+-- Un brouillon par client actif ayant au moins une ligne annuelle (lignes_annuelles_client).
+-- Idempotente : un client qui a déjà une facture annuelle non annulée pour la saison est
+-- renvoyé avec deja_existante (total : celui de la facture).
 create or replace function public.generer_factures_annuelles(
   p_saison integer,
   p_academie_id uuid default null,
@@ -538,7 +654,6 @@ set search_path = public
 as $$
 #variable_conflict use_column
 declare
-  v_debut date := make_date(p_saison, 9, 1);
   v_libelle_saison text := p_saison || '-' || (p_saison + 1);
   p public.parametres;
   r record;
@@ -554,26 +669,16 @@ begin
   end if;
 
   for r in
-    with tarifs as (
-      select t.*,
-             coalesce(t.prix_unitaire_centimes, pr.prix_unitaire_centimes) as prix_mensuel,
-             (select count(*)::integer
-                from generate_series(0, 9) as k
-               where (t.date_debut is null or t.date_debut < (v_debut + make_interval(months => k + 1))::date)
-                 and (t.date_fin is null or t.date_fin >= (v_debut + make_interval(months => k))::date)) as nb_mois
-        from public.tarifs_clients t
-        left join public.prestations pr on pr.id = t.prestation_id
-       where t.actif and t.recurrent
-    )
-    select c.id as cid,
-           count(t.id)::integer as nb,
-           sum(round(t.quantite * t.prix_mensuel * t.nb_mois))::integer as total
+    select c.id as cid, x.nb, x.total
       from public.clients c
-      join tarifs t on t.client_id = c.id
+     cross join lateral (
+       select count(*)::integer as nb,
+              sum(round(l.quantite * l.prix_unitaire_centimes))::integer as total
+         from public.lignes_annuelles_client(c.id, p_saison) l
+     ) x
      where (p_academie_id is null or c.academie_id = p_academie_id)
        and c.actif
-       and t.nb_mois > 0
-     group by c.id
+       and x.nb > 0
      order by c.id
   loop
     select f.id, f.total_ht_centimes into v_facture, v_total_existant
@@ -606,34 +711,64 @@ begin
 
     insert into public.lignes_facture (facture_id, ordre, libelle, description, quantite, prix_unitaire_centimes,
                                        prestation_id, prix_catalogue_centimes, motif_reduction)
-    select v_facture,
-           row_number() over (order by t.ordre, t.created_at)::integer,
-           coalesce(t.libelle, pr.libelle) || ' – ' || v_libelle_saison
-             || case when m.nb_mois < 10 then ' (' || m.nb_mois || ' mois)' else '' end,
-           coalesce(t.description, pr.description),
-           t.quantite,
-           coalesce(t.prix_unitaire_centimes, pr.prix_unitaire_centimes) * m.nb_mois,
-           t.prestation_id,
-           pr.prix_unitaire_centimes * m.nb_mois,
-           t.motif_reduction
-      from public.tarifs_clients t
-      left join public.prestations pr on pr.id = t.prestation_id
-      cross join lateral (
-        select count(*)::integer as nb_mois
-          from generate_series(0, 9) as k
-         where (t.date_debut is null or t.date_debut < (v_debut + make_interval(months => k + 1))::date)
-           and (t.date_fin is null or t.date_fin >= (v_debut + make_interval(months => k))::date)
-      ) m
-     where t.client_id = r.cid
-       and t.actif
-       and t.recurrent
-       and m.nb_mois > 0;
+    select v_facture, l.ordre, l.libelle, l.description, l.quantite, l.prix_unitaire_centimes,
+           l.prestation_id, l.prix_catalogue_centimes, l.motif_reduction
+      from public.lignes_annuelles_client(r.cid, p_saison) l;
 
     client_id := r.cid; facture_id := v_facture; nb_lignes := r.nb;
     total_ht_centimes := r.total; deja_existante := false;
     return next;
     v_facture := null;
   end loop;
+end;
+$$;
+
+-- « Recalculer depuis les tarifs » : remplace les lignes d'un BROUILLON généré (facture annuelle,
+-- ou ancien brouillon mensuel) par celles calculées à partir des tarifs et réductions actuels du
+-- client. Les lignes ajoutées ou modifiées à la main sont remplacées. Renvoie le nombre de lignes.
+create or replace function public.recalculer_brouillon(p_facture_id uuid)
+returns integer
+language plpgsql
+set search_path = public
+as $$
+declare
+  f public.factures;
+  v_nb integer;
+begin
+  select * into f from public.factures where id = p_facture_id for update;
+  if not found then
+    raise exception 'Facture introuvable';
+  end if;
+  if f.statut <> 'brouillon' then
+    raise exception 'Seul un brouillon peut être recalculé (facture % émise)', f.numero;
+  end if;
+
+  if f.type_facture = 'annuelle' then
+    select count(*) into v_nb from public.lignes_annuelles_client(f.client_id, f.saison);
+  elsif f.generation_auto and f.periode is not null then
+    select count(*) into v_nb from public.lignes_mensuelles_client(f.client_id, f.periode);
+  else
+    raise exception 'Brouillon saisi à la main : aucun tarif à recalculer';
+  end if;
+  if v_nb = 0 then
+    raise exception 'Aucun tarif récurrent valide pour ce client : rien à recalculer';
+  end if;
+
+  delete from public.lignes_facture where facture_id = f.id;
+  if f.type_facture = 'annuelle' then
+    insert into public.lignes_facture (facture_id, ordre, libelle, description, quantite, prix_unitaire_centimes,
+                                       prestation_id, prix_catalogue_centimes, motif_reduction)
+    select f.id, l.ordre, l.libelle, l.description, l.quantite, l.prix_unitaire_centimes,
+           l.prestation_id, l.prix_catalogue_centimes, l.motif_reduction
+      from public.lignes_annuelles_client(f.client_id, f.saison) l;
+  else
+    insert into public.lignes_facture (facture_id, ordre, libelle, description, quantite, prix_unitaire_centimes,
+                                       prestation_id, prix_catalogue_centimes, motif_reduction, deduction_arrhes_centimes)
+    select f.id, l.ordre, l.libelle, l.description, l.quantite, l.prix_unitaire_centimes,
+           l.prestation_id, l.prix_catalogue_centimes, l.motif_reduction, l.deduction_arrhes_centimes
+      from public.lignes_mensuelles_client(f.client_id, f.periode) l;
+  end if;
+  return v_nb;
 end;
 $$;
 
@@ -726,12 +861,23 @@ select e.*,
 -- -----------------------------------------------------------------------------
 -- 10. Sécurité
 -- -----------------------------------------------------------------------------
+-- Droits explicites (en plus des privilèges par défaut du schéma public de Supabase) ; la RLS
+-- et la vérification des membres restent la barrière d'accès.
+grant select, insert, update, delete on public.echeances to authenticated, service_role;
+grant select on public.factures_vue, public.echeances_vue to authenticated, service_role;
+
 alter table public.echeances enable row level security;
 create policy echeances_membres on public.echeances
   for all to authenticated using (public.est_membre()) with check (public.est_membre());
 
 revoke execute on function public.generer_factures_annuelles(integer, uuid, boolean) from public, anon;
 grant execute on function public.generer_factures_annuelles(integer, uuid, boolean) to authenticated, service_role;
+revoke execute on function public.recalculer_brouillon(uuid) from public, anon;
+grant execute on function public.recalculer_brouillon(uuid) to authenticated, service_role;
+revoke execute on function public.lignes_annuelles_client(uuid, integer) from public, anon;
+grant execute on function public.lignes_annuelles_client(uuid, integer) to authenticated, service_role;
+revoke execute on function public.lignes_mensuelles_client(uuid, date) from public, anon;
+grant execute on function public.lignes_mensuelles_client(uuid, date) to authenticated, service_role;
 revoke execute on function public.prochaine_reference_client() from public, anon;
 grant execute on function public.prochaine_reference_client() to authenticated, service_role;
 -- emettre_facture : droits inchangés (create or replace les conserve).
