@@ -230,7 +230,7 @@ export function FormulaireNouvelleFacture({
                   </option>
                 ))}
           </select>
-          {tentative && !client && <p className="mt-1 text-xs text-red-700">Choisis le client à facturer.</p>}
+          {tentative && !client && <p className="mt-1 text-xs text-red-700">Choisir le client à facturer.</p>}
           {client && academie && (
             <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted">
               <span>Académie</span>
@@ -241,14 +241,13 @@ export function FormulaireNouvelleFacture({
             </div>
           )}
           {client && !client.actif && (
-            <p className="avertissement mt-2">Ce client est archivé : réactive sa fiche pour pouvoir le facturer.</p>
+            <p className="avertissement mt-2">Client archivé : réactiver sa fiche pour le facturer.</p>
           )}
           {client && client.actif && !client.aDesDestinataires && (
             <p className="avertissement mt-2 flex items-start gap-2">
               <IconeAlerte className="mt-0.5 size-4 text-amber-600" />
               <span>
-                Ce client n&apos;a pas d&apos;adresse e-mail : tu pourras émettre et télécharger la facture, mais pas
-                la lui envoyer par e-mail.{" "}
+                Aucune adresse e-mail : émission et téléchargement possibles, pas d&apos;envoi par e-mail.{" "}
                 <Link href={`/clients/${client.id}`} className="font-medium underline">
                   Compléter la fiche
                 </Link>
@@ -311,14 +310,14 @@ export function FormulaireNouvelleFacture({
           </h2>
           <p className="mt-0.5 text-xs text-muted">
             {client
-              ? "Pré-remplies avec les tarifs actifs du client. Modifie, retire ou ajoute des lignes."
-              : "Choisis d'abord le client : ses tarifs seront repris tout seuls."}
+              ? "Pré-remplies avec les tarifs actifs du client. Modifier, retirer ou ajouter des lignes."
+              : "Choisir d'abord le client : ses tarifs sont repris automatiquement."}
           </p>
         </div>
 
         {client && lignes.length === 0 && (
           <div className="px-5 py-8 text-center text-sm text-muted">
-            Aucune ligne pour l&apos;instant. Ajoute une prestation du catalogue ou une ligne libre.
+            Aucune ligne pour l&apos;instant. Ajouter une prestation du catalogue ou une ligne libre.
           </div>
         )}
 
@@ -454,7 +453,7 @@ export function FormulaireNouvelleFacture({
               </div>
             ) : (
               <p className="flex-1 text-xs text-muted">
-                Notre catalogue n&apos;a aucune prestation active.{" "}
+                Aucune prestation active dans le catalogue.{" "}
                 <Link href="/prestations" className="btn-lien text-xs">
                   Gérer les prestations
                 </Link>
@@ -491,14 +490,14 @@ export function FormulaireNouvelleFacture({
 
       {tentative && client && lignes.length === 0 && (
         <p role="alert" className="erreur">
-          Ajoute au moins une ligne à la facture.
+          Ajouter au moins une ligne à la facture.
         </p>
       )}
       {tentative && lignesInvalides > 0 && (
         <p role="alert" className="erreur">
           {lignesInvalides === 1
-            ? "Une ligne est incomplète : vérifie le libellé, la quantité et le prix (surlignés en rouge)."
-            : `${lignesInvalides} lignes sont incomplètes : vérifie les libellés, quantités et prix (surlignés en rouge).`}
+            ? "Ligne incomplète : vérifier le libellé, la quantité et le prix (surlignés en rouge)."
+            : `${lignesInvalides} lignes incomplètes : vérifier les libellés, quantités et prix (surlignés en rouge).`}
         </p>
       )}
       {etat && !etat.ok && (
@@ -516,7 +515,7 @@ export function FormulaireNouvelleFacture({
         </button>
       </div>
       <p className="text-right text-xs text-muted">
-        Le brouillon n&apos;a pas encore de numéro : tu pourras le relire, le modifier puis l&apos;émettre.
+        Brouillon sans numéro : à relire, modifier puis émettre.
       </p>
     </form>
   );

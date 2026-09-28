@@ -71,7 +71,7 @@ export function FormulairePrestation({
           autoFocus={!prestation}
           className="champ"
         />
-        <p className="aide">Imprimé tel quel sur les lignes de nos factures.</p>
+        <p className="aide">Imprimé tel quel sur les lignes des factures.</p>
       </div>
 
       <div>
@@ -111,9 +111,9 @@ export function FormulairePrestation({
           </div>
           <p id="prestation-prix-aide" className="aide">
             {prix.trim() !== "" && centimes === null ? (
-              <span className="text-red-700">Montant invalide : saisis par exemple 450 ou 450,50.</span>
+              <span className="text-red-700">Montant invalide : saisir par exemple 450 ou 450,50.</span>
             ) : (
-              "Prix catalogue : tu pourras le personnaliser pour chaque client."
+              "Prix catalogue, personnalisable pour chaque client."
             )}
           </p>
         </div>
@@ -163,7 +163,7 @@ export function FormulairePrestation({
         <p className="avertissement">
           Le nouveau prix s&apos;appliquera aux prochaines factures{" "}
           {nbClientsPrixCatalogue > 1 ? "des" : "du"} {pluriel(nbClientsPrixCatalogue, "client")} au prix catalogue
-          (des deux académies). Les clients au prix personnalisé et les factures déjà créées ne bougent pas.
+          (des deux académies). Les clients au prix personnalisé et les factures déjà créées ne changent pas.
         </p>
       )}
 
@@ -173,13 +173,13 @@ export function FormulairePrestation({
           nom="recurrente"
           defaut={prestation?.recurrente ?? true}
           titre="Facturée chaque mois"
-          detail="Quand tu l'ajoutes aux tarifs d'un client, elle revient chaque mois sur sa facture mensuelle."
+          detail="Ajoutée aux tarifs d'un client, elle revient chaque mois sur sa facture mensuelle."
         />
         <Case
           nom="actif"
           defaut={prestation?.actif ?? true}
           titre="Active"
-          detail="Décoche pour archiver la prestation : elle ne sera plus proposée pour de nouveaux tarifs."
+          detail="Décocher pour archiver la prestation : elle ne sera plus proposée pour de nouveaux tarifs."
         />
       </fieldset>
 

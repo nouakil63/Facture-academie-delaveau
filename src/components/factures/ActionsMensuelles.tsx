@@ -113,7 +113,7 @@ export function EnvoiBrouillons({
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-sm text-muted">
           {n > 0
-            ? "Relis les brouillons (lien « Relire »), puis émets-les et envoie-les en une fois."
+            ? "Relire les brouillons (lien « Relire »), puis les émettre et les envoyer en une fois."
             : "Aucun brouillon à envoyer pour ce mois."}
         </p>
         <button
@@ -132,8 +132,8 @@ export function EnvoiBrouillons({
           <IconeAlerte className="mt-0.5 size-4 text-amber-600" />
           <span>
             {nbSansEmail === 1
-              ? "1 brouillon concerne un client sans adresse e-mail : il ne part pas avec l'envoi groupé. Ouvre-le pour l'émettre sans envoi (remise en main propre) ou complète la fiche client."
-              : `${nbSansEmail} brouillons concernent des clients sans adresse e-mail : ils ne partent pas avec l'envoi groupé. Ouvre-les pour les émettre sans envoi (remise en main propre) ou complète les fiches clients.`}
+              ? "1 brouillon concerne un client sans adresse e-mail : exclu de l'envoi groupé. L'ouvrir pour l'émettre sans envoi (remise en main propre) ou compléter la fiche client."
+              : `${nbSansEmail} brouillons concernent des clients sans adresse e-mail : exclus de l'envoi groupé. Les ouvrir pour les émettre sans envoi (remise en main propre) ou compléter les fiches clients.`}
           </span>
         </p>
       )}
@@ -168,7 +168,7 @@ export function EnvoiBrouillons({
             </li>
           ))}
         </ul>
-        {n > 10 && <p className="text-xs text-muted">Les factures partent une par une : compte quelques secondes par facture.</p>}
+        {n > 10 && <p className="text-xs text-muted">Envoi facture par facture : compter quelques secondes pour chacune.</p>}
       </ModaleConfirmation>
     </div>
   );

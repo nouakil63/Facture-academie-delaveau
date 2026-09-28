@@ -18,7 +18,7 @@ export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
   const session = await sessionUtilisateur();
-  if (!session) return erreurTexte(401, "Ta session a expiré : reconnecte-toi pour afficher l'aperçu.");
+  if (!session) return erreurTexte(401, "Session expirée : se reconnecter pour afficher l'aperçu.");
   const { supabase } = session;
 
   try {
@@ -55,6 +55,6 @@ export async function GET(request: NextRequest) {
     return reponsePdf(pdf, `Apercu-facture-${parametres.prefixe_facture}.pdf`, telecharger);
   } catch (e) {
     console.error("Aperçu PDF de la facture type impossible :", e);
-    return erreurTexte(500, "Impossible de générer l'aperçu de la facture. Réessaie dans un instant.");
+    return erreurTexte(500, "Impossible de générer l'aperçu de la facture. Réessayer dans un instant.");
   }
 }

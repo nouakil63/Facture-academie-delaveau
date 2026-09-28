@@ -121,7 +121,7 @@ export default async function PageClient(props: PageProps<"/clients/[id]">) {
               Nouvelle facture
             </Link>
           ) : (
-            <button type="button" className="btn-primaire" disabled title="Réactive le client pour pouvoir le facturer">
+            <button type="button" className="btn-primaire" disabled title="Réactiver le client pour le facturer">
               Nouvelle facture
             </button>
           )}
@@ -131,8 +131,7 @@ export default async function PageClient(props: PageProps<"/clients/[id]">) {
 
       {!client.actif && (
         <p className="avertissement">
-          Ce client est archivé : on ne le facture plus chaque mois. Réactive-le pour recommencer à le
-          facturer.
+          Client archivé : plus de facture mensuelle. Le réactiver pour reprendre la facturation.
         </p>
       )}
       {client.envoi_auto && client.actif && (
@@ -152,7 +151,7 @@ export default async function PageClient(props: PageProps<"/clients/[id]">) {
           <IconeAlerte className="size-4 text-amber-600" />
           {client.envoi_auto && client.actif
             ? "Aucune adresse e-mail : l'envoi automatique échouera. "
-            : "Pas d'adresse e-mail : on ne pourra pas lui envoyer ses factures par e-mail. "}
+            : "Aucune adresse e-mail : envoi des factures par e-mail impossible. "}
           <a href="#email" className="font-medium underline">
             Compléter
           </a>

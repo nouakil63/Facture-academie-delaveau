@@ -34,7 +34,7 @@ import type { Client, Facture, LigneFacture, ResultatAction, StatutFacture } fro
 
 const ERREUR_INATTENDUE: ResultatAction = {
   ok: false,
-  erreur: "Ça n'a pas abouti. Vérifie ta connexion et réessaie.",
+  erreur: "Opération non aboutie. Vérifier la connexion et réessayer.",
 };
 
 type EtatFacture = Pick<Facture, "id" | "statut" | "numero" | "client_id" | "envoyee_le">;
@@ -53,11 +53,11 @@ async function lireFacture(supabase: ClientSupabase, id: string): Promise<EtatFa
 
 /** Message expliquant qu'une opération n'est pas possible dans le statut actuel. */
 function horsStatut(statut: StatutFacture, operation: string): string {
-  return `Impossible de ${operation} : la facture est au statut « ${LIBELLES_STATUT[statut]} ». Recharge la page.`;
+  return `Impossible de ${operation} : la facture est au statut « ${LIBELLES_STATUT[statut]} ». Recharger la page.`;
 }
 
 const MESSAGE_PLUS_BROUILLON =
-  "Cette facture n'est plus un brouillon : on ne peut plus toucher à son contenu. Recharge la page.";
+  "Cette facture n'est plus un brouillon : contenu non modifiable. Recharger la page.";
 
 /** Vérifie qu'une facture est un brouillon (null si oui, sinon message d'erreur). */
 async function exigerBrouillon(supabase: ClientSupabase, id: string): Promise<EtatFacture | string> {
@@ -141,7 +141,7 @@ export async function enregistrerLigne(_precedent: ResultatAction | null, formDa
   });
   if (!saisie.success) return { ok: false, erreur: messagesValidation(saisie.error) };
   if (mode === "catalogue" && !saisie.data.ligne.prestation_id) {
-    return { ok: false, erreur: "Choisis une prestation du catalogue." };
+    return { ok: false, erreur: "Choisir une prestation du catalogue." };
   }
   const { facture_id, ligne_id, ligne } = saisie.data;
 
@@ -156,7 +156,7 @@ export async function enregistrerLigne(_precedent: ResultatAction | null, formDa
       if (!resPrestation.data) {
         return {
           ok: false,
-          erreur: "Cette prestation a été supprimée de notre catalogue : choisis-en une autre ou saisis une ligne libre.",
+          erreur: "Prestation supprimée du catalogue : en choisir une autre ou saisir une ligne libre.",
         };
       }
     }
@@ -177,7 +177,7 @@ export async function enregistrerLigne(_precedent: ResultatAction | null, formDa
         .eq("facture_id", facture_id)
         .select("id");
       if (error) return { ok: false, erreur: traduireErreur(error) };
-      if (!data || data.length === 0) return { ok: false, erreur: "Cette ligne n'existe plus. Recharge la page." };
+      if (!data || data.length === 0) return { ok: false, erreur: "Cette ligne n'existe plus. Recharger la page." };
     } else {
       const resOrdre = await supabase
         .from("lignes_facture")
@@ -246,7 +246,7 @@ export async function deplacerLigne(factureId: string, ligneId: string, sens: "h
     const lignes = data as Pick<LigneFacture, "id" | "ordre">[];
     const i = lignes.findIndex((l) => l.id === entree.data.ligneId);
     const j = entree.data.sens === "haut" ? i - 1 : i + 1;
-    if (i < 0) return { ok: false, erreur: "Cette ligne n'existe plus. Recharge la page." };
+    if (i < 0) return { ok: false, erreur: "Cette ligne n'existe plus. Recharger la page." };
     if (j < 0 || j >= lignes.length) return { ok: true };
     [lignes[i], lignes[j]] = [lignes[j], lignes[i]];
 
@@ -279,7 +279,7 @@ export async function supprimerBrouillon(factureId: string): Promise<ResultatAct
     if (facture.statut !== "brouillon") {
       return {
         ok: false,
-        erreur: `La facture ${facture.numero} est émise : on ne peut plus la supprimer, seulement l'annuler.`,
+        erreur: `La facture ${facture.numero} est émise : suppression impossible, seulement l'annulation.`,
       };
     }
     const { data, error } = await supabase
@@ -312,7 +312,7 @@ export async function emettreSansEnvoyer(factureId: string): Promise<ResultatAct
     return { ok: false, erreur: messageException(e, "Émission impossible") };
   }
   revaliderFactures();
-  return { ok: true, message: `Facture ${numero ?? ""} émise. Tu peux maintenant l'envoyer ou la télécharger.` };
+  return { ok: true, message: `Facture ${numero ?? ""} émise, prête à être envoyée ou téléchargée.` };
 }
 
 // -----------------------------------------------------------------------------
@@ -329,7 +329,7 @@ export async function envoyerParEmail(factureId: string): Promise<ResultatAction
   if (!id.success) return { ok: false, erreur: messagesValidation(id.error) };
 
   if (!emailConfigure()) {
-    return { ok: false, erreur: "L'envoi d'e-mails n'est pas encore configuré (serveur SMTP) : passe par les Paramètres." };
+    return { ok: false, erreur: "Envoi d'e-mails non configuré (serveur SMTP) : voir les Paramètres." };
   }
 
   const avant = await lireFacture(supabase, id.data).catch(() => null);
@@ -344,7 +344,7 @@ export async function envoyerParEmail(factureId: string): Promise<ResultatAction
       return {
         ok: false,
         erreur:
-          "Le client n'a aucune adresse e-mail : complète sa fiche, ou émets la facture sans l'envoyer pour la lui remettre en main propre.",
+          "Aucune adresse e-mail : compléter la fiche, ou émettre la facture sans l'envoyer pour la remettre en main propre.",
       };
     }
   }
@@ -367,7 +367,7 @@ export async function envoyerParEmail(factureId: string): Promise<ResultatAction
     return {
       ok: false,
       erreur: emiseSansEnvoi
-        ? `${resultat.erreur}\nLa facture a bien été émise (${numero}) mais l'e-mail n'est pas parti : tu peux relancer l'envoi.`
+        ? `${resultat.erreur}\nLa facture a bien été émise (${numero}) mais l'e-mail n'est pas parti : relancer l'envoi.`
         : resultat.erreur,
     };
   }
@@ -375,7 +375,7 @@ export async function envoyerParEmail(factureId: string): Promise<ResultatAction
   const destinataires = resultat.destinataires.join(", ");
   const refus =
     resultat.refusees.length > 0
-      ? `\nAdresse(s) en copie refusée(s) par le serveur d'envoi : ${resultat.refusees.join(", ")}. Vérifie la fiche client.`
+      ? `\nAdresse(s) en copie refusée(s) par le serveur d'envoi : ${resultat.refusees.join(", ")}. Vérifier la fiche client.`
       : "";
   if (avant?.statut === "brouillon") {
     return { ok: true, message: `Facture ${numero ?? ""} émise et envoyée à ${destinataires}.${refus}` };
@@ -399,7 +399,7 @@ const schemaPaiement = z.object({
       error: "Date de paiement invalide.",
     })
     .refine((v) => v <= aujourdhuiParis(), { error: "La date de paiement ne peut pas être dans le futur." }),
-  mode_paiement: z.enum(MODES_PAIEMENT, { error: "Choisis le mode de paiement." }),
+  mode_paiement: z.enum(MODES_PAIEMENT, { error: "Choisir le mode de paiement." }),
   reference_paiement: texteFacultatif(120, "Référence"),
 });
 
@@ -428,7 +428,7 @@ export async function marquerPayee(_precedent: ResultatAction | null, formData: 
       .in("statut", ["emise", "envoyee"])
       .select("id");
     if (error) return { ok: false, erreur: traduireErreur(error) };
-    if (!data || data.length === 0) return { ok: false, erreur: "Le statut de la facture a changé entre-temps. Recharge la page." };
+    if (!data || data.length === 0) return { ok: false, erreur: "Statut de la facture modifié entre-temps. Recharger la page." };
   } catch (e) {
     console.error(e);
     return ERREUR_INATTENDUE;
@@ -456,7 +456,7 @@ export async function annulerPaiement(factureId: string): Promise<ResultatAction
       .eq("statut", "payee")
       .select("id");
     if (error) return { ok: false, erreur: traduireErreur(error) };
-    if (!data || data.length === 0) return { ok: false, erreur: "Le statut de la facture a changé entre-temps. Recharge la page." };
+    if (!data || data.length === 0) return { ok: false, erreur: "Statut de la facture modifié entre-temps. Recharger la page." };
   } catch (e) {
     console.error(e);
     return ERREUR_INATTENDUE;
@@ -474,7 +474,7 @@ const schemaAnnulation = z.object({
   motif: z
     .string()
     .trim()
-    .min(3, { error: "Indique le motif de l'annulation." })
+    .min(3, { error: "Indiquer le motif de l'annulation." })
     .max(500, { error: "Motif : 500 caractères au maximum." }),
 });
 
@@ -491,7 +491,7 @@ export async function annulerFacture(_precedent: ResultatAction | null, formData
     const facture = await lireFacture(supabase, saisie.data.facture_id);
     if (typeof facture === "string") return { ok: false, erreur: facture };
     if (facture.statut === "payee") {
-      return { ok: false, erreur: "Cette facture est payée : annule d'abord le paiement, puis la facture." };
+      return { ok: false, erreur: "Facture payée : annuler d'abord le paiement, puis la facture." };
     }
     if (facture.statut !== "emise" && facture.statut !== "envoyee") {
       return { ok: false, erreur: horsStatut(facture.statut, "annuler la facture") };
@@ -503,7 +503,7 @@ export async function annulerFacture(_precedent: ResultatAction | null, formData
       .in("statut", ["emise", "envoyee"])
       .select("id");
     if (error) return { ok: false, erreur: traduireErreur(error) };
-    if (!data || data.length === 0) return { ok: false, erreur: "Le statut de la facture a changé entre-temps. Recharge la page." };
+    if (!data || data.length === 0) return { ok: false, erreur: "Statut de la facture modifié entre-temps. Recharger la page." };
   } catch (e) {
     console.error(e);
     return ERREUR_INATTENDUE;
@@ -567,12 +567,12 @@ export async function dupliquerFacture(factureId: string): Promise<ResultatActio
     let resultat = await creerBrouillon(supabase, { ...saisie, generationAuto: remplacementMensuel });
     if (remplacementMensuel) {
       if (resultat.ok) {
-        message = "Brouillon créé : il remplace cette facture dans la facturation mensuelle du mois.";
+        message = "Brouillon créé en remplacement de cette facture dans la facturation mensuelle du mois.";
       } else if (resultat.erreur.includes("facture mensuelle existe déjà")) {
         // Une facture mensuelle active existe déjà pour ce mois : simple copie.
         resultat = await creerBrouillon(supabase, saisie);
         message =
-          "Brouillon créé à partir de cette facture. Une autre facture mensuelle existe déjà pour ce client et ce mois : vérifie qu'il ne fait pas double emploi.";
+          "Brouillon créé à partir de cette facture. Une autre facture mensuelle existe déjà pour ce client et ce mois : vérifier l'absence de double emploi.";
       }
     }
     if (!resultat.ok) return resultat;

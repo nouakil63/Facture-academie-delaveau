@@ -38,8 +38,8 @@ function RappelIban() {
     <div role="note" className="avertissement flex flex-col gap-3 sm:flex-row sm:items-center">
       <IconeAlerte className="hidden h-5 w-5 shrink-0 sm:block" />
       <p className="flex-1">
-        <strong className="font-semibold">IBAN non renseigné.</strong> Nos factures n&apos;indiquent pour l&apos;instant
-        aucune coordonnée bancaire pour le virement : ajoute notre IBAN.
+        <strong className="font-semibold">IBAN non renseigné.</strong> Les factures n&apos;indiquent pour l&apos;instant
+        aucune coordonnée bancaire pour le virement : ajouter l&apos;IBAN.
       </p>
       <Link href="/parametres#paiement" className="btn-secondaire btn-petit shrink-0">
         Compléter l&apos;IBAN
@@ -71,8 +71,8 @@ export default async function PageTableauDeBord() {
           <p className="font-medium text-ink">Aucune donnée accessible</p>
           <p className="mt-1 text-sm text-muted">
             {acces === "non_membre"
-              ? "Le tableau de bord s'affichera dès que ton compte sera autorisé (voir l'encadré ci-dessus)."
-              : "Le tableau de bord s'affichera dès que la base de données répondra. Recharge la page dans un moment."}
+              ? "Tableau de bord disponible dès que le compte sera autorisé (voir l'encadré ci-dessus)."
+              : "Tableau de bord disponible dès que la base de données répondra : recharger la page dans un moment."}
           </p>
         </div>
       </div>

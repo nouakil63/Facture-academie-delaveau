@@ -56,8 +56,8 @@ export async function genererBrouillons(
     ok: true,
     message:
       crees === 0
-        ? `Aucun nouveau brouillon : on avait déjà généré toutes les factures de ${mot}.`
-        : `${crees} brouillon${crees > 1 ? "s" : ""} créé${crees > 1 ? "s" : ""} pour ${mot}. Relis-les ci-dessous avant de les envoyer.`,
+        ? `Aucun nouveau brouillon : toutes les factures de ${mot} sont déjà générées.`
+        : `${crees} brouillon${crees > 1 ? "s" : ""} créé${crees > 1 ? "s" : ""} pour ${mot}. À relire ci-dessous avant l'envoi.`,
     donnees: { crees },
   };
 }
@@ -66,7 +66,7 @@ const schemaEnvoi = schemaCible.extend({
   ids: z
     .array(schemaId, { error: "Sélection invalide." })
     .min(1, { error: "Aucun brouillon à envoyer." })
-    .max(LOT_ENVOI_MAX, { error: `${LOT_ENVOI_MAX} factures au maximum par appel : fais-le en plusieurs fois.` })
+    .max(LOT_ENVOI_MAX, { error: `${LOT_ENVOI_MAX} factures au maximum par appel : procéder en plusieurs fois.` })
     .transform((ids) => [...new Set(ids)]),
 });
 
@@ -104,9 +104,9 @@ export async function envoyerBrouillonsMensuels(
       demandes,
       (f) =>
         !valides.has(f.id)
-          ? "Ignorée : elle ne fait pas partie de la facturation de ce mois."
+          ? "Ignorée : hors facturation de ce mois."
           : f.statut !== "brouillon"
-            ? "Ignorée : elle a été émise entre-temps. Si elle est restée « Émise », envoie-la depuis sa fiche."
+            ? "Ignorée : émise entre-temps. Si elle est restée « Émise », l'envoyer depuis sa fiche."
             : null,
       { exigerBrouillon: true },
     );
@@ -118,7 +118,7 @@ export async function envoyerBrouillonsMensuels(
     revaliderFactures();
     return {
       ok: false,
-      erreur: "L'envoi s'est interrompu. Recharge la page pour voir ce qui est déjà parti avant de relancer.",
+      erreur: "Envoi interrompu. Recharger la page pour voir les factures déjà envoyées avant de relancer.",
     };
   }
 }

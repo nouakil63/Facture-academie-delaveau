@@ -208,7 +208,7 @@ export function ActionsFacture({
       </div>
 
       {statut === "brouillon" && sansLignes && (
-        <p className="aide">Ajoute au moins une ligne pour pouvoir émettre la facture.</p>
+        <p className="aide">Ajouter au moins une ligne pour émettre la facture.</p>
       )}
       {statut !== "annulee" && raisonEnvoi && !(statut === "brouillon" && sansLignes) && (
         <p className="aide flex items-start gap-1.5 text-amber-800">
@@ -217,7 +217,7 @@ export function ActionsFacture({
         </p>
       )}
       {statut === "payee" && (
-        <p className="aide">Pour annuler une facture payée, annule d&apos;abord le paiement.</p>
+        <p className="aide">Pour annuler une facture payée, annuler d&apos;abord le paiement.</p>
       )}
 
       {/* Émettre et envoyer (brouillon) */}
@@ -232,7 +232,7 @@ export function ActionsFacture({
       >
         <p>
           La facture de <strong>{nomClient}</strong> d&apos;un montant de <strong>{montant} TTC</strong> recevra son numéro
-          définitif ({prefixe}-AAAA-NNNN) et on ne pourra plus la modifier. Elle partira ensuite par e-mail avec le PDF en
+          définitif ({prefixe}-AAAA-NNNN) et ne sera plus modifiable. Elle partira ensuite par e-mail avec le PDF en
           pièce jointe.
         </p>
         {listeDestinataires}
@@ -252,8 +252,7 @@ export function ActionsFacture({
           pourra <strong>plus être modifiée ni supprimée</strong> (seulement annulée).
         </p>
         <p className="text-muted">
-          Aucun e-mail ne part : tu pourras la télécharger pour la remettre en main propre, ou l&apos;envoyer plus
-          tard.
+          Aucun e-mail envoyé : la télécharger pour la remettre en main propre, ou l&apos;envoyer plus tard.
         </p>
       </ModaleConfirmation>
 
@@ -274,7 +273,7 @@ export function ActionsFacture({
         {generationAuto && (
           <p className="avertissement">
             Ce brouillon mensuel reviendra à la prochaine génération du mois tant que le client a un tarif récurrent
-            actif. Pour ne pas le facturer ce mois-ci, mets une date de fin au tarif ou archive le client.
+            actif. Pour ne pas le facturer ce mois-ci, mettre une date de fin au tarif ou archiver le client.
           </p>
         )}
       </ModaleConfirmation>
@@ -358,8 +357,7 @@ export function ActionsFacture({
       >
         <p>
           Un nouveau brouillon sera créé pour <strong>{nomClient}</strong> avec les mêmes lignes, le même objet et la même
-          période. Tu pourras le modifier avant de l&apos;émettre. La facture <strong>{libelle}</strong>, elle, ne
-          change pas.
+          période, modifiable avant émission. La facture <strong>{libelle}</strong>, elle, ne change pas.
         </p>
       </ModaleConfirmation>
     </section>
@@ -502,9 +500,9 @@ function FormulaireAnnulation({
           arrière : c&apos;est <strong>définitif</strong>.
         </p>
         <p className="text-muted">
-          On ne peut pas supprimer une facture émise : les règles de facturation nous obligent à la garder dans notre
-          numérotation continue, marquée comme annulée. Pour la remplacer, duplique-la ensuite en brouillon, corrige-la
-          puis émets-la.
+          Une facture émise ne peut pas être supprimée : les règles de facturation imposent de la garder dans la
+          numérotation continue, marquée comme annulée. Pour la remplacer, la dupliquer ensuite en brouillon, la corriger
+          puis l&apos;émettre.
         </p>
       </div>
       <div>

@@ -150,16 +150,16 @@ export default async function PageFacture(props: PageProps<"/factures/[id]">) {
       {/* Bandeaux d'état */}
       {brouillon && (
         <p className="rounded-lg border border-brand/20 bg-brand-light px-3 py-2 text-sm text-brand-dark">
-          <strong>Brouillon</strong> : pas encore de numéro. Relis les lignes et les informations, puis émets la facture.
-          {facture.generation_auto && " Il a été préparé par la facturation mensuelle."}
+          <strong>Brouillon</strong> : pas encore de numéro. Relire les lignes et les informations, puis émettre la facture.
+          {facture.generation_auto && " Préparé par la facturation mensuelle."}
         </p>
       )}
       {enRetard && (
         <p className="erreur flex items-start gap-2">
           <IconeHorloge className="mt-0.5 size-4" />
           <span>
-            Échéance dépassée depuis le {formatDateLongue(facture.date_echeance)} : pense à relancer le client, puis
-            enregistre le paiement dès qu&apos;on l&apos;a reçu.
+            Échéance dépassée depuis le {formatDateLongue(facture.date_echeance)} : relancer le client, puis
+            enregistrer le paiement dès réception.
           </span>
         </p>
       )}
@@ -178,8 +178,8 @@ export default async function PageFacture(props: PageProps<"/factures/[id]">) {
           <IconeAnnuler className="mt-0.5 size-4" />
           <span>
             Facture annulée le {formatDateHeure(facture.annulee_le)}
-            {facture.motif_annulation ? ` — motif : ${facture.motif_annulation}` : ""}. Elle reste dans notre
-            numérotation, mais on ne peut plus la modifier ni l&apos;envoyer.
+            {facture.motif_annulation ? ` — motif : ${facture.motif_annulation}` : ""}. Elle reste dans la
+            numérotation, mais ne peut plus être modifiée ni envoyée.
           </span>
         </p>
       )}
@@ -187,7 +187,7 @@ export default async function PageFacture(props: PageProps<"/factures/[id]">) {
         <p className="avertissement flex items-start gap-2">
           <IconeAlerte className="mt-0.5 size-4 text-amber-600" />
           <span>
-            Ce client n&apos;a pas d&apos;adresse e-mail : on ne peut pas lui envoyer la facture par e-mail.{" "}
+            Aucune adresse e-mail : envoi de la facture par e-mail impossible.{" "}
             <Link href={`/clients/${facture.client_id}`} className="font-medium underline">
               Voir la fiche client
             </Link>
@@ -389,7 +389,7 @@ export default async function PageFacture(props: PageProps<"/factures/[id]">) {
             <h2 id="titre-notes-internes" className="titre-section">
               Notes internes
             </h2>
-            <p className="aide mb-3">Pour nous seulement : jamais imprimées.</p>
+            <p className="aide mb-3">Internes, jamais imprimées.</p>
             <NotesInternes factureId={facture.id} notes={facture.notes_internes} />
           </section>
         </aside>
@@ -479,7 +479,7 @@ function BlocEmetteur({
         )}
         <p className="aide">
           {brouillon
-            ? "Ce sont nos paramètres actuels : ils seront figés à l'émission."
+            ? "Paramètres actuels, figés à l'émission."
             : "Informations figées à l'émission, telles qu'imprimées sur la facture."}
         </p>
       </div>
@@ -521,7 +521,7 @@ function FactureIntrouvable() {
       <div className="carte carte-corps text-center sm:p-8">
         <h1 className="titre-section">Facture introuvable</h1>
         <p className="mt-2 text-sm text-muted">
-          Cette facture n&apos;existe pas ou plus (un brouillon qu&apos;on a supprimé, par exemple).
+          Cette facture n&apos;existe pas ou plus (brouillon supprimé, par exemple).
         </p>
         <Link href="/factures" className="btn-primaire mt-5">
           Retour aux factures

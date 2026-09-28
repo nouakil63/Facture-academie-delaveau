@@ -233,7 +233,7 @@ export default async function PageFacturationMensuelle(props: PageProps<"/factur
                   )}
                 </>
               ) : (
-                <>génération automatique désactivée : on passe par cette page chaque mois (factures {moisFacture}).</>
+                <>génération automatique désactivée : passer par cette page chaque mois (factures {moisFacture}).</>
               )}
             </p>
           </div>
@@ -247,8 +247,8 @@ export default async function PageFacturationMensuelle(props: PageProps<"/factur
         <p className="avertissement flex items-start gap-2">
           <IconeAlerte className="mt-0.5 size-4 text-amber-600" />
           <span>
-            L&apos;envoi d&apos;e-mails n&apos;est pas encore configuré (serveur SMTP) : tu peux générer les factures, mais
-            pas les envoyer. Ça se règle dans les{" "}
+            Envoi d&apos;e-mails non configuré (serveur SMTP) : génération possible, envoi impossible. Réglage dans
+            les{" "}
             <Link href="/parametres#envoi-emails" className="font-medium underline">
               Paramètres
             </Link>
@@ -274,7 +274,7 @@ export default async function PageFacturationMensuelle(props: PageProps<"/factur
             )}
           </div>
           <p className="mt-1 text-xs text-muted">
-            Un brouillon pour chaque client actif qui a au moins un tarif mensuel valide sur le mois. Objet : «{" "}
+            Un brouillon par client actif ayant au moins un tarif mensuel valide sur le mois. Objet : «{" "}
             {parametres.objet_facture_mensuelle} – {libelleMois} ».
           </p>
         </div>
@@ -287,7 +287,7 @@ export default async function PageFacturationMensuelle(props: PageProps<"/factur
           <div className="px-5 py-10 text-center">
             <p className="font-medium text-ink">Aucun client à facturer pour {libelleMois}</p>
             <p className="mx-auto mt-1 max-w-md text-sm text-muted">
-              Ajoute des tarifs mensuels (récurrents) sur les fiches de nos clients
+              Ajouter des tarifs mensuels (récurrents) sur les fiches clients
               {academie ? ` de ${avecArticle(academie.nom)}` : ""} : ils apparaîtront ici.
             </p>
             <Link href="/clients" className="btn-secondaire mt-5">
@@ -400,8 +400,8 @@ export default async function PageFacturationMensuelle(props: PageProps<"/factur
               <details className="avertissement group">
                 <summary className="cursor-pointer font-medium">
                   {nonFactures.length === 1
-                    ? "1 client actif ne sera pas facturé : il n'a aucun tarif mensuel valide sur ce mois."
-                    : `${nonFactures.length} clients actifs ne seront pas facturés : ils n'ont aucun tarif mensuel valide sur ce mois.`}
+                    ? "1 client actif ne sera pas facturé : aucun tarif mensuel valide sur ce mois."
+                    : `${nonFactures.length} clients actifs ne seront pas facturés : aucun tarif mensuel valide sur ce mois.`}
                 </summary>
                 <ul className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
                   {nonFactures.map((c) => {
@@ -424,17 +424,17 @@ export default async function PageFacturationMensuelle(props: PageProps<"/factur
                   })}
                 </ul>
                 <p className="mt-2 text-xs">
-                  Ajoute-leur un tarif récurrent, ou fais-leur une facture ponctuelle depuis leur fiche.
+                  Ajouter un tarif récurrent, ou créer une facture ponctuelle depuis la fiche client.
                 </p>
               </details>
             )}
             {sansEmail.length > 0 && (
               <p className="avertissement">
                 {sansEmail.length === 1
-                  ? `1 client facturé n'a pas d'adresse e-mail (${sansEmail[0].nom}) : on ne pourra pas lui envoyer sa facture. Complète sa fiche avant l'envoi.`
-                  : `${sansEmail.length} clients facturés n'ont pas d'adresse e-mail (${sansEmail
+                  ? `1 client facturé sans adresse e-mail (${sansEmail[0].nom}) : envoi de sa facture impossible. Compléter sa fiche avant l'envoi.`
+                  : `${sansEmail.length} clients facturés sans adresse e-mail (${sansEmail
                       .map((l) => l.nom)
-                      .join(", ")}) : on ne pourra pas leur envoyer leur facture. Complète leur fiche avant l'envoi.`}
+                      .join(", ")}) : envoi de leur facture impossible. Compléter leur fiche avant l'envoi.`}
               </p>
             )}
           </div>
@@ -483,7 +483,7 @@ export default async function PageFacturationMensuelle(props: PageProps<"/factur
             </span>
             <p className="mt-4 font-medium text-ink">Aucune facture générée pour {libelleMois}</p>
             <p className="mx-auto mt-1 max-w-md text-sm text-muted">
-              Génère les brouillons à l&apos;étape 1 : ils apparaîtront ici pour qu&apos;on les relise avant l&apos;envoi.
+              Générer les brouillons à l&apos;étape 1 : ils apparaîtront ici, à relire avant l&apos;envoi.
             </p>
           </div>
         ) : (
@@ -583,8 +583,8 @@ export default async function PageFacturationMensuelle(props: PageProps<"/factur
               />
             ) : (
               <p className="text-sm text-muted">
-                Configure l&apos;envoi d&apos;e-mails pour envoyer les brouillons d&apos;un coup, ou émets-les un par un
-                depuis leur fiche.
+                Configurer l&apos;envoi d&apos;e-mails pour envoyer les brouillons en une fois, ou les émettre un par
+                un depuis leur fiche.
               </p>
             )}
           </div>
@@ -599,8 +599,8 @@ function EnTete() {
     <div>
       <h1 className="titre-page">Facturation mensuelle</h1>
       <p className="mt-1 text-sm text-muted">
-        On prépare les factures du mois à partir des tarifs de nos clients, on les relit, puis on les émet et on les
-        envoie d&apos;un coup.
+        Préparer les factures du mois à partir des tarifs des clients, les relire, puis les émettre et les envoyer en
+        une fois.
       </p>
     </div>
   );
@@ -609,7 +609,7 @@ function EnTete() {
 /** « Académie Espoir » → « l'Académie Espoir » ; autre nom → « « Nom » ». */
 function SansEmail() {
   return (
-    <span className="mt-0.5 flex items-center gap-1 text-xs font-medium text-amber-700" title="Pas d'adresse e-mail : on ne peut pas l'envoyer">
+    <span className="mt-0.5 flex items-center gap-1 text-xs font-medium text-amber-700" title="Pas d'adresse e-mail : envoi impossible">
       <IconeAlerte className="size-3.5" />
       Aucun e-mail
     </span>

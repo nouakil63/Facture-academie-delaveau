@@ -11,9 +11,9 @@ const schemaConnexion = z.object({
   email: z
     .string()
     .trim()
-    .min(1, "Saisis ton adresse e-mail.")
-    .pipe(z.email("Cette adresse e-mail n'est pas valide : vérifie-la.")),
-  motDePasse: z.string().min(1, "Saisis ton mot de passe."),
+    .min(1, "Adresse e-mail obligatoire.")
+    .pipe(z.email("Adresse e-mail non valide.")),
+  motDePasse: z.string().min(1, "Mot de passe obligatoire."),
   suite: z.string(),
 });
 
@@ -23,18 +23,18 @@ function messageErreurConnexion(erreur: { code?: string; status?: number; name?:
     return "E-mail ou mot de passe incorrect.";
   }
   if (erreur.code === "email_not_confirmed") {
-    return "Cette adresse e-mail n'est pas encore confirmée. Confirme-la dans Supabase (Authentication → Users), puis réessaie.";
+    return "Adresse e-mail non confirmée : la confirmer dans Supabase (Authentication → Users), puis réessayer.";
   }
   if (erreur.code === "user_banned") {
-    return "Ce compte est bloqué. Débloque-le dans Supabase (Authentication → Users), puis réessaie.";
+    return "Compte bloqué : le débloquer dans Supabase (Authentication → Users), puis réessayer.";
   }
   if (erreur.status === 429 || erreur.code?.startsWith("over_")) {
-    return "Trop de tentatives de connexion. Attends quelques minutes avant de réessayer.";
+    return "Trop de tentatives de connexion : réessayer dans quelques minutes.";
   }
   if (erreur.name === "AuthRetryableFetchError" || erreur.status === 0) {
-    return "Le service de connexion ne répond pas. Vérifie ta connexion Internet, puis réessaie.";
+    return "Le service de connexion ne répond pas : vérifier la connexion Internet, puis réessayer.";
   }
-  return "Connexion impossible pour le moment. Réessaie dans un instant.";
+  return "Connexion impossible pour le moment : réessayer dans un instant.";
 }
 
 /**
@@ -53,7 +53,7 @@ export async function seConnecter(etatPrecedent: ResultatAction | null, formData
     suite: texte("suite"),
   });
   if (!saisie.success) {
-    return { ok: false, erreur: saisie.error.issues[0]?.message ?? "Remplis l'e-mail et le mot de passe." };
+    return { ok: false, erreur: saisie.error.issues[0]?.message ?? "E-mail et mot de passe obligatoires." };
   }
 
   try {
@@ -68,7 +68,7 @@ export async function seConnecter(etatPrecedent: ResultatAction | null, formData
     }
   } catch (e) {
     console.error("Connexion :", e);
-    return { ok: false, erreur: "Connexion impossible : l'application est mal configurée. Vérifie les variables Supabase (URL et clé) dans Vercel." };
+    return { ok: false, erreur: "Connexion impossible : application mal configurée. Vérifier les variables Supabase (URL et clé) dans Vercel." };
   }
 
   // redirect() lève une exception de contrôle : il doit rester hors du try/catch.

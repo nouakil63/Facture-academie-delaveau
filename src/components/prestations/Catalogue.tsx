@@ -101,7 +101,7 @@ export function Catalogue({
         ouverte={edition !== null}
         onFermer={() => setEdition(null)}
         titre={prestationEditee ? "Modifier la prestation" : "Nouvelle prestation"}
-        sousTitre={prestationEditee ? prestationEditee.libelle : "Ajout à notre catalogue, commun aux deux académies"}
+        sousTitre={prestationEditee ? prestationEditee.libelle : "Ajout au catalogue, commun aux deux académies"}
         largeur="max-w-xl"
         verrouillee={enregistrement}
       >
@@ -183,8 +183,8 @@ function ListePrestations({
           </p>
           <p className="mt-1 max-w-md text-sm text-muted">
             {nbArchiveesMasquees > 0
-              ? "Toutes nos prestations sont archivées. Affiche les archivées pour en réactiver une, ou crées-en une nouvelle."
-              : "Ajoute les prestations qu'on facture (pension, entraînement, scolarité, stage…) avec leur prix : tu les attribueras ensuite à chaque client."}
+              ? "Toutes les prestations sont archivées. Afficher les archivées pour en réactiver une, ou en créer une nouvelle."
+              : "Ajouter les prestations facturées (pension, entraînement, scolarité, stage…) avec leur prix, puis les attribuer à chaque client."}
           </p>
           <button type="button" className="btn-primaire mt-5" onClick={onAjouter}>
             <IconePlus />
@@ -411,20 +411,20 @@ function ConfirmationSuppression({
                 </p>
                 {p.actif ? (
                   <p>
-                    <strong>Archive-la plutôt</strong> : elle ne sera plus proposée pour de nouveaux tarifs.
+                    <strong>L&apos;archiver plutôt</strong> : elle ne sera plus proposée pour de nouveaux tarifs.
                   </p>
                 ) : (
                   <p>Elle est déjà archivée : elle n&apos;est plus proposée pour de nouveaux tarifs.</p>
                 )}
                 <p className="text-muted">
                   Les tarifs existants ne changent pas et restent facturés chaque mois. Pour arrêter de la facturer à
-                  un client, désactive ou supprime la ligne correspondante sur sa fiche.
+                  un client, désactiver ou supprimer la ligne correspondante sur sa fiche.
                 </p>
               </>
             ) : (
               <>
                 <p>
-                  « {p.libelle} » sera retirée pour de bon de notre catalogue. Aucun client ne l&apos;a dans ses
+                  « {p.libelle} » sera retirée définitivement du catalogue. Aucun client ne l&apos;a dans ses
                   tarifs.
                 </p>
                 <p className="text-muted">Les factures déjà créées gardent leurs lignes, avec le libellé et le prix d&apos;origine.</p>
@@ -446,7 +446,7 @@ function ConfirmationSuppression({
               p.actif && (
                 <button type="button" className="btn-primaire" disabled={enCours} autoFocus onClick={archiverPrestation}>
                   <IconeArchive />
-                  {enCours ? "Patientez…" : "Archiver la prestation"}
+                  {enCours ? "En cours…" : "Archiver la prestation"}
                 </button>
               )
             ) : (

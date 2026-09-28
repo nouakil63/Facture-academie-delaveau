@@ -60,7 +60,7 @@ export function EditeurLignes({
       {lignes.length === 0 ? (
         <div className="px-5 py-10 text-center">
           <p className="font-medium text-ink">Ce brouillon ne contient aucune ligne</p>
-          <p className="mt-1 text-sm text-muted">Ajoute une prestation du catalogue ou une ligne libre.</p>
+          <p className="mt-1 text-sm text-muted">Ajouter une prestation du catalogue ou une ligne libre.</p>
         </div>
       ) : (
         <ul className="divide-y divide-line">
@@ -293,11 +293,11 @@ function FormulaireLigne({
       {mode === "catalogue" &&
         (options.length === 0 ? (
           <p className="avertissement">
-            Notre catalogue n&apos;a aucune prestation active.{" "}
+            Aucune prestation active dans le catalogue.{" "}
             <Link href="/prestations" className="font-medium underline">
               Gérer les prestations
             </Link>{" "}
-            ou ajoute une ligne libre.
+            ou ajouter une ligne libre.
           </p>
         ) : (
           <div>

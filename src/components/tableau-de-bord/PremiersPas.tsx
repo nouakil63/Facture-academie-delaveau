@@ -23,17 +23,17 @@ export function PremiersPas({
 
   const etapes = [
     {
-      titre: "Crée nos prestations",
-      texte: "Notre catalogue, commun aux deux académies : pension, cours, formation… avec leur prix mensuel.",
+      titre: "Créer les prestations",
+      texte: "Catalogue commun aux deux académies : pension, cours, formation… avec leur prix mensuel.",
       href: "/prestations",
       action: "Ouvrir le catalogue",
       faite: compteurs.prestations > 0,
     },
     {
-      titre: "Ajoute nos clients et leurs tarifs",
+      titre: "Ajouter les clients et leurs tarifs",
       texte: sansTarifs
-        ? "Ouvre la fiche de chaque client et ajoute-lui les prestations à facturer chaque mois (au prix du catalogue ou à un prix personnalisé)."
-        : `Chaque famille ou structure qu'on facture, rattachée ${
+        ? "Sur la fiche de chaque client, ajouter les prestations à facturer chaque mois (au prix du catalogue ou à un prix personnalisé)."
+        : `Chaque famille ou structure facturée, rattachée ${
             nomAcademie ? `à ${avecArticle(nomAcademie)}` : "à l'Académie Delaveau ou à l'Académie Espoir"
           }, avec les prestations à lui facturer chaque mois.`,
       href: compteurs.clients > 0 ? "/clients" : "/clients/nouveau",
@@ -41,11 +41,11 @@ export function PremiersPas({
       faite: compteurs.clients > 0 && compteurs.tarifs > 0,
     },
     {
-      titre: "Lance la facturation du mois",
-      texte: `Un brouillon est préparé pour chaque client qui a des tarifs : tu le vérifies, puis tu l'envoies. ${
+      titre: "Lancer la facturation du mois",
+      texte: `Un brouillon par client ayant des tarifs, à vérifier puis envoyer. ${
         facturation.generationAuto
           ? `Préparation automatique le ${jourDuMois(facturation.jourGeneration)} de chaque mois.`
-          : "L'automatisation mensuelle est désactivée : tu peux l'activer dans les paramètres."
+          : "Automatisation mensuelle désactivée : activable dans les paramètres."
       }`,
       href: "/facturation-mensuelle",
       action: "Facturation du mois",
@@ -62,7 +62,7 @@ export function PremiersPas({
         </h2>
         <p className="mt-1 text-sm text-muted">
           {nomAcademie ? `Aucune facture pour ${avecArticle(nomAcademie)} pour l'instant. ` : "Aucune facture pour l'instant. "}
-          Commence par créer nos prestations, puis nos clients : la facturation mensuelle s&apos;appuie sur eux.
+          Créer d&apos;abord les prestations, puis les clients : la facturation mensuelle s&apos;appuie sur eux.
         </p>
       </div>
 
@@ -71,8 +71,8 @@ export function PremiersPas({
           <div role="note" className="avertissement flex flex-col gap-3 sm:flex-row sm:items-center">
             <IconeAlerte className="hidden h-5 w-5 shrink-0 sm:block" />
             <p className="flex-1">
-              <strong className="font-semibold">IBAN à compléter.</strong> Notre IBAN est imprimé sur chaque facture
-              pour le virement : renseigne-le avant d&apos;envoyer nos premières factures.
+              <strong className="font-semibold">IBAN à compléter.</strong> L&apos;IBAN est imprimé sur chaque facture
+              pour le virement : le renseigner avant d&apos;envoyer les premières factures.
             </p>
             <Link href="/parametres#paiement" className="btn-secondaire btn-petit shrink-0">
               Compléter l&apos;IBAN

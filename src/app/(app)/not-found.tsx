@@ -13,7 +13,7 @@ export default function IntrouvableApplication() {
         <h1 className="titre-page mt-2">Élément introuvable</h1>
         <p className="mt-2 text-sm text-muted">
           Cette page n&apos;existe pas ou plus : le lien est peut-être faux, ou l&apos;élément a été supprimé.
-          Repars du tableau de bord ou des listes ci-dessous.
+          Repartir du tableau de bord ou des listes ci-dessous.
         </p>
         <div className="mt-6 flex flex-col flex-wrap justify-center gap-2 sm:flex-row">
           <Link href="/" className="btn-primaire">

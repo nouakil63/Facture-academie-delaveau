@@ -188,17 +188,17 @@ export function messageErreurEmail(erreur: unknown): string {
   switch (code) {
     case "EAUTH":
     case "ENOAUTH":
-      return "Identifiants refusés par le serveur SMTP : SMTP_USER doit être l'adresse complète de notre boîte (ex. contact@academiedelaveau.com) et SMTP_PASSWORD son mot de passe (voir Paramètres → Envoi des e-mails).";
+      return "Identifiants refusés par le serveur SMTP : SMTP_USER doit être l'adresse complète de la boîte (ex. contact@academiedelaveau.com) et SMTP_PASSWORD son mot de passe (voir Paramètres → Envoi des e-mails).";
     case "ECONNECTION":
     case "ECONNREFUSED":
     case "ETIMEDOUT":
     case "ESOCKET":
     case "EDNS":
-      return `Serveur d'envoi injoignable (${lireVariable("SMTP_HOST") ?? "SMTP_HOST non défini"}) : vérifie SMTP_HOST et SMTP_PORT, puis réessaie.`;
+      return `Serveur d'envoi injoignable (${lireVariable("SMTP_HOST") ?? "SMTP_HOST non défini"}) : vérifier SMTP_HOST et SMTP_PORT, puis réessayer.`;
     case "ETLS":
-      return "Connexion sécurisée impossible avec le serveur d'envoi : vérifie SMTP_PORT et SMTP_SECURE (465 → true, 587 → false).";
+      return "Connexion sécurisée impossible avec le serveur d'envoi : vérifier SMTP_PORT et SMTP_SECURE (465 → true, 587 → false).";
     case "EENVELOPE":
-      return `Adresse refusée par le serveur d'envoi : vérifie l'adresse du destinataire (fiche client) et l'expéditeur (EMAIL_FROM). (${brut})`;
+      return `Adresse refusée par le serveur d'envoi : vérifier l'adresse du destinataire (fiche client) et l'expéditeur (EMAIL_FROM). (${brut})`;
     case "EMESSAGE":
       return `Le serveur d'envoi a refusé le message. (${brut})`;
     default:

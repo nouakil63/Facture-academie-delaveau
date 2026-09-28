@@ -122,7 +122,7 @@ export function ModaleConfirmation<T = undefined>({
   sousTitre,
   children,
   libelleConfirmer,
-  libelleEnCours = "Patientez…",
+  libelleEnCours = "En cours…",
   libelleAnnuler = "Annuler",
   danger = false,
   desactiver = false,

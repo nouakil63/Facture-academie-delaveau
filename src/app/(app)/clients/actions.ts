@@ -22,7 +22,7 @@ type ErreurSupabase = { code?: string; message: string; details?: string | null;
 
 const ERREUR_RESEAU: ResultatAction = {
   ok: false,
-  erreur: "Impossible de joindre la base de données. Vérifie ta connexion et réessaie.",
+  erreur: "Impossible de joindre la base de données. Vérifier la connexion et réessayer.",
 };
 
 /** Traduit une erreur Postgres / PostgREST en message compréhensible. */
@@ -48,13 +48,13 @@ function traduireErreur(erreur: ErreurSupabase, siCleEtrangere?: string): string
     case "22008":
       return "Une valeur saisie n'a pas le bon format.";
     case "42501":
-      return "Accès refusé : ton compte n'a pas le droit de modifier ces données.";
+      return "Accès refusé : ce compte n'a pas le droit de modifier ces données.";
     case "P0001":
       // Exceptions levées par les triggers : messages métier déjà rédigés en français.
       return erreur.message;
     case "PGRST301":
     case "PGRST303":
-      return "Ta session a expiré : reconnecte-toi.";
+      return "Session expirée : se reconnecter.";
     default:
       return `Erreur de la base de données : ${erreur.message}`;
   }
@@ -78,7 +78,7 @@ function revaliderClients() {
 
 const schemaId = z.uuid({ error: "Identifiant invalide." });
 
-const ACADEMIE_INTROUVABLE = "Cette académie n'existe plus : actualise la page et réessaie.";
+const ACADEMIE_INTROUVABLE = "Cette académie n'existe plus : actualiser la page et réessayer.";
 
 /** Texte facultatif : espaces retirés, "" → null. */
 const texteFacultatif = (max: number, libelle: string) =>
@@ -104,7 +104,7 @@ const dateFacultative = (libelle: string) =>
 
 const schemaClient = z
   .object({
-    academie_id: z.uuid({ error: "Choisis l'académie du client : Académie Delaveau ou Académie Espoir." }),
+    academie_id: z.uuid({ error: "Choisir l'académie du client : Académie Delaveau ou Académie Espoir." }),
     type: z.enum(["particulier", "professionnel"], { error: "Type de client invalide." }),
     civilite: texteFacultatif(30, "Civilité"),
     nom: z
@@ -169,7 +169,7 @@ const schemaClient = z
   })
   .refine((c) => c.type !== "professionnel" || Boolean(c.adresse_ligne1 && c.code_postal && c.ville), {
     path: ["adresse_ligne1"],
-    error: "Pour un client professionnel, il nous faut l'adresse complète (rue, code postal et ville) : elle figure sur ses factures.",
+    error: "Client professionnel : adresse complète obligatoire (rue, code postal et ville), imprimée sur ses factures.",
     when: (payload) =>
       !payload.issues.some((i) => ["type", "adresse_ligne1", "code_postal", "ville"].includes(String(i.path?.[0]))),
   })
@@ -281,7 +281,7 @@ export async function changerArchivageClient(clientId: string, archiver: boolean
   return {
     ok: true,
     message: archiver
-      ? "Client archivé : on ne le facture plus chaque mois."
+      ? "Client archivé : plus de facture mensuelle."
       : "Client réactivé : il revient dans la facturation mensuelle.",
   };
 }
@@ -293,7 +293,7 @@ export async function supprimerClient(clientId: string): Promise<ResultatAction>
   const id = schemaId.safeParse(clientId);
   if (!id.success) return { ok: false, erreur: "Client introuvable." };
 
-  const refus = "Ce client a des factures, qu'on doit conserver : on ne peut pas le supprimer. Archive-le plutôt.";
+  const refus = "Suppression impossible : ce client a des factures, à conserver. L'archiver plutôt.";
   try {
     const factures = await supabase
       .from("factures")
@@ -322,7 +322,7 @@ const schemaTarif = z
   .object({
     client_id: schemaId,
     tarif_id: z.union([z.literal(""), schemaId]),
-    mode: z.enum(["catalogue", "libre"], { error: "Choisis une prestation du catalogue ou une ligne libre." }),
+    mode: z.enum(["catalogue", "libre"], { error: "Choisir une prestation du catalogue ou une ligne libre." }),
     prestation_id: z.string().trim(),
     libelle: texteFacultatif(200, "Libellé"),
     description: texteFacultatif(1000, "Description"),
@@ -339,7 +339,7 @@ const schemaTarif = z
     let prix: number | null = null;
     if (t.prix !== "") {
       prix = parseEurosEnCentimes(t.prix);
-      if (prix === null) erreur("Prix invalide : saisis un montant en euros (ex. 450 ou 450,50).");
+      if (prix === null) erreur("Prix invalide : saisir un montant en euros (ex. 450 ou 450,50).");
       else if (prix > 1_000_000_000) erreur("Prix trop élevé.");
     }
 
@@ -348,7 +348,7 @@ const schemaTarif = z
 
     const prestationId = t.mode === "catalogue" ? t.prestation_id : "";
     if (t.mode === "catalogue" && !schemaId.safeParse(prestationId).success) {
-      erreur("Choisis une prestation du catalogue.");
+      erreur("Choisir une prestation du catalogue.");
     }
     if (t.mode === "libre") {
       if (!t.libelle) erreur("Le libellé est obligatoire pour une ligne libre.");
@@ -404,7 +404,7 @@ export async function enregistrerTarif(_precedent: ResultatAction | null, formDa
         .eq("id", tarif_id)
         .eq("client_id", client_id)
         .select("id");
-      if (error) return { ok: false, erreur: traduireErreur(error, "Cette prestation n'existe plus dans notre catalogue.") };
+      if (error) return { ok: false, erreur: traduireErreur(error, "Cette prestation n'existe plus dans le catalogue.") };
       if (!data || data.length === 0) return { ok: false, erreur: "Ligne de tarif introuvable : elle a peut-être été supprimée." };
     } else {
       // Nouvelle ligne placée en dernier.
@@ -421,7 +421,7 @@ export async function enregistrerTarif(_precedent: ResultatAction | null, formDa
       if (error) {
         return {
           ok: false,
-          erreur: traduireErreur(error, "Client ou prestation introuvable : actualise la page et réessaie."),
+          erreur: traduireErreur(error, "Client ou prestation introuvable : actualiser la page et réessayer."),
         };
       }
     }

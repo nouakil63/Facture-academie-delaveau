@@ -77,8 +77,8 @@ export function FormulaireClient({
               </select>
               <p className="aide">
                 {creation
-                  ? "Le groupe de l'élève, rappelé sur ses factures. Tu pourras le changer à tout moment."
-                  : "Tu peux la changer à tout moment : ses factures déjà émises gardent l'académie d'origine."}
+                  ? "Groupe de l'élève, rappelé sur ses factures. Modifiable à tout moment."
+                  : "Modifiable à tout moment : les factures déjà émises gardent l'académie d'origine."}
               </p>
             </div>
 
@@ -171,7 +171,7 @@ export function FormulaireClient({
                     defaultValue={client?.raison_sociale ?? ""}
                     className="champ"
                   />
-                  <p className="aide">C&apos;est ce nom qui figure sur la facture ; le nom et le prénom, c&apos;est notre contact.</p>
+                  <p className="aide">Nom imprimé sur la facture ; le nom et le prénom désignent le contact.</p>
                 </div>
                 <div className="sm:col-span-3">
                   <label htmlFor="siret" className="label">
@@ -221,7 +221,7 @@ export function FormulaireClient({
                 autoComplete="off"
                 className="champ"
               />
-              <p className="aide">On lui envoie ses factures à cette adresse.</p>
+              <p className="aide">Adresse d&apos;envoi des factures.</p>
             </div>
             <div>
               <label htmlFor="telephone" className="label">
@@ -250,7 +250,7 @@ export function FormulaireClient({
                 autoComplete="off"
                 className="champ"
               />
-              <p className="aide">Sépare les adresses par des virgules. Elles reçoivent aussi chaque facture.</p>
+              <p className="aide">Adresses séparées par des virgules. Elles reçoivent aussi chaque facture.</p>
             </div>
           </div>
         </Section>
@@ -345,7 +345,7 @@ export function FormulaireClient({
                 defaultValue={client?.notes ?? ""}
                 className="champ"
               />
-              <p className="aide">Pour nous seulement : jamais imprimées sur les factures.</p>
+              <p className="aide">Internes, jamais imprimées.</p>
             </div>
             <div className="space-y-2">
               <label

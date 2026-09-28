@@ -158,8 +158,8 @@ export default async function PageFactures(props: PageProps<"/factures">) {
 
       {tronque && (
         <p className="avertissement">
-          On n&apos;affiche que les {LIMITE} premières factures sur {total} (et seules elles comptent dans les totaux).
-          Affine avec les filtres ci-dessus.
+          Seules les {LIMITE} premières factures sur {total} sont affichées (et comptées dans les totaux).
+          Affiner avec les filtres ci-dessus.
         </p>
       )}
 
@@ -173,8 +173,8 @@ export default async function PageFactures(props: PageProps<"/factures">) {
               <p className="mt-4 font-medium text-ink">Aucune facture ne correspond à ces filtres</p>
               <p className="mt-1 max-w-md text-sm text-muted">
                 {academie
-                  ? `Tu ne vois que les factures de ${avecArticle(academie.nom)} : choisis « Toutes » dans le menu pour voir les autres.`
-                  : "Change la recherche, le mois ou le statut."}
+                  ? `Seules les factures de ${avecArticle(academie.nom)} sont affichées : choisir « Toutes » dans le menu pour voir les autres.`
+                  : "Modifier la recherche, le mois ou le statut."}
               </p>
               <Link href="/factures" className="btn-secondaire mt-5">
                 Effacer les filtres
@@ -186,7 +186,7 @@ export default async function PageFactures(props: PageProps<"/factures">) {
                 {academie ? `Aucune facture pour ${avecArticle(academie.nom)}` : "Aucune facture pour l'instant"}
               </p>
               <p className="mt-1 max-w-md text-sm text-muted">
-                Génère les factures du mois à partir des tarifs de nos clients, ou crée une facture ponctuelle (stage,
+                Générer les factures du mois à partir des tarifs des clients, ou créer une facture ponctuelle (stage,
                 concours, pension…).
               </p>
               <div className="mt-5 flex flex-wrap justify-center gap-2">

@@ -148,9 +148,9 @@ export default async function PageParametres() {
         <div className="min-w-0">
           <h1 className="titre-page">Paramètres</h1>
           <p className="mt-1 max-w-2xl text-sm text-muted">
-            Tout ce qui est imprimé sur nos factures (Académie Delaveau comme Académie Espoir), la facturation
-            mensuelle, nos académies, l&apos;envoi des e-mails et nos accès. Une facture déjà émise garde les informations
-            du jour où on l&apos;a émise.
+            Informations imprimées sur les factures (Académie Delaveau comme Académie Espoir), facturation mensuelle,
+            académies, envoi des e-mails et accès. Une facture déjà émise conserve les informations du jour de son
+            émission.
           </p>
         </div>
         <a
@@ -158,7 +158,7 @@ export default async function PageParametres() {
           target="_blank"
           rel="noopener noreferrer"
           className="btn-secondaire"
-          title="Ouvre un PDF d'exemple dans un nouvel onglet, avec nos paramètres enregistrés"
+          title="PDF d'exemple avec les paramètres enregistrés (nouvel onglet)"
         >
           <IconeFacture />
           Aperçu d&apos;une facture type
@@ -247,7 +247,7 @@ export default async function PageParametres() {
                   <h2 id="envoi-emails-titre" className="titre-section">
                     {titreSection("envoi-emails")}
                   </h2>
-                  <p className="text-sm text-muted">Le serveur SMTP de notre boîte mail, qui envoie les factures aux familles.</p>
+                  <p className="text-sm text-muted">Serveur SMTP de la boîte mail de l&apos;association, pour l&apos;envoi des factures aux familles.</p>
                 </div>
               </div>
               {smtpOk ? (
@@ -269,7 +269,7 @@ export default async function PageParametres() {
                   <IconeAlerte className="mt-0.5 size-4 shrink-0" />
                   <span>
                     {pluriel(nbClientsEnvoiAuto, "client")} en envoi automatique, mais aucun serveur SMTP configuré :
-                    leurs factures ne pourront pas partir. Suivre les étapes Amen ci-dessous.
+                    factures impossibles à envoyer. Suivre les étapes Amen ci-dessous.
                   </span>
                 </p>
               )}
@@ -292,7 +292,7 @@ export default async function PageParametres() {
               </div>
 
               <p className="aide">
-                Le message qui part avec chaque facture (objet, texte, copie cachée) se règle dans la section{" "}
+                Message envoyé avec chaque facture (objet, texte, copie cachée) : section{" "}
                 <a href="#emails" className="btn-lien text-xs">
                   {titreSection("emails")}
                 </a>
@@ -312,13 +312,13 @@ export default async function PageParametres() {
                   {titreSection("utilisateurs")}
                 </h2>
                 <p className="text-sm text-muted">
-                  Seules ces adresses ont accès à nos données, même si quelqu&apos;un d&apos;autre a un compte de connexion.
+                  Seules ces adresses ont accès aux données, même si d&apos;autres personnes ont un compte de connexion.
                 </p>
               </div>
             </div>
 
             {membres.length === 0 ? (
-              <p className="px-5 py-6 text-sm text-muted">Aucun utilisateur autorisé à afficher pour l&apos;instant.</p>
+              <p className="px-5 py-6 text-sm text-muted">Aucun utilisateur autorisé pour l&apos;instant.</p>
             ) : (
               <ul className="divide-y divide-line">
                 {membres.map((m) => (
@@ -326,7 +326,7 @@ export default async function PageParametres() {
                     <div className="min-w-0">
                       <p className="truncate font-medium text-ink">
                         {m.nom ?? m.email}
-                        {m.email === emailUtilisateur && <span className="ml-2 badge bg-brand-light text-brand-dark">Toi</span>}
+                        {m.email === emailUtilisateur && <span className="ml-2 badge bg-brand-light text-brand-dark">Connecté(e)</span>}
                       </p>
                       {m.nom && <p className="truncate text-sm text-muted">{m.email}</p>}
                     </div>
@@ -343,11 +343,11 @@ export default async function PageParametres() {
               </p>
               <ol className="list-decimal space-y-1 pl-5">
                 <li>
-                  Dans Supabase, <strong>Authentication → Users → Add user</strong> : crée son compte (e-mail et mot de
+                  Dans Supabase, <strong>Authentication → Users → Add user</strong> : créer le compte (e-mail et mot de
                   passe).
                 </li>
                 <li>
-                  Dans <strong>SQL Editor</strong>, autorise son adresse (en minuscules) :
+                  Dans <strong>SQL Editor</strong>, autoriser l&apos;adresse (en minuscules) :
                   <pre className="mt-1.5 overflow-x-auto rounded-lg border border-line bg-surface px-3 py-2 font-mono text-xs text-ink">
                     insert into membres (email, nom) values (&apos;prenom.nom@exemple.fr&apos;, &apos;Prénom Nom&apos;);
                   </pre>
@@ -370,16 +370,16 @@ function AideAmen({ ouverte }: { ouverte: boolean }) {
     {
       nom: "SMTP_HOST",
       valeur: "smtp-fr.securemail.pro",
-      detail: "ou smtp.amen.fr : vérifie dans notre espace client Amen (paramètres de la messagerie).",
+      detail: "ou smtp.amen.fr : à vérifier dans l'espace client Amen (paramètres de la messagerie).",
     },
-    { nom: "SMTP_PORT", valeur: "465", detail: "SSL. Si ça ne passe pas : 587 (STARTTLS)." },
+    { nom: "SMTP_PORT", valeur: "465", detail: "SSL. En cas d'échec : 587 (STARTTLS)." },
     { nom: "SMTP_SECURE", valeur: "true", detail: "true avec le port 465, false avec le port 587." },
-    { nom: "SMTP_USER", valeur: ADRESSE_AMEN, detail: "Notre adresse complète, pas seulement « contact »." },
-    { nom: "SMTP_PASSWORD", valeur: "••••••••", detail: "Le mot de passe de notre boîte mail (celui du webmail)." },
+    { nom: "SMTP_USER", valeur: ADRESSE_AMEN, detail: "Adresse complète, pas seulement « contact »." },
+    { nom: "SMTP_PASSWORD", valeur: "••••••••", detail: "Mot de passe de la boîte mail (celui du webmail)." },
     {
       nom: "EMAIL_FROM",
       valeur: `Académie Delaveau <${ADRESSE_AMEN}>`,
-      detail: "L'expéditeur que voient les familles : garde bien l'adresse de la boîte, sinon nos messages risquent d'être refusés.",
+      detail: "Expéditeur vu par les familles : garder l'adresse de la boîte, sinon risque de refus des messages.",
     },
   ];
 
@@ -387,7 +387,7 @@ function AideAmen({ ouverte }: { ouverte: boolean }) {
     <details open={ouverte} className="group rounded-lg border border-line">
       <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-medium text-ink hover:bg-page">
         <span>
-          Configurer avec notre messagerie Amen <span className="font-normal text-muted">({ADRESSE_AMEN})</span>
+          Configurer avec la messagerie Amen <span className="font-normal text-muted">({ADRESSE_AMEN})</span>
         </span>
         <span aria-hidden="true" className="text-muted transition-transform group-open:rotate-180">
           ▾
@@ -396,12 +396,12 @@ function AideAmen({ ouverte }: { ouverte: boolean }) {
       <div className="space-y-3 border-t border-line px-4 py-4 text-sm text-muted">
         <ol className="list-decimal space-y-1 pl-5">
           <li>
-            Dans notre <strong>espace client Amen</strong>, ouvre la boîte <Code>{ADRESSE_AMEN}</Code> et note le{" "}
+            Dans l&apos;<strong>espace client Amen</strong>, ouvrir la boîte <Code>{ADRESSE_AMEN}</Code> et noter le{" "}
             <strong>serveur d&apos;envoi (SMTP)</strong> indiqué dans les paramètres de configuration de la messagerie.
           </li>
           <li>
-            Dans <strong>Vercel</strong>, ouvre le projet → <strong>Settings → Environment Variables</strong> et
-            ajoute :
+            Dans <strong>Vercel</strong>, ouvrir le projet → <strong>Settings → Environment Variables</strong> et
+            ajouter :
           </li>
         </ol>
         <dl className="divide-y divide-line rounded-lg border border-line bg-surface">
@@ -416,11 +416,11 @@ function AideAmen({ ouverte }: { ouverte: boolean }) {
           ))}
         </dl>
         <ol start={3} className="list-decimal space-y-1 pl-5">
-          <li>Redéploie l&apos;application, puis envoie-toi un e-mail de test juste en dessous.</li>
+          <li>Redéployer l&apos;application, puis envoyer un e-mail de test juste en dessous.</li>
         </ol>
         <p className="text-xs">
-          Si le test échoue sur le port 465, essaie le port 587 avec <Code>SMTP_SECURE=false</Code>. Un refus
-          d&apos;identification, c&apos;est presque toujours un mauvais mot de passe ou une adresse incomplète.
+          Échec sur le port 465 : essayer le port 587 avec <Code>SMTP_SECURE=false</Code>. Refus
+          d&apos;identification : presque toujours un mauvais mot de passe ou une adresse incomplète.
         </p>
       </div>
     </details>
@@ -435,8 +435,8 @@ function ErreurChargement({ message }: { message: string }) {
         <p className="font-medium">Impossible de charger les paramètres.</p>
         <p>{message}</p>
         <p>
-          Vérifie que les migrations Supabase sont bien appliquées et que ton adresse fait partie des utilisateurs
-          autorisés (table <Code>membres</Code>).
+          Vérifier que les migrations Supabase sont appliquées et que l&apos;adresse connectée fait partie des
+          utilisateurs autorisés (table <Code>membres</Code>).
         </p>
       </div>
     </div>

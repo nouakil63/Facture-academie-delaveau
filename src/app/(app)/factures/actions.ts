@@ -24,7 +24,7 @@ import type { ResultatAction, StatutFacture } from "@/lib/types";
  */
 
 const schemaNouvelleFacture = z.object({
-  client_id: z.guid({ error: "Choisis le client à facturer." }),
+  client_id: z.guid({ error: "Choisir le client à facturer." }),
   objet: texteFacultatif(200, "Objet"),
   periode: schemaPeriode,
   notes: texteFacultatif(2000, "Notes imprimées"),
@@ -34,14 +34,14 @@ const schemaNouvelleFacture = z.object({
       try {
         return JSON.parse(v) as unknown;
       } catch {
-        ctx.addIssue({ code: "custom", message: "Lignes illisibles : recharge la page." });
+        ctx.addIssue({ code: "custom", message: "Lignes illisibles : recharger la page." });
         return z.NEVER;
       }
     })
     .pipe(
       z
-        .array(schemaLigne, { error: "Lignes illisibles : recharge la page." })
-        .min(1, { error: "Ajoute au moins une ligne à la facture." })
+        .array(schemaLigne, { error: "Lignes illisibles : recharger la page." })
+        .min(1, { error: "Ajouter au moins une ligne à la facture." })
         .max(100, { error: "100 lignes au maximum par facture." }),
     ),
 });
@@ -73,7 +73,7 @@ export async function creerFacture(_precedent: ResultatAction | null, formData: 
     factureId = resultat.donnees!.id;
   } catch (e) {
     console.error("Création de facture impossible :", e);
-    return { ok: false, erreur: "La facture n'a pas pu être créée. Vérifie ta connexion et réessaie." };
+    return { ok: false, erreur: "La facture n'a pas pu être créée. Vérifier la connexion et réessayer." };
   }
 
   revaliderFactures();
@@ -87,8 +87,8 @@ const schemaSelection = z
   .array(z.object({ id: schemaId, statut: z.enum(STATUTS, { error: "Sélection invalide." }) }), {
     error: "Sélection invalide.",
   })
-  .min(1, { error: "Sélectionne au moins une facture." })
-  .max(LOT_ENVOI_MAX, { error: `${LOT_ENVOI_MAX} factures au maximum par appel : fais-le en plusieurs fois.` })
+  .min(1, { error: "Sélectionner au moins une facture." })
+  .max(LOT_ENVOI_MAX, { error: `${LOT_ENVOI_MAX} factures au maximum par appel : procéder en plusieurs fois.` })
   .transform((factures) => new Map(factures.map((f) => [f.id, f.statut])));
 
 /** Un renvoi groupé récent (même facture) est ignoré : protège contre une relance après une coupure. */
@@ -116,7 +116,7 @@ export async function envoyerSelection(
     const maintenant = Date.now();
     const resultat = await envoyerLot(supabase, [...statutsVus.keys()], (f) =>
       statutsVus.get(f.id) !== f.statut
-        ? "Ignorée : son statut a changé entre-temps (déjà envoyée ?). Recharge la page avant de relancer."
+        ? "Ignorée : statut modifié entre-temps (déjà envoyée ?). Recharger la page avant de relancer."
         : f.envoyee_le && maintenant - Date.parse(f.envoyee_le) < DELAI_RENVOI_MS
           ? "Ignorée : déjà envoyée il y a moins de 15 minutes."
           : null,
@@ -127,6 +127,6 @@ export async function envoyerSelection(
   } catch (e) {
     console.error("Envoi groupé impossible :", e);
     revaliderFactures();
-    return { ok: false, erreur: "L'envoi groupé s'est interrompu. Regarde l'historique de chaque facture avant de relancer." };
+    return { ok: false, erreur: "Envoi groupé interrompu. Consulter l'historique de chaque facture avant de relancer." };
   }
 }

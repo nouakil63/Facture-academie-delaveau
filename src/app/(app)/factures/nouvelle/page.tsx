@@ -138,12 +138,12 @@ export default async function PageNouvelleFacture(props: PageProps<"/factures/no
           {academieFiltree && <AcademieBadge nom={academieFiltree.nom} couleur={academieFiltree.couleur} />}
         </div>
         <p className="mt-1 text-sm text-muted">
-          Une facture ponctuelle ou mensuelle faite à la main. Elle part en brouillon, sans numéro.
+          Facture ponctuelle ou mensuelle saisie à la main, créée en brouillon, sans numéro.
         </p>
       </div>
 
       {clientDemande && !demande && (
-        <p className="avertissement">Client introuvable : choisis-en un dans la liste.</p>
+        <p className="avertissement">Client introuvable : en choisir un dans la liste.</p>
       )}
 
       {clients.length === 0 ? (
@@ -152,8 +152,8 @@ export default async function PageNouvelleFacture(props: PageProps<"/factures/no
             {academieFiltree ? `Aucun client actif pour ${avecArticle(academieFiltree.nom)}` : "Aucun client actif"}
           </p>
           <p className="mt-1 max-w-md text-sm text-muted">
-            Crée d&apos;abord la fiche du client à facturer
-            {academieFiltree ? ", ou choisis « Toutes » dans le filtre d'académie du menu." : "."}
+            Créer d&apos;abord la fiche du client à facturer
+            {academieFiltree ? ", ou choisir « Toutes » dans le filtre d'académie du menu." : "."}
           </p>
           <Link href="/clients/nouveau" className="btn-primaire mt-5">
             <IconePlus />

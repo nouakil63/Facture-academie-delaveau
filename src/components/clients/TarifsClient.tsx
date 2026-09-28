@@ -91,16 +91,16 @@ export function TarifsClient({
         <div className="px-5 py-10 text-center">
           <p className="font-medium text-ink">Aucun tarif pour ce client</p>
           <p className="mx-auto mt-1 max-w-md text-sm text-muted">
-            Ajoute ce qu&apos;on lui facture chaque mois (pension, coaching, scolarité…), avec un prix personnalisé
-            si besoin. Ces lignes rempliront toutes seules sa facture mensuelle.
+            Ajouter ce qui est facturé chaque mois (pension, coaching, scolarité…), avec un prix personnalisé
+            si besoin. Ces lignes remplissent automatiquement la facture mensuelle.
           </p>
           {prestations.length === 0 && (
             <p className="mx-auto mt-3 max-w-md text-xs text-muted">
-              Notre catalogue est vide :{" "}
+              Catalogue vide :{" "}
               <Link href="/prestations" className="btn-lien text-xs">
-                crée des prestations
+                créer des prestations
               </Link>{" "}
-              ou utilise une ligne libre.
+              ou utiliser une ligne libre.
             </p>
           )}
           <button type="button" className="btn-secondaire mt-5" onClick={() => ouvrir("nouveau")}>
@@ -278,7 +278,7 @@ export function TarifsClient({
           facturée à ce client.
         </p>
         <p className="text-muted">
-          Ses factures déjà créées ne bougent pas. Pour suspendre la ligne sans la perdre, modifie-la et décoche
+          Factures déjà créées inchangées. Pour suspendre la ligne sans la perdre, la modifier et décocher
           « Ligne active ».
         </p>
       </ModaleConfirmation>

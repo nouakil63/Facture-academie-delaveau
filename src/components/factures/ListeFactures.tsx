@@ -160,7 +160,7 @@ export function ListeFactures({
       )}
       {choisies.length > 0 && !envoiPossible && (
         <p className="avertissement">
-          L&apos;envoi d&apos;e-mails n&apos;est pas encore configuré (serveur SMTP) : pas d&apos;envoi groupé pour l&apos;instant.{" "}
+          Envoi d&apos;e-mails non configuré (serveur SMTP) : envoi groupé indisponible.{" "}
           <Link href="/parametres#envoi-emails" className="font-medium underline">
             Paramètres
           </Link>
@@ -168,7 +168,7 @@ export function ListeFactures({
       )}
       {tropNombreuses && (
         <p className="avertissement">
-          {MAX_LOT} factures au maximum par envoi groupé : réduis la sélection et fais-le en plusieurs fois.
+          {MAX_LOT} factures au maximum par envoi groupé : réduire la sélection et procéder en plusieurs fois.
         </p>
       )}
 
@@ -211,7 +211,7 @@ export function ListeFactures({
                         aria-label={`Sélectionner ${libelleNumero(f.numero)} – ${nomClientFacture(f)}`}
                         checked={choisie}
                         disabled={annulee}
-                        title={annulee ? "Facture annulée : on ne peut plus l'envoyer" : undefined}
+                        title={annulee ? "Facture annulée : envoi impossible" : undefined}
                         onChange={() => basculer(f.id)}
                       />
                     </td>
@@ -385,7 +385,7 @@ export function ListeFactures({
           </p>
         )}
         {choisies.length > 10 && (
-          <p className="text-xs text-muted">Les factures partent une par une : compte quelques secondes par facture.</p>
+          <p className="text-xs text-muted">Envoi facture par facture : compter quelques secondes pour chacune.</p>
         )}
       </ModaleConfirmation>
     </div>

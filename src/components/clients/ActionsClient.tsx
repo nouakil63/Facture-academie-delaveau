@@ -79,10 +79,10 @@ export function ActionsClient({
         onSucces={(r) => r.message && setMessage({ ok: true, texte: r.message })}
       >
         <p>
-          On ne facturera plus <strong>{nom}</strong> chaque mois, et il disparaîtra de la liste des clients (sauf si
-          tu affiches les archivés).
+          <strong>{nom}</strong> ne sera plus facturé chaque mois et disparaîtra de la liste des clients (sauf avec
+          « Afficher les archivés »).
         </p>
-        <p className="text-muted">On garde ses factures et ses tarifs. Tu pourras le réactiver à tout moment.</p>
+        <p className="text-muted">Factures et tarifs conservés. Réactivation possible à tout moment.</p>
       </ModaleConfirmation>
 
       {supprimable ? (
@@ -108,13 +108,13 @@ export function ActionsClient({
           onSucces={(r) => r.message && setMessage({ ok: true, texte: r.message })}
         >
           <p>
-            <strong>{nom}</strong> a {nbFactures} facture{nbFactures > 1 ? "s" : ""}. On doit conserver nos factures :
+            <strong>{nom}</strong> a {nbFactures} facture{nbFactures > 1 ? "s" : ""}. Les factures sont à conserver :
             un client déjà facturé ne peut pas être supprimé.
           </p>
           <p className="text-muted">
             {actif
-              ? "Archive-le pour le retirer de la liste et de la facturation mensuelle : on garde son historique."
-              : "Il est déjà archivé : il n'apparaît plus ni dans la liste ni dans la facturation mensuelle."}
+              ? "L'archiver pour le retirer de la liste et de la facturation mensuelle, historique conservé."
+              : "Déjà archivé : absent de la liste et de la facturation mensuelle."}
           </p>
         </ModaleConfirmation>
       )}

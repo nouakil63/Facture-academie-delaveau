@@ -60,8 +60,8 @@ export function ProchaineFacturation({
               <div className="mt-3 space-y-1.5 text-xs text-amber-900">
                 <span className="badge bg-amber-100 text-amber-900">Automatisation désactivée</span>
                 <p>
-                  Date indicative : aucun brouillon ne sera créé tout seul. Lance la facturation toi-même, ou
-                  active l&apos;automatisation.
+                  Date indicative : aucun brouillon ne sera créé automatiquement. Lancer la facturation manuellement, ou
+                  activer l&apos;automatisation.
                 </p>
                 <Link href="/parametres#mensuelle" className="btn-lien text-xs">
                   <IconeParametres className="h-3.5 w-3.5" />
@@ -80,10 +80,10 @@ export function ProchaineFacturation({
           </h3>
 
           {apercu === null ? (
-            <p className="mt-1 text-sm text-muted">Avancement indisponible pour le moment : recharge la page dans un instant.</p>
+            <p className="mt-1 text-sm text-muted">Avancement indisponible pour le moment : recharger la page dans un instant.</p>
           ) : apercu.aFacturer === 0 ? (
             <p className="mt-1 text-sm text-muted">
-              Aucun de nos clients n&apos;a de tarif mensuel actif pour ce mois : rien à facturer automatiquement.
+              Aucun client n&apos;a de tarif mensuel actif pour ce mois : rien à facturer automatiquement.
             </p>
           ) : (
             <>

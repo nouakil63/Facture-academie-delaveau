@@ -22,7 +22,7 @@ export default function ErreurGlobale({ error, retry }: { error: Error & { diges
             <h1 className="titre-section">Une erreur est survenue</h1>
             <p className="mt-2 text-sm text-muted">
               Cette page n&apos;a pas pu s&apos;afficher, sans doute à cause d&apos;une coupure réseau ou d&apos;un
-              service momentanément indisponible. Si tu venais d&apos;enregistrer quelque chose, recharge la page pour
+              service momentanément indisponible. Après un enregistrement, recharger la page pour
               vérifier ce qui a été pris en compte.
             </p>
             {error.digest && (

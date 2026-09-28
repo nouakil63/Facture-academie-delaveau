@@ -16,7 +16,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const { id } = await params;
 
   const session = await sessionUtilisateur();
-  if (!session) return erreurTexte(401, "Ta session a expiré : reconnecte-toi pour afficher cette facture.");
+  if (!session) return erreurTexte(401, "Session expirée : se reconnecter pour afficher cette facture.");
 
   if (!estUuid(id)) return erreurTexte(404, "Facture introuvable.");
 
@@ -25,7 +25,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     donnees = await chargerFactureComplete(session.supabase, id);
   } catch (e) {
     console.error(`PDF : chargement de la facture ${id} impossible :`, e);
-    return erreurTexte(500, "Impossible de charger la facture. Réessaie dans un instant.");
+    return erreurTexte(500, "Impossible de charger la facture. Réessayer dans un instant.");
   }
   if (!donnees) return erreurTexte(404, "Facture introuvable : elle a peut-être été supprimée.");
 
@@ -35,6 +35,6 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     return reponsePdf(pdf, nomFichierFacture(donnees.facture), telecharger);
   } catch (e) {
     console.error(`PDF : génération impossible pour la facture ${id} :`, e);
-    return erreurTexte(500, "Impossible de générer le PDF de la facture. Réessaie dans un instant.");
+    return erreurTexte(500, "Impossible de générer le PDF de la facture. Réessayer dans un instant.");
   }
 }
