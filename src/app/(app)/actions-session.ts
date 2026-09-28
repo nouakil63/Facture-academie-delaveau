@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { exigerUtilisateur } from "@/lib/auth";
 import type { ResultatAction } from "@/lib/types";
 
-const ECHEC_DECONNEXION = "La déconnexion a échoué. Vérifiez votre connexion Internet puis réessayez.";
+const ECHEC_DECONNEXION = "La déconnexion a échoué. Vérifie ta connexion Internet puis réessaie.";
 
 /** Ferme la session de cet appareil uniquement, puis renvoie vers /connexion. */
 export async function seDeconnecter(): Promise<ResultatAction> {
