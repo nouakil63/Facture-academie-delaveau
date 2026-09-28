@@ -52,6 +52,9 @@ function traduireErreur(erreur: ErreurSupabase, siCleEtrangere?: string): string
     case "P0001":
       // Exceptions levées par les triggers : messages métier déjà rédigés en français.
       return erreur.message;
+    case "PGRST204":
+    case "42703":
+      return "Base de données pas à jour : exécuter dans Supabase la dernière migration du dossier supabase/migrations.";
     case "PGRST301":
     case "PGRST303":
       return "Session expirée : se reconnecter.";
@@ -190,8 +193,11 @@ function lireFormulaireClient(formData: FormData) {
   };
 }
 
-/** Création d'un client, puis redirection vers sa fiche. */
-export async function creerClient(_precedent: ResultatAction | null, formData: FormData): Promise<ResultatAction> {
+/** Création d'un client ; le formulaire ouvre ensuite sa fiche. */
+export async function creerClient(
+  _precedent: ResultatAction<{ id: string }> | null,
+  formData: FormData,
+): Promise<ResultatAction<{ id: string }>> {
   const { supabase } = await exigerUtilisateur();
 
   const lecture = schemaClient.safeParse(lireFormulaireClient(formData));
@@ -207,7 +213,9 @@ export async function creerClient(_precedent: ResultatAction | null, formData: F
   }
 
   revaliderClients();
-  redirect(`/clients/${id}`);
+  // La navigation vers la fiche est faite par le formulaire (router.push) : une redirection
+  // lancée depuis l'action pouvait laisser le bouton en « Enregistrement… ».
+  return { ok: true, message: "Client créé.", donnees: { id } };
 }
 
 /**

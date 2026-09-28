@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { startTransition, useActionState, useState } from "react";
+import { useRouter } from "next/navigation";
+import { startTransition, useActionState, useEffect, useState } from "react";
 import { creerClient, modifierClient } from "@/app/(app)/clients/actions";
 import { IconeAlerte } from "@/components/Icones";
 import { appeler } from "@/lib/appeler";
@@ -33,10 +34,19 @@ export function FormulaireClient({
   jourGeneration: number;
 }) {
   const creation = !client;
-  const [etat, envoyer, enCours] = useActionState<ResultatAction | null, FormData>(
-    (precedent, donnees) => appeler((creation ? creerClient : modifierClient)(precedent, donnees)),
+  const router = useRouter();
+  const [etat, envoyer, enCours] = useActionState<ResultatAction<{ id: string }> | null, FormData>(
+    (precedent, donnees) =>
+      creation
+        ? appeler(creerClient(precedent, donnees))
+        : appeler<{ id: string }>(modifierClient(null, donnees) as Promise<ResultatAction<{ id: string }>>),
     null,
   );
+  // Création réussie : ouvrir la fiche du nouveau client.
+  const nouveauId = creation && etat?.ok ? etat.donnees?.id : undefined;
+  useEffect(() => {
+    if (nouveauId) router.push(`/clients/${nouveauId}`);
+  }, [nouveauId, router]);
   const [type, setType] = useState<TypeClient>(client?.type ?? "particulier");
   const professionnel = type === "professionnel";
   // Suivis pour avertir d'un envoi automatique sans destinataire.
