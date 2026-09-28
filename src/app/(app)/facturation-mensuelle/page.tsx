@@ -32,6 +32,7 @@ import {
   pluriel,
   LIBELLES_STATUT,
 } from "@/lib/format";
+import { CHAMPS_TARIF_POUR_CALCUL, deductionArrhes, mensuelDetaille, type TarifPourCalcul } from "@/lib/tarifs";
 import type { Academie, Client, FactureVue, Parametres, ResultatGeneration, StatutFacture } from "@/lib/types";
 
 export const metadata: Metadata = { title: "Facturation mensuelle" };
@@ -41,7 +42,18 @@ export const maxDuration = 300;
 
 type ClientMensuel = Pick<
   Client,
-  "id" | "academie_id" | "type" | "nom" | "prenom" | "raison_sociale" | "email" | "emails_cc" | "cavaliers"
+  | "id"
+  | "academie_id"
+  | "type"
+  | "nom"
+  | "prenom"
+  | "raison_sociale"
+  | "email"
+  | "emails_cc"
+  | "cavaliers"
+  | "arrhes_reglees"
+  | "arrhes_centimes"
+  | "arrhes_saison"
 >;
 type FactureMensuelle = Pick<
   FactureVue,
@@ -102,7 +114,9 @@ export default async function PageFacturationMensuelle(props: PageProps<"/factur
 
   let requeteClients = supabase
     .from("clients")
-    .select("id, academie_id, type, nom, prenom, raison_sociale, email, emails_cc, cavaliers")
+    .select(
+      "id, academie_id, type, nom, prenom, raison_sociale, email, emails_cc, cavaliers, arrhes_reglees, arrhes_centimes, arrhes_saison",
+    )
     .eq("actif", true);
   if (academieId) requeteClients = requeteClients.eq("academie_id", academieId);
 
@@ -134,6 +148,32 @@ export default async function PageFacturationMensuelle(props: PageProps<"/factur
   if (resFactures.error) return <ErreurChargement message={resFactures.error.message} />;
 
   const clients = new Map((resClients.data as ClientMensuel[]).map((c) => [c.id, c]));
+
+  // Arrhes : clients dont la déduction du mois ne peut pas être appliquée (aucune ligne
+  // mensuelle de quantité 1 d'un prix suffisant) — même règle que la génération.
+  const clientsAvecDeduction = [...clients.values()].filter((c) => deductionArrhes(c, periode) > 0);
+  const arrhesNonAppliquees = new Map<string, number>();
+  if (clientsAvecDeduction.length > 0) {
+    const resTarifsArrhes = await supabase
+      .from("tarifs_clients")
+      .select(`client_id, ${CHAMPS_TARIF_POUR_CALCUL}`)
+      .in(
+        "client_id",
+        clientsAvecDeduction.map((c) => c.id),
+      );
+    if (resTarifsArrhes.error) return <ErreurChargement message={resTarifsArrhes.error.message} />;
+    const tarifsArrhes = resTarifsArrhes.data as unknown as (TarifPourCalcul & { client_id: string })[];
+    for (const c of clientsAvecDeduction) {
+      const detail = mensuelDetaille(
+        tarifsArrhes.filter((t) => t.client_id === c.id),
+        c,
+        periode,
+      );
+      if (detail.nonAppliquee) arrhesNonAppliquees.set(c.id, detail.deduction);
+    }
+  }
+  // Juillet et août : pas de mensualité (échéancier de septembre à juin), facturation manuelle.
+  const moisHorsEcheancier = ["07", "08"].includes(periode.slice(5, 7));
   const trierParNom = <T,>(liste: T[], nom: (x: T) => string) =>
     [...liste].sort((a, b) => nom(a).localeCompare(nom(b), "fr", { sensitivity: "base" }));
 
