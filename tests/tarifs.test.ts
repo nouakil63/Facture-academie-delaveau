@@ -2,7 +2,14 @@ import { PGlite } from "@electric-sql/pglite";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import {
   bornesMois,
+  deductionArrhes,
+  libelleSaison,
+  ligneDeductionArrhes,
+  mensualiteArrhes,
+  mensuelDetaille,
   mensuelEstime,
+  mensuelNet,
+  saisonEnCours,
   parseQuantite,
   prixApplique,
   quantiteVersSaisie,
@@ -123,6 +130,74 @@ describe("saisie des quantités", () => {
   });
 });
 
+describe("arrhes", () => {
+  const arrhes = (arrhes_centimes: number | null, arrhes_saison: number | null = 2026, arrhes_reglees = true) => ({
+    arrhes_reglees,
+    arrhes_centimes,
+    arrhes_saison,
+  });
+
+  test("saison en cours (heure de Paris) et libellé", () => {
+    expect(saisonEnCours("2026-09-28")).toBe(2026);
+    expect(saisonEnCours("2026-07-01")).toBe(2026);
+    expect(saisonEnCours("2026-06-30")).toBe(2025);
+    expect(saisonEnCours("2027-01-15")).toBe(2026);
+    expect(libelleSaison(2026)).toBe("2026-2027");
+  });
+
+  test("déduction : dixième de septembre à mai, reste en juin, rien en juillet/août ni hors saison", () => {
+    const a = arrhes(100005); // 1 000,05 €
+    expect(deductionArrhes(a, "2026-09-01")).toBe(10000);
+    expect(deductionArrhes(a, "2026-12-15")).toBe(10000);
+    expect(deductionArrhes(a, "2027-05-01")).toBe(10000);
+    expect(deductionArrhes(a, "2027-06-30")).toBe(10005);
+    const total = ["2026-09", "2026-10", "2026-11", "2026-12", "2027-01", "2027-02", "2027-03", "2027-04", "2027-05", "2027-06"]
+      .map((m) => deductionArrhes(a, `${m}-01`))
+      .reduce((s, d) => s + d, 0);
+    expect(total).toBe(100005); // total exact sur 10 mois
+    for (const hors of ["2026-07-01", "2026-08-01", "2027-07-01", "2027-08-01", "2026-06-01", "2027-09-01", "2025-10-01"]) {
+      expect(deductionArrhes(a, hors)).toBe(0);
+    }
+    expect(deductionArrhes(arrhes(100005, 2026, false), "2026-10-01")).toBe(0); // non réglées
+    expect(deductionArrhes(arrhes(null), "2026-10-01")).toBe(0);
+    expect(deductionArrhes(arrhes(0), "2026-10-01")).toBe(0);
+    expect(deductionArrhes(arrhes(100005, null), "2026-10-01")).toBe(0);
+    expect(deductionArrhes(arrhes(9), "2026-10-01")).toBe(0); // arrondi : tout en juin
+    expect(deductionArrhes(arrhes(9), "2027-06-01")).toBe(9);
+    expect(mensualiteArrhes(45000)).toBe(4500);
+  });
+
+  test("application : ligne de quantité 1 de plus grand total, première en cas d'égalité", () => {
+    const tarifs = [
+      tarif({ prix_unitaire_centimes: 30000, ordre: 1 }),
+      tarif({ prix_unitaire_centimes: 50000, ordre: 3 }),
+      tarif({ prix_unitaire_centimes: 50000, ordre: 2 }), // égalité : ordre 2 avant ordre 3
+      tarif({ prix_unitaire_centimes: 20000, quantite: 4, ordre: 0 }), // quantité 4 : jamais retenue
+    ];
+    expect(ligneDeductionArrhes(tarifs, 4500, "2026-10-01")).toBe(2);
+    const d = mensuelDetaille(tarifs, arrhes(45000), "2026-10-01");
+    expect(d).toMatchObject({ brut: 210000, deduction: 4500, appliquee: 4500, net: 205500, nonAppliquee: false, ligne: 2 });
+    // Hors saison : pas de déduction, pas d'alerte.
+    expect(mensuelDetaille(tarifs, arrhes(45000), "2026-07-01")).toMatchObject({ net: 210000, nonAppliquee: false });
+    // Aucune ligne adéquate (prix < déduction, ou seulement quantité > 1) : aucune déduction, alerte.
+    expect(mensuelDetaille([tarif({ prix_unitaire_centimes: 4000 })], arrhes(45000), "2026-10-01")).toMatchObject({
+      brut: 4000,
+      appliquee: 0,
+      net: 4000,
+      nonAppliquee: true,
+      ligne: null,
+    });
+    expect(mensuelDetaille([tarif({ quantite: 4 })], arrhes(45000), "2026-10-01")).toMatchObject({
+      net: 180000,
+      nonAppliquee: true,
+    });
+    // Ligne inactive ou hors période : ignorée.
+    expect(ligneDeductionArrhes([tarif({ actif: false }), tarif({ prix_unitaire_centimes: 5000 })], 4500, "2026-10-01")).toBe(1);
+    // Sans arrhes : strictement le mensuel estimé.
+    expect(mensuelNet(tarifs, arrhes(null, null, false), "2026-10-01")).toBe(mensuelEstime(tarifs, "2026-10-01"));
+  });
+});
+
 describe("égalité avec la base de données", () => {
   let pg: PGlite;
   beforeAll(async () => {
@@ -217,6 +292,118 @@ describe("égalité avec la base de données", () => {
       ).rows;
       for (const l of lignes) {
         expect(totalLigneCentimes(l.quantite, l.prix_unitaire_centimes)).toBe(l.total_centimes);
+      }
+    } finally {
+      await db.close();
+    }
+  });
+
+  test("deductionArrhes = public.deduction_arrhes, sur un large échantillon", async () => {
+    const db = await creerBase();
+    try {
+      const academie = (await db.query<{ id: string }>(`select id from academies order by ordre limit 1`)).rows[0].id;
+      const cas: { reglees: boolean; montant: number | null; saison: number | null }[] = [];
+      for (const montant of [null, 0, 1, 9, 10, 11, 45000, 45005, 99999, 123456789]) {
+        for (const saison of [null, 2025, 2026]) {
+          cas.push({ reglees: true, montant, saison });
+        }
+      }
+      cas.push({ reglees: false, montant: 45000, saison: 2026 });
+      const periodes = ["2025-08-01", "2025-09-01", "2026-05-01", "2026-06-15", "2026-07-01", "2026-08-01", "2026-09-01",
+        "2026-12-01", "2027-02-01", "2027-06-01", "2027-07-01", "2027-09-01"];
+      for (const [i, c] of cas.entries()) {
+        const { rows } = await db.query<{ periode: string; d: number }>(
+          `with c as (
+             insert into clients (academie_id, nom, arrhes_reglees, arrhes_centimes, arrhes_saison)
+             values ($1, $2, $3, $4, $5) returning *
+           )
+           select p.periode::text as periode, deduction_arrhes(c, p.periode::date) as d
+             from c, unnest($6::text[]) as p(periode)`,
+          [academie, `Client ${i}`, c.reglees, c.montant, c.saison, periodes],
+        );
+        for (const r of rows) {
+          const client = { arrhes_reglees: c.reglees, arrhes_centimes: c.montant, arrhes_saison: c.saison };
+          expect({ ...c, periode: r.periode, d: deductionArrhes(client, r.periode) }).toEqual({ ...c, periode: r.periode, d: r.d });
+        }
+      }
+    } finally {
+      await db.close();
+    }
+  });
+
+  test("mensuelDetaille = generer_brouillons_mensuels (aperçu, lignes créées, total) avec arrhes", async () => {
+    const db = await creerBase();
+    try {
+      const un = async <T>(sql: string, params: unknown[] = []) => (await db.query<T>(sql, params)).rows[0];
+      const academie = (await un<{ id: string }>(`select id from academies order by ordre limit 1`)).id;
+      const pension = (await un<{ id: string }>(
+        `insert into prestations (libelle, prix_unitaire_centimes) values ('Pension', 45000) returning id`,
+      )).id;
+
+      type Scenario = { nom: string; arrhes: number | null; reglees: boolean; tarifs: TarifPourCalcul[] };
+      const scenarios: Scenario[] = [
+        {
+          nom: "Arrondi",
+          arrhes: 100007,
+          reglees: true,
+          tarifs: [
+            tarif({ ordre: 1 }), // 450,00 (catalogue)
+            tarif({ prix_unitaire_centimes: 60000, ordre: 2 }), // 600,00 : porte la déduction
+            tarif({ prix_unitaire_centimes: 60000, ordre: 3 }), // égalité : la première (ordre 2)
+            tarif({ prix_unitaire_centimes: 90000, quantite: 4, ordre: 4 }), // quantité 4 : ignorée
+          ],
+        },
+        { nom: "Quantité 4 seule", arrhes: 45000, reglees: true, tarifs: [tarif({ quantite: 4, ordre: 1 })] },
+        {
+          nom: "Prix insuffisant",
+          arrhes: 450000,
+          reglees: true,
+          tarifs: [tarif({ prix_unitaire_centimes: 40000, ordre: 1 }), tarif({ prix_unitaire_centimes: 100000, quantite: 2, ordre: 2 })],
+        },
+        { nom: "Non réglées", arrhes: 45000, reglees: false, tarifs: [tarif({ ordre: 1 })] },
+        { nom: "Prix égal", arrhes: 450000, reglees: true, tarifs: [tarif({ ordre: 1 })] }, // 45 000 = déduction : net 0
+      ];
+      const ids = new Map<string, Scenario>();
+      for (const s of scenarios) {
+        const id = (await un<{ id: string }>(
+          `insert into clients (academie_id, nom, arrhes_reglees, arrhes_centimes, arrhes_saison)
+           values ($1, $2, $3, $4, 2026) returning id`,
+          [academie, s.nom, s.reglees, s.arrhes],
+        )).id;
+        ids.set(id, s);
+        for (const t of s.tarifs) {
+          await db.query(
+            `insert into tarifs_clients (client_id, prestation_id, prix_unitaire_centimes, quantite, ordre)
+             values ($1, $2, $3, $4, $5)`,
+            [id, pension, t.prix_unitaire_centimes, t.quantite, t.ordre],
+          );
+        }
+      }
+
+      for (const periode of ["2026-08-01", "2026-09-01", "2027-01-01", "2027-06-01", "2027-07-01"]) {
+        const apercu = (await db.query<{ client_id: string; total_ht_centimes: number }>(
+          `select * from generer_brouillons_mensuels($1, null, true)`, [periode])).rows;
+        const genere = (await db.query<{ client_id: string; facture_id: string; total_ht_centimes: number }>(
+          `select * from generer_brouillons_mensuels($1)`, [periode])).rows;
+        expect(apercu).toHaveLength(scenarios.length);
+        for (const r of genere) {
+          const s = ids.get(r.client_id)!;
+          const detail = mensuelDetaille(s.tarifs, { arrhes_reglees: s.reglees, arrhes_centimes: s.arrhes, arrhes_saison: 2026 }, periode);
+          const contexte = `${s.nom} ${periode}`;
+          expect({ contexte, total: r.total_ht_centimes }).toEqual({ contexte, total: detail.net });
+          expect({ contexte, apercu: apercu.find((a) => a.client_id === r.client_id)?.total_ht_centimes }).toEqual({
+            contexte,
+            apercu: detail.net,
+          });
+          const f = await un<{ total_ht_centimes: number }>(`select total_ht_centimes from factures where id = $1`, [r.facture_id]);
+          expect({ contexte, facture: f.total_ht_centimes }).toEqual({ contexte, facture: detail.net });
+          // Prix ligne par ligne : seule la ligne choisie porte la déduction.
+          const prix = (await db.query<{ prix_unitaire_centimes: number }>(
+            `select prix_unitaire_centimes from lignes_facture where facture_id = $1 order by ordre`, [r.facture_id])).rows
+            .map((l) => l.prix_unitaire_centimes);
+          const attendus = s.tarifs.map((t, i) => (prixApplique(t) ?? 0) - (i === detail.ligne ? detail.appliquee : 0));
+          expect({ contexte, prix }).toEqual({ contexte, prix: attendus });
+        }
       }
     } finally {
       await db.close();
