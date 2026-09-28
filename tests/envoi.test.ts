@@ -195,7 +195,7 @@ describe("envoyerFacture", () => {
     const { faux, supabase } = base();
     const resultat = await envoyerFacture(supabase, faux.facture.id);
 
-    expect(resultat).toEqual({ ok: false, erreur: expect.stringMatching(/n'est pas configuré/) });
+    expect(resultat).toEqual({ ok: false, erreur: expect.stringMatching(/n'est pas encore configuré/) });
     expect(faux.appelsRpc).toHaveLength(0);
     expect(faux.facture.statut).toBe("brouillon");
   });
@@ -324,7 +324,7 @@ describe("envoyerFacture", () => {
 
     expect(resultat).toEqual({
       ok: false,
-      erreur: "La facture AD-2026-0042 est annulée : elle ne peut pas être envoyée.",
+      erreur: "La facture AD-2026-0042 est annulée : on ne peut plus l'envoyer.",
     });
     expect(envoyerEmail).not.toHaveBeenCalled();
     expect(faux.envois).toHaveLength(0);
@@ -405,7 +405,7 @@ describe("envoyerFacture", () => {
     const { faux, supabase } = base({ statut: "envoyee", facture: { ...EMISE, envoyee_le: "2026-09-01T08:00:00Z" } });
     const resultat = await envoyerFacture(supabase, faux.facture.id, { exigerBrouillon: true });
 
-    expect(resultat).toEqual({ ok: false, erreur: expect.stringMatching(/^Ignorée : déjà émise/), ignoree: true });
+    expect(resultat).toEqual({ ok: false, erreur: expect.stringMatching(/^Ignorée : elle a été émise entre-temps/), ignoree: true });
     expect(envoyerEmail).not.toHaveBeenCalled();
     expect(faux.envois).toHaveLength(0);
   });
@@ -418,7 +418,7 @@ describe("envoyerFacture", () => {
     const resultats = await envoyerFactures(supabase, [faux.facture.id], { exigerBrouillon: true });
 
     expect(resultats).toEqual([
-      { id: faux.facture.id, ok: false, erreur: expect.stringMatching(/^Ignorée : déjà émise/), ignoree: true },
+      { id: faux.facture.id, ok: false, erreur: expect.stringMatching(/^Ignorée : elle a été émise entre-temps/), ignoree: true },
     ]);
     expect(envoyerEmail).not.toHaveBeenCalled();
   });
