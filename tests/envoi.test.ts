@@ -195,7 +195,7 @@ describe("envoyerFacture", () => {
     const { faux, supabase } = base();
     const resultat = await envoyerFacture(supabase, faux.facture.id);
 
-    expect(resultat).toEqual({ ok: false, erreur: expect.stringMatching(/n'est pas encore configuré/) });
+    expect(resultat).toEqual({ ok: false, erreur: expect.stringMatching(/non configuré/) });
     expect(faux.appelsRpc).toHaveLength(0);
     expect(faux.facture.statut).toBe("brouillon");
   });

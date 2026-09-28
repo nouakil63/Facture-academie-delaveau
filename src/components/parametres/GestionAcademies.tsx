@@ -443,7 +443,7 @@ function ConfirmationDesactivation({
               autoFocus
               onClick={() => executer(() => changerActivationAcademie(a.id, false), "Académie désactivée.")}
             >
-              {enCours ? "Patientez…" : "Désactiver"}
+              {enCours ? "En cours…" : "Désactiver"}
             </button>
           </div>
         </>
@@ -535,7 +535,7 @@ function ConfirmationSuppression({
             {rattachee ? (
               peutDesactiver && (
                 <button type="button" className="btn-primaire" disabled={enCours} autoFocus onClick={desactiver}>
-                  {enCours ? "Patientez…" : "Désactiver l'académie"}
+                  {enCours ? "En cours…" : "Désactiver l'académie"}
                 </button>
               )
             ) : (
