@@ -5,16 +5,26 @@ import { useState, useTransition } from "react";
 import { deplacerTarif, supprimerTarif } from "@/app/(app)/clients/actions";
 import { formatDate, formatEuros, formatPeriode, formatQuantite } from "@/lib/format";
 import {
-  mensuelEstime,
+  libelleSaison,
+  mensualiteArrhes,
+  mensuelDetaille,
   prixApplique,
   situationSurMois,
   tarifFactureSurMois,
   totalLigneCentimes,
+  type ArrhesClient,
   type PrestationDuTarif,
   type TarifAvecPrestation,
 } from "@/lib/tarifs";
 import { FormulaireTarif } from "./FormulaireTarif";
-import { IconeCorbeille, IconeCrayon, IconeFlecheBas, IconeFlecheHaut, IconePlus } from "@/components/Icones";
+import {
+  IconeAlerte,
+  IconeCorbeille,
+  IconeCrayon,
+  IconeFlecheBas,
+  IconeFlecheHaut,
+  IconePlus,
+} from "@/components/Icones";
 import { Modale, ModaleConfirmation } from "@/components/Modale";
 import { appeler } from "@/lib/appeler";
 
@@ -25,8 +35,11 @@ export function TarifsClient({
   tarifs,
   prestations,
   periode,
+  arrhes,
 }: {
   clientId: string;
+  /** Arrhes du client : déduites de la mensualité de septembre à juin. */
+  arrhes: ArrhesClient;
   clientActif: boolean;
   /** Tarifs du client, triés par ordre. */
   tarifs: TarifAvecPrestation[];
@@ -41,7 +54,19 @@ export function TarifsClient({
   const [message, setMessage] = useState<{ ok: boolean; texte: string } | null>(null);
   const [deplacement, demarrerDeplacement] = useTransition();
 
-  const total = mensuelEstime(tarifs, periode);
+  // Arrhes : même calcul que la génération mensuelle (déduction sur une ligne de quantité 1).
+  const detail = mensuelDetaille(tarifs, arrhes, periode);
+  const total = detail.net;
+  const avecArrhes = arrhes.arrhes_reglees && (arrhes.arrhes_centimes ?? 0) > 0;
+  // Déduction impossible ce mois-ci, ou dès septembre si la saison n'a pas commencé.
+  const debutSaison = arrhes.arrhes_saison != null ? `${arrhes.arrhes_saison}-09-01` : null;
+  const periodeControle =
+    detail.deduction > 0 ? periode : debutSaison && debutSaison > periode ? debutSaison : null;
+  const controle = periodeControle ? mensuelDetaille(tarifs, arrhes, periodeControle) : null;
+  const alerteArrhes =
+    avecArrhes && periodeControle && controle?.nonAppliquee
+      ? { periode: periodeControle, deduction: controle.deduction }
+      : null;
   const nbFactures = tarifs.filter((t) => tarifFactureSurMois(t, periode)).length;
   const mois = formatPeriode(periode);
 
@@ -224,20 +249,63 @@ export function TarifsClient({
             })}
           </ul>
 
+          {detail.appliquee > 0 && (
+            <dl className="space-y-1 border-t border-line px-5 py-3 text-sm">
+              <div className="flex justify-between gap-3">
+                <dt className="text-muted">Mensualité brute</dt>
+                <dd className="tabular-nums">{formatEuros(detail.brut)}</dd>
+              </div>
+              <div className="flex justify-between gap-3">
+                <dt className="text-muted">
+                  Déduction des arrhes
+                  {arrhes.arrhes_saison != null && (
+                    <span className="text-xs"> (saison {libelleSaison(arrhes.arrhes_saison)})</span>
+                  )}
+                </dt>
+                <dd className="tabular-nums text-emerald-700">−{formatEuros(detail.appliquee)}</dd>
+              </div>
+            </dl>
+          )}
+
           <div className="flex flex-wrap items-baseline justify-between gap-2 border-t border-line bg-page/60 px-5 py-4">
             <div className="text-sm text-muted">
-              Total mensuel estimé — {mois}
+              {detail.appliquee > 0 ? "Mensualité nette" : "Total mensuel estimé"} — {mois}
               <span className="block text-xs">
                 {nbFactures > 1
                   ? `${nbFactures} lignes mensuelles actives sur ce mois`
                   : `${nbFactures} ligne mensuelle active sur ce mois`}
-                , montant hors taxes{clientActif ? "" : " · client archivé : aucune facture générée"}
+                , montant hors taxes{detail.appliquee > 0 ? ", seul montant affiché sur la facture" : ""}
+                {clientActif ? "" : " · client archivé : aucune facture générée"}
               </span>
             </div>
             <div className={`text-xl font-semibold tabular-nums ${clientActif ? "text-brand" : "text-muted line-through"}`}>
               {formatEuros(total)}
             </div>
           </div>
+
+          {avecArrhes && (
+            <div className="space-y-2 border-t border-line px-5 py-3">
+              {alerteArrhes ? (
+                <p role="alert" className="avertissement flex items-start gap-2">
+                  <IconeAlerte className="mt-0.5 size-4 shrink-0 text-amber-600" />
+                  <span>
+                    Déduction des arrhes impossible{alerteArrhes.periode === periode ? ` en ${mois}` : ` à partir de ${formatPeriode(alerteArrhes.periode)}`} :
+                    aucune ligne mensuelle de quantité 1 d&apos;au moins {formatEuros(alerteArrhes.deduction)}. Les
+                    factures seront générées sans déduction : ajouter ou ajuster une ligne de quantité 1.
+                  </span>
+                </p>
+              ) : (
+                detail.deduction === 0 && (
+                  <p className="text-xs text-muted">
+                    Arrhes réglées
+                    {arrhes.arrhes_saison != null ? ` (saison ${libelleSaison(arrhes.arrhes_saison)})` : ""} : aucune
+                    déduction en {mois}. Déduction de septembre à juin : −
+                    {formatEuros(mensualiteArrhes(arrhes.arrhes_centimes ?? 0))} par mois.
+                  </p>
+                )
+              )}
+            </div>
+          )}
         </>
       )}
 

@@ -5,6 +5,7 @@ import { IconeRetour } from "@/components/Icones";
 import { academieSelectionnee, resoudreAcademie } from "@/lib/academie-selectionnee";
 import { exigerUtilisateur } from "@/lib/auth";
 import { chargerAcademies, chargerParametres } from "@/lib/facturation/service";
+import { saisonEnCours } from "@/lib/tarifs";
 import type { Academie, Parametres } from "@/lib/types";
 
 export const metadata: Metadata = { title: "Nouveau client" };

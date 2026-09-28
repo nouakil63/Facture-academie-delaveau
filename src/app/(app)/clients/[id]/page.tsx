@@ -10,7 +10,13 @@ import { TarifsClient } from "@/components/clients/TarifsClient";
 import { exigerUtilisateur } from "@/lib/auth";
 import { chargerAcademies, chargerParametres } from "@/lib/facturation/service";
 import { destinatairesFacture, formatEuros, formatPeriode, jourDuMois, nomClient, premierDuMois } from "@/lib/format";
-import { mensuelEstime, type PrestationDuTarif, type TarifAvecPrestation } from "@/lib/tarifs";
+import {
+  libelleSaison,
+  mensuelDetaille,
+  saisonEnCours,
+  type PrestationDuTarif,
+  type TarifAvecPrestation,
+} from "@/lib/tarifs";
 import type { Academie, Client } from "@/lib/types";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -78,7 +84,10 @@ export default async function PageClient(props: PageProps<"/clients/[id]">) {
   const academie = academies.find((a) => a.id === client.academie_id);
   const nom = nomClient(client);
   const periode = premierDuMois();
-  const mensuel = mensuelEstime(tarifs, periode);
+  // Mensualité nette : arrhes déduites comme le fera la génération mensuelle.
+  const detail = mensuelDetaille(tarifs, client, periode);
+  const mensuel = detail.net;
+  const avecArrhes = client.arrhes_reglees && (client.arrhes_centimes ?? 0) > 0;
   const aEncaisser = factures
     .filter((f) => f.statut === "emise" || f.statut === "envoyee")
     .reduce((s, f) => s + f.total_ttc_centimes, 0);
@@ -105,6 +114,14 @@ export default async function PageClient(props: PageProps<"/clients/[id]">) {
                 title={`Émise et envoyée automatiquement le ${jourDuMois(jourGeneration)} de chaque mois, sans relecture`}
               >
                 Envoi auto
+              </span>
+            )}
+            {avecArrhes && (
+              <span
+                className="badge bg-emerald-100 text-emerald-800"
+                title={`Arrhes réglées (saison ${client.arrhes_saison != null ? libelleSaison(client.arrhes_saison) : "non renseignée"}) : déduites des mensualités de septembre à juin`}
+              >
+                Arrhes
               </span>
             )}
           </div>
@@ -160,7 +177,11 @@ export default async function PageClient(props: PageProps<"/clients/[id]">) {
 
       <dl className="grid gap-3 sm:grid-cols-3">
         <Indicateur libelle={`Mensuel estimé (${formatPeriode(periode)})`} valeur={client.actif ? formatEuros(mensuel) : "—"}>
-          {client.actif ? "Hors taxes, lignes mensuelles actives" : "Client archivé : non facturé"}
+          {!client.actif
+            ? "Client archivé : non facturé"
+            : detail.appliquee > 0
+              ? `Hors taxes, arrhes déduites (−${formatEuros(detail.appliquee)})`
+              : "Hors taxes, lignes mensuelles actives"}
         </Indicateur>
         <Indicateur libelle="Reste à encaisser" valeur={formatEuros(aEncaisser)} alerte={nbEnRetard > 0}>
           {nbEnRetard > 0
@@ -180,6 +201,11 @@ export default async function PageClient(props: PageProps<"/clients/[id]">) {
         tarifs={tarifs}
         prestations={prestations}
         periode={periode}
+        arrhes={{
+          arrhes_reglees: client.arrhes_reglees,
+          arrhes_centimes: client.arrhes_centimes,
+          arrhes_saison: client.arrhes_saison,
+        }}
       />
 
       <FacturesClient
@@ -199,7 +225,12 @@ export default async function PageClient(props: PageProps<"/clients/[id]">) {
           </p>
         </div>
         <div className="carte-corps sm:p-6">
-          <FormulaireClient client={client} academies={academiesProposees} jourGeneration={jourGeneration} />
+          <FormulaireClient
+            client={client}
+            academies={academiesProposees}
+            jourGeneration={jourGeneration}
+            saisonParDefaut={saisonEnCours()}
+          />
         </div>
       </section>
     </div>
