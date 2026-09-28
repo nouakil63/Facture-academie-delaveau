@@ -2,9 +2,10 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { genererPdfFacture, nomFichierFacture } from "@/lib/pdf";
-import { donneesExemple, parametresExemple } from "@/lib/pdf/exemple";
-import { texteRappelFacture } from "@/lib/pdf/FacturePdf";
+import { genererPdfAvis, genererPdfFacture, nomFichierAvis, nomFichierFacture } from "@/lib/pdf";
+import { rappelAvis, texteRappelAvis } from "@/lib/pdf/AvisEcheancePdf";
+import { avisExemple, donneesAnnuellesExemple, donneesExemple, parametresExemple } from "@/lib/pdf/exemple";
+import { echeancierFacture, texteRappelFacture, texteReductionLigne } from "@/lib/pdf/FacturePdf";
 import type { Client, Parametres } from "@/lib/types";
 
 /**
@@ -289,5 +290,115 @@ describe("PDF de facture", () => {
     const donnees = donneesExemple(parametresExemple(), { academie: { nom: "" } });
     const pdf = await genererPdfFacture(donnees);
     expect(nombrePages(pdf)).toBe(1);
+  });
+});
+
+/** Texte brut d'un PDF (flux non compressés de react-pdf : chaînes entre parenthèses). */
+function contientTexte(pdf: Buffer, texte: string): boolean {
+  return pdf.toString("latin1").includes(texte);
+}
+
+describe("PDF de la facture annuelle et de l'avis d'échéance", () => {
+  // Cas réel : Asma Dos Santos, Académie Espoir, E1, 1 320 €/mois → 13 200 €/an, arrhes 3 960 € → 10 × 924 €.
+  const ASMA = {
+    academie: { nom: "Académie Espoir", couleur: "#2E7D8C" },
+    client: {
+      civilite: "Mme",
+      prenom: "Asma",
+      nom: "Dos Santos",
+      reference: "E1",
+      cavaliers: "Inès Dos Santos",
+      adresse_ligne1: "3 rue du Manège",
+      code_postal: "50100",
+      ville: "Cherbourg-en-Cotentin",
+      arrhes_reglees: true,
+      arrhes_centimes: 396000,
+      arrhes_saison: 2026,
+    },
+    lignes: [
+      {
+        libelle: "Enseignement – 2026-2027",
+        description: "Formation sportive et scolaire, pension et travail du cheval",
+        quantite: 1,
+        prix_unitaire_centimes: 1320000,
+      },
+    ],
+  };
+
+  it("facture annuelle émise : année scolaire, réf. élève, arrhes, reste à payer et échéancier de 10 × 924 €", async () => {
+    const donnees = donneesAnnuellesExemple(PARAMETRES, ASMA);
+    expect(donnees.facture.total_ttc_centimes).toBe(1320000);
+    expect(donnees.echeances?.map((e) => e.montant_centimes)).toEqual(Array(10).fill(92400));
+    const echeancier = echeancierFacture(donnees.facture, donnees.client, donnees.emetteur, donnees.echeances);
+    expect(echeancier).toMatchObject({ arrhes: 396000, reste: 924000, previsionnel: false });
+    expect(echeancier?.lignes.map((l) => l.periode)).toEqual([
+      "2026-09-01", "2026-10-01", "2026-11-01", "2026-12-01", "2027-01-01",
+      "2027-02-01", "2027-03-01", "2027-04-01", "2027-05-01", "2027-06-01",
+    ]);
+
+    const pdf = await genererPdfFacture(donnees);
+    ecrireApercu("apercu-facture-annuelle.pdf", pdf);
+    expect(pdf.subarray(0, 5).toString()).toBe("%PDF-");
+    expect(nombrePages(pdf)).toBe(1);
+    expect(nomFichierFacture(donnees.facture)).toBe("Facture-AD-2026-0001.pdf");
+  });
+
+  it("facture annuelle à prix réduit motivé (ligne détaillée) et brouillon (échéancier prévisionnel)", async () => {
+    const ligne = {
+      libelle: "Académicien Delaveau – 2026-2027",
+      quantite: 1,
+      prix_unitaire_centimes: 2100000,
+      prix_catalogue_centimes: 2400000,
+      motif_reduction: "Prise en charge 50 % location cheval",
+    };
+    expect(texteReductionLigne(ligne)).toBe(
+      "Tarif annuel 24 000,00 € – Prise en charge 50 % location cheval : −3 000,00 €",
+    );
+    expect(texteReductionLigne({ ...ligne, motif_reduction: null })).toBeNull();
+    expect(texteReductionLigne({ ...ligne, prix_catalogue_centimes: 2100000 })).toBeNull();
+
+    const reduite = donneesAnnuellesExemple(PARAMETRES, {
+      ...ASMA,
+      lignes: [ligne, { libelle: "Licence FFE – 2026-2027", quantite: 1, prix_unitaire_centimes: 5000 }],
+      facture: { numero: "AD-2026-0002", sequence: 2 },
+    });
+    const pdf = await genererPdfFacture(reduite);
+    ecrireApercu("apercu-facture-annuelle-reduction.pdf", pdf);
+    expect(nombrePages(pdf)).toBe(1);
+
+    const brouillon = donneesAnnuellesExemple(PARAMETRES, { ...ASMA, statut: "brouillon" });
+    const prevu = echeancierFacture(brouillon.facture, brouillon.client, brouillon.emetteur, brouillon.echeances);
+    expect(prevu).toMatchObject({ arrhes: 396000, reste: 924000, previsionnel: true });
+    expect(prevu?.lignes.map((l) => l.montant_centimes)).toEqual(Array(10).fill(92400));
+    const pdfBrouillon = await genererPdfFacture(brouillon);
+    ecrireApercu("apercu-facture-annuelle-brouillon.pdf", pdfBrouillon);
+    expect(nombrePages(pdfBrouillon)).toBe(1);
+    // Facture ponctuelle : pas d'échéancier.
+    expect(echeancierFacture(donneesExemple(PARAMETRES).facture, donneesExemple(PARAMETRES).client, PARAMETRES, [])).toBeNull();
+  });
+
+  it("avis d'échéance : titre, numéro d'avis, facture, montant, date limite, rappel et mention non fiscale", async () => {
+    const avis = avisExemple(PARAMETRES, 2, { ...ASMA, statutsEcheances: { 1: "payee", 2: "envoyee" } });
+    expect(avis.echeance.numero_avis).toBe("E1-2026-10");
+    expect(nomFichierAvis(avis.echeance)).toBe("Avis-E1-2026-10.pdf");
+    const rappel = rappelAvis(avis.echeance, avis.echeances, avis.facture.total_ttc_centimes, 396000);
+    expect(rappel).toEqual({ totalAnnuel: 1320000, arrhes: 396000, dejaRegle: 92400, resteApres: 924000 - 2 * 92400 });
+    expect(texteRappelAvis(rappel)).toBe(
+      "Total annuel : 13 200,00 € · Arrhes versées : 3 960,00 € · Déjà réglé : 924,00 € · Reste dû après cette échéance : 7 392,00 €",
+    );
+
+    const pdf = await genererPdfAvis(avis);
+    ecrireApercu("apercu-avis-echeance.pdf", pdf);
+    expect(pdf.subarray(0, 5).toString()).toBe("%PDF-");
+    expect(nombrePages(pdf)).toBe(1);
+    expect(contientTexte(pdf, "FACTURE (")).toBe(false);
+
+    // Échéance payée et échéance annulée : rendu sans erreur.
+    const payee = await genererPdfAvis(avisExemple(PARAMETRES, 1, { ...ASMA, statutsEcheances: { 1: "payee" } }));
+    expect(nombrePages(payee)).toBe(1);
+    ecrireApercu("apercu-avis-payee.pdf", payee);
+    const annulee = await genererPdfAvis(avisExemple(PARAMETRES, 3, { ...ASMA, statut: "annulee", statutsEcheances: { 3: "annulee" } }));
+    expect(nombrePages(annulee)).toBe(1);
+    ecrireApercu("apercu-avis-annule.pdf", annulee);
   });
 });

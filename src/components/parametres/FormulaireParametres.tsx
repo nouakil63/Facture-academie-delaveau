@@ -30,7 +30,7 @@ import {
   normaliserRna,
   rnaValide,
 } from "./controles";
-import { apercuModele, VARIABLES_EMAIL, variablesInconnues } from "./modeles-email";
+import { apercuModele, VARIABLES_AVIS, VARIABLES_EMAIL, variablesInconnues } from "./modeles-email";
 import { titreSection } from "./sections";
 
 const MENTIONS_TVA = [
@@ -699,32 +699,33 @@ function SectionTva({ parametres, onModifie }: Contexte) {
 }
 
 // -----------------------------------------------------------------------------
-// Facturation mensuelle
+// Année scolaire et avis (ancre #mensuelle conservée)
 // -----------------------------------------------------------------------------
 
 function SectionMensuelle({ parametres, aujourdhui, smtpConfigure, nbClientsEnvoiAuto, nbClientsAutoSansEmail }: Contexte) {
   const [objet, setObjet] = useState(parametres.objet_facture_mensuelle);
   const [jour, setJour] = useState(String(parametres.jour_generation));
   const [mois, setMois] = useState<MoisFacture>(parametres.mois_facture);
-  const [generationAuto, setGenerationAuto] = useState(parametres.generation_auto);
-  // Des clients en envoi automatique : la génération a lieu ce jour-là, même sans la case.
   const envoiAuto = nbClientsEnvoiAuto > 0;
 
   const jourNombre = Number(jour);
   const jourValide = Number.isInteger(jourNombre) && jourNombre >= 1 && jourNombre <= 28;
-  const dateGeneration = jourValide ? datesGeneration(jourNombre, aujourdhui).prochaine : null;
-  const periode = dateGeneration ? premierDuMois(dateGeneration, mois === "precedent" ? -1 : 0) : null;
-  const objetExemple = `${objet.trim() || "…"} – ${periode ? formatPeriode(periode) : "octobre 2026"}`;
+  const dateEnvoi = jourValide ? datesGeneration(jourNombre, aujourdhui).prochaine : null;
+  const periode = dateEnvoi ? premierDuMois(dateEnvoi, mois === "precedent" ? -1 : 0) : null;
+  const avecAvis = periode ? !["07", "08"].includes(periode.slice(5, 7)) : true;
+  const [a] = aujourdhui.split("-").map(Number);
+  const saison = Number(aujourdhui.slice(5, 7)) >= 7 ? a : a - 1;
+  const objetExemple = `${objet.trim() || "…"} – saison ${saison}-${saison + 1}`;
 
   return (
     <Section
       id="mensuelle"
       titre={titreSection("mensuelle")}
-      description="Préparation des factures du mois à partir des tarifs de chaque client, pour les deux académies."
+      description="Une facture annuelle par élève (émise à la rentrée), puis un avis d'échéance chaque mois de septembre à juin."
     >
       <div>
         <label htmlFor="objet_facture_mensuelle" className="label">
-          Objet des factures mensuelles
+          Objet des factures annuelles
           <Obligatoire />
         </label>
         <input
@@ -738,14 +739,14 @@ function SectionMensuelle({ parametres, aujourdhui, smtpConfigure, nbClientsEnvo
           className="champ"
         />
         <p className="aide">
-          Mois ajouté automatiquement : <span className="font-medium text-ink">« {objetExemple} »</span>
+          Année scolaire ajoutée automatiquement : <span className="font-medium text-ink">« {objetExemple} »</span>
         </p>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-3">
         <div>
           <label htmlFor="jour_generation" className="label">
-            Jour de génération
+            Jour d&apos;envoi des avis
             <Obligatoire />
           </label>
           <input
@@ -761,16 +762,19 @@ function SectionMensuelle({ parametres, aujourdhui, smtpConfigure, nbClientsEnvo
             onChange={(e) => setJour(e.target.value)}
             className="champ"
           />
-          <p className="aide">Entre 1 et 28, pour exister tous les mois.</p>
+          <p className="aide">
+            Entre 1 et 28. Date limite de chaque échéance : ce jour + délai de paiement (section Paiement), fixée à
+            l&apos;émission de la facture annuelle.
+          </p>
         </div>
 
         <fieldset className="sm:col-span-2">
-          <legend className="label">Mois facturé</legend>
+          <legend className="label">Avis envoyé ce jour-là</legend>
           <div className="grid gap-2 sm:grid-cols-2">
             {(
               [
-                ["courant", "Mois en cours", "Le 1er octobre → facture d'octobre (à échoir)."],
-                ["precedent", "Mois précédent", "Le 1er octobre → facture de septembre (échu)."],
+                ["courant", "Échéance du mois en cours", "Le 1er octobre → avis d'octobre (à échoir)."],
+                ["precedent", "Échéance du mois précédent", "Le 1er octobre → avis de septembre (échu)."],
               ] as const
             ).map(([valeur, libelle, detail]) => (
               <label
@@ -796,31 +800,15 @@ function SectionMensuelle({ parametres, aujourdhui, smtpConfigure, nbClientsEnvo
       </div>
 
       <div className="space-y-3">
-        <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-line px-3 py-3 hover:bg-page">
-          <input
-            type="checkbox"
-            name="generation_auto"
-            checked={generationAuto}
-            onChange={(e) => setGenerationAuto(e.target.checked)}
-            className="mt-0.5 size-4 shrink-0 accent-brand"
-          />
-          <span className="text-sm">
-            <span className="font-medium text-ink">Générer automatiquement les brouillons</span>
-            <span className="block text-muted">
-              Chaque mois, le jour choisi (vers 7 h – 8 h, heure de Paris) : un brouillon par client actif ayant des
-              tarifs mensuels, dans les deux académies. À relire puis envoyer depuis « Facturation mensuelle ».
-            </span>
-          </span>
-        </label>
-
         <div
           className={`rounded-lg border px-3 py-3 text-sm ${envoiAuto ? "border-brand/40 bg-brand-light/40" : "border-line"}`}
         >
-          <p className="font-medium text-ink">Envoi automatique : réglé client par client</p>
+          <p className="font-medium text-ink">Envoi automatique des avis : réglé client par client</p>
           <p className="mt-0.5 text-muted">
-            Case « Envoyer sa facture automatiquement chaque mois » sur la fiche client. Envoi le jour de génération :
-            factures des clients cochés émises et envoyées sans relecture ; autres brouillons à relire. Récapitulatif
-            ensuite envoyé aux utilisateurs de l&apos;application.
+            Case « Envoyer ses avis d&apos;échéance automatiquement » sur la fiche client. Le jour d&apos;envoi (vers 7 h –
+            8 h, heure de Paris), l&apos;avis du mois des clients cochés part sans relecture, s&apos;il n&apos;est ni déjà
+            envoyé ni réglé. Récapitulatif ensuite envoyé aux utilisateurs de l&apos;application, avec les clients sans
+            facture annuelle émise. Les factures annuelles, elles, ne sont jamais émises automatiquement.
           </p>
           <p className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
             <span className={envoiAuto ? "font-medium text-brand-dark" : "text-muted"}>
@@ -832,12 +820,6 @@ function SectionMensuelle({ parametres, aujourdhui, smtpConfigure, nbClientsEnvo
               Voir les clients
             </Link>
           </p>
-          {envoiAuto && !generationAuto && (
-            <p className="mt-2 text-muted">
-              Génération automatique décochée : brouillons du mois tout de même préparés ce jour-là pour tous les
-              clients, les autres restant à relire.
-            </p>
-          )}
         </div>
 
         {envoiAuto && (!smtpConfigure || nbClientsAutoSansEmail > 0) && (
@@ -845,7 +827,7 @@ function SectionMensuelle({ parametres, aujourdhui, smtpConfigure, nbClientsEnvo
             <IconeAlerte className="mt-0.5 size-4 shrink-0 text-red-600" />
             <div className="space-y-1">
               {!smtpConfigure && (
-                <p className="font-medium">Envoi d&apos;e-mails non configuré : factures automatiques impossibles à envoyer.</p>
+                <p className="font-medium">Envoi d&apos;e-mails non configuré : avis automatiques impossibles à envoyer.</p>
               )}
               {nbClientsAutoSansEmail > 0 && (
                 <p>
@@ -858,13 +840,14 @@ function SectionMensuelle({ parametres, aujourdhui, smtpConfigure, nbClientsEnvo
           </div>
         )}
 
-        {(generationAuto || envoiAuto) && dateGeneration && periode && (
+        {envoiAuto && dateEnvoi && periode && (
           <p className="flex items-start gap-2 text-sm text-muted">
             <IconeInfo className="mt-0.5 size-4 shrink-0 text-brand" />
             <span>
-              Prochaine génération : <span className="font-medium text-ink">{formatDateLongue(dateGeneration)}</span>, pour{" "}
-              {formatPeriode(periode)}
-              {envoiAuto ? `, avec envoi automatique pour ${pluriel(nbClientsEnvoiAuto, "client")}.` : "."}
+              Prochain envoi : <span className="font-medium text-ink">{formatDateLongue(dateEnvoi)}</span>
+              {avecAvis
+                ? `, avis de ${formatPeriode(periode)} pour ${pluriel(nbClientsEnvoiAuto, "client")}.`
+                : " : juillet/août, aucun avis."}
             </span>
           </p>
         )}
@@ -891,7 +874,9 @@ function SectionEmails({ parametres, aujourdhui, prochainNumero, academies, onMo
   // Valeurs d'exemple cohérentes avec les paramètres enregistrés.
   const [a, m, j] = aujourdhui.split("-").map(Number);
   const echeance = new Date(Date.UTC(a, m - 1, j + parametres.delai_paiement_jours)).toISOString().slice(0, 10);
-  const periode = formatPeriode(premierDuMois(aujourdhui, parametres.mois_facture === "precedent" ? -1 : 0));
+  // Exemple : facture annuelle de la saison en cours.
+  const saison = m >= 7 ? a : a - 1;
+  const periode = `${saison}-${saison + 1}`;
   const academie = academies.find((x) => x.id === academieApercu) ?? academies[0];
   const exemples = {
     numero: prochainNumero,
@@ -899,7 +884,7 @@ function SectionEmails({ parametres, aujourdhui, prochainNumero, academies, onMo
     periode,
     structure: parametres.raison_sociale,
     academie: academie?.nom ?? "Académie Delaveau",
-    objet: `${parametres.objet_facture_mensuelle} – ${periode}`,
+    objet: `${parametres.objet_facture_mensuelle} – saison ${periode}`,
   };
 
   /** Insère « {variable} » à la position du curseur dans le dernier champ utilisé. */
@@ -923,7 +908,7 @@ function SectionEmails({ parametres, aujourdhui, prochainNumero, academies, onMo
     <Section
       id="emails"
       titre={titreSection("emails")}
-      description="Message envoyé avec chaque facture (PDF joint automatiquement). Identique pour les deux académies."
+      description="Messages envoyés avec chaque facture et chaque avis d'échéance (PDF joint automatiquement). Identiques pour les deux académies."
     >
       <div>
         <label htmlFor="email_objet" className="label">
@@ -1028,6 +1013,8 @@ function SectionEmails({ parametres, aujourdhui, prochainNumero, academies, onMo
         <p className="aide">Exemple avec des valeurs inventées.</p>
       </div>
 
+      <ModeleAvis parametres={parametres} academie={academie?.nom ?? "Académie Delaveau"} />
+
       <Champ
         nom="email_copie"
         libelle="Copie cachée (archivage)"
@@ -1035,9 +1022,80 @@ function SectionEmails({ parametres, aujourdhui, prochainNumero, academies, onMo
         defaut={parametres.email_copie}
         maxLength={254}
         placeholder="contact@academiedelaveau.com"
-        aide="Facultatif. Reçoit en copie cachée chaque facture envoyée (trace dans la boîte mail)."
+        aide="Facultatif. Reçoit en copie cachée chaque facture et chaque avis envoyés (trace dans la boîte mail)."
       />
     </Section>
+  );
+}
+
+/** Modèle de l'e-mail d'un avis d'échéance (objet, message, variables, aperçu). */
+function ModeleAvis({ parametres, academie }: { parametres: Parametres; academie: string }) {
+  const [objet, setObjet] = useState(parametres.email_avis_objet);
+  const [corps, setCorps] = useState(parametres.email_avis_corps);
+  const exemples = { structure: parametres.raison_sociale, academie };
+  return (
+    <div className="space-y-4 rounded-lg border border-line p-4">
+      <div>
+        <p className="font-medium text-ink">E-mail d&apos;un avis d&apos;échéance</p>
+        <p className="aide mt-0.5">
+          Envoyé chaque mois avec l&apos;avis (PDF joint), à la main ou automatiquement. Destiné aux familles.
+        </p>
+      </div>
+      <div>
+        <label htmlFor="email_avis_objet" className="label">
+          Objet
+          <Obligatoire />
+        </label>
+        <input
+          id="email_avis_objet"
+          name="email_avis_objet"
+          value={objet}
+          onChange={(e) => setObjet(e.target.value)}
+          required
+          maxLength={200}
+          className="champ"
+        />
+        {variablesInconnues(objet, VARIABLES_AVIS).length > 0 && (
+          <VariablesInconnues noms={variablesInconnues(objet, VARIABLES_AVIS)} />
+        )}
+      </div>
+      <div>
+        <label htmlFor="email_avis_corps" className="label">
+          Message
+          <Obligatoire />
+        </label>
+        <textarea
+          id="email_avis_corps"
+          name="email_avis_corps"
+          value={corps}
+          onChange={(e) => setCorps(e.target.value)}
+          required
+          rows={6}
+          maxLength={5000}
+          className="champ"
+        />
+        {variablesInconnues(corps, VARIABLES_AVIS).length > 0 && (
+          <VariablesInconnues noms={variablesInconnues(corps, VARIABLES_AVIS)} />
+        )}
+      </div>
+      <p className="text-xs text-muted">
+        Variables : {VARIABLES_AVIS.map((v) => (
+          <span key={v.nom} className="mr-2 inline-block" title={v.description}>
+            <code className="font-mono text-brand">{`{${v.nom}}`}</code> {v.description.toLowerCase()}
+          </span>
+        ))}
+      </p>
+      <div className="overflow-hidden rounded-lg border border-line">
+        <div className="border-b border-line bg-page px-4 py-2 text-sm break-words">
+          <span className="text-muted">Objet : </span>
+          <span className="font-medium text-ink">{apercuModele(objet, exemples, VARIABLES_AVIS)}</span>
+        </div>
+        <div className="px-4 py-3 text-sm break-words whitespace-pre-line text-ink">
+          {apercuModele(corps, exemples, VARIABLES_AVIS)}
+        </div>
+        <div className="border-t border-line px-4 py-2 text-xs text-muted">Pièce jointe : Avis-E1-2026-10.pdf</div>
+      </div>
+    </div>
   );
 }
 

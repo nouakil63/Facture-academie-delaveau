@@ -1,22 +1,17 @@
 import { NextRequest } from "next/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { Academie, Parametres, ResultatGeneration } from "@/lib/types";
+import type { Parametres } from "@/lib/types";
 
-// Base simulée : paramètres, académies et génération (service), envoi (envoi.ts), client admin.
+// Base simulée : paramètres (service), envoi des avis (avis.ts), e-mail, client admin.
 const chargerParametres = vi.fn<() => Promise<Parametres>>();
-const chargerAcademies = vi.fn<() => Promise<Academie[]>>();
-const genererBrouillonsMensuels =
-  vi.fn<(s: unknown, periode: string, o?: { academieId?: string | null; apercu?: boolean }) => Promise<ResultatGeneration[]>>();
 vi.mock("@/lib/facturation/service", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/facturation/service")>()),
   chargerParametres,
-  chargerAcademies,
-  genererBrouillonsMensuels,
 }));
 
-const envoyerFactures =
-  vi.fn<(s: unknown, ids: string[], o?: { exigerBrouillon?: boolean }) => Promise<{ id: string; ok: boolean; erreur?: string; ignoree?: boolean }[]>>();
-vi.mock("@/lib/facturation/envoi", () => ({ envoyerFactures }));
+const envoyerAvisLot =
+  vi.fn<(s: unknown, ids: string[], o?: { exigerAEnvoyer?: boolean }) => Promise<{ id: string; ok: boolean; erreur?: string; ignoree?: boolean }[]>>();
+vi.mock("@/lib/facturation/avis", () => ({ envoyerAvisLot }));
 
 const envoyerEmail = vi.fn<(msg: { a: string[]; objet: string; texte: string; html?: string }) => Promise<{ messageId: string; refusees: string[] }>>();
 vi.mock("@/lib/email", async (importOriginal) => ({
@@ -24,10 +19,7 @@ vi.mock("@/lib/email", async (importOriginal) => ({
   envoyerEmail,
 }));
 
-/**
- * Base simulée pour le client admin : tables en mémoire, filtres eq / in appliqués.
- * `lectures` garde chaque requête (table, filtres) ; `pannes` fait échouer une table.
- */
+/** Base simulée pour le client admin : tables en mémoire, filtres eq / in appliqués ; `pannes` fait échouer une table. */
 type Ligne = Record<string, unknown>;
 let tables: Record<string, Ligne[]> = {};
 let pannes: Record<string, string> = {};
@@ -50,10 +42,7 @@ const admin = { from: requete };
 vi.mock("@/lib/supabase/admin", () => ({ creerClientAdmin: () => admin }));
 
 const { GET } = await import("@/app/api/cron/facturation-mensuelle/route");
-const { academieExemple, parametresExemple } = await import("@/lib/pdf/exemple");
-
-const DELAVEAU = academieExemple({ id: "a0000000-0000-4000-8000-000000000001", nom: "Académie Delaveau", ordre: 1 });
-const ESPOIR = academieExemple({ id: "a0000000-0000-4000-8000-000000000002", nom: "Académie Espoir", ordre: 2 });
+const { parametresExemple } = await import("@/lib/pdf/exemple");
 
 function appel(recherche = "", secret = "secret-cron") {
   return GET(
@@ -63,50 +52,39 @@ function appel(recherche = "", secret = "secret-cron") {
   );
 }
 
-function resultat(client_id: string, facture_id: string | null, deja_existante = false): ResultatGeneration {
-  return { client_id, facture_id, nb_lignes: 1, total_ht_centimes: 45000, deja_existante };
+function client(id: string, nom: string, reference: string, envoi_auto: boolean, actif = true): Ligne {
+  return { id, type: "particulier", nom, prenom: null, raison_sociale: null, reference, envoi_auto, actif };
 }
 
-function client(id: string, nom: string, academie_id: string, envoi_auto: boolean, actif = true): Ligne {
-  return { id, type: "particulier", nom, prenom: null, raison_sociale: null, academie_id, envoi_auto, actif };
-}
-
-function facture(id: string, client_id: string, modifications: Ligne = {}): Ligne {
+/** Échéance d'octobre 2026 (vue echeances_vue). */
+function echeance(id: string, client_id: string, numero_avis: string, modifications: Ligne = {}): Ligne {
   return {
     id,
     client_id,
     periode: "2026-10-01",
-    generation_auto: true,
-    statut: "brouillon",
-    numero: null,
-    total_ttc_centimes: 45000,
+    statut: "a_venir",
+    numero_avis,
+    montant_centimes: 92400,
+    facture_statut: "envoyee",
     ...modifications,
   };
 }
 
-/** Émission simulée : l'envoi réussi attribue un numéro, comme emettre_facture. */
-function emettre(id: string, numero: string) {
-  const f = tables.factures.find((x) => x.id === id);
-  if (f) Object.assign(f, { statut: "envoyee", numero });
+function factureAnnuelle(id: string, client_id: string, statut = "envoyee", saison = 2026): Ligne {
+  return { id, client_id, statut, type_facture: "annuelle", saison };
 }
 
 beforeEach(() => {
   vi.stubEnv("CRON_SECRET", "secret-cron");
   vi.stubEnv("APP_URL", "https://facturation.academie.test/");
   chargerParametres.mockReset().mockResolvedValue(
-    parametresExemple({ generation_auto: true, jour_generation: 5, mois_facture: "courant", email_copie: null }),
+    parametresExemple({ jour_generation: 5, mois_facture: "courant", email_copie: null }),
   );
-  chargerAcademies.mockReset().mockResolvedValue([DELAVEAU, ESPOIR]);
-  genererBrouillonsMensuels.mockReset().mockResolvedValue([]);
-  envoyerFactures.mockReset().mockImplementation(async (_s, ids) =>
-    ids.map((id, i) => {
-      emettre(id, `AD-2026-${String(i + 1).padStart(4, "0")}`);
-      return { id, ok: true };
-    }),
-  );
+  envoyerAvisLot.mockReset().mockImplementation(async (_s, ids) => ids.map((id) => ({ id, ok: true })));
   envoyerEmail.mockReset().mockResolvedValue({ messageId: "recap", refusees: [] });
   tables = {
     clients: [],
+    echeances_vue: [],
     factures: [],
     membres: [{ email: "equipe@academie.test" }, { email: "associe@academie.test" }],
   };
@@ -116,7 +94,7 @@ afterEach(() => {
   vi.unstubAllEnvs();
 });
 
-describe("GET /api/cron/facturation-mensuelle", () => {
+describe("GET /api/cron/facturation-mensuelle (avis d'échéance)", () => {
   it("refuse un appel sans le bon secret, et un secret non configuré", async () => {
     expect((await appel("", "mauvais")).status).toBe(401);
     vi.stubEnv("CRON_SECRET", "");
@@ -125,288 +103,194 @@ describe("GET /api/cron/facturation-mensuelle", () => {
   });
 
   it("refuse une date invalide", async () => {
-    const reponse = await appel("?date=2026-02-30");
-    expect(reponse.status).toBe(400);
+    expect((await appel("?date=2026-02-30")).status).toBe(400);
   });
 
-  it("ne fait rien si ce n'est pas le jour de génération", async () => {
-    const reponse = await appel("?date=2026-10-04");
-    expect(reponse.status).toBe(200);
-    expect(await reponse.json()).toMatchObject({
+  it("ne fait rien sans client actif en envoi automatique, ni un autre jour que le jour d'envoi", async () => {
+    tables.clients = [client("c1", "Archivé", "E1", true, false), client("c2", "Durand", "E2", false)];
+    expect(await (await appel("?date=2026-10-05")).json()).toMatchObject({
       ok: true,
       execute: false,
-      raison: "génération prévue le 5 du mois",
-    });
-    expect(genererBrouillonsMensuels).not.toHaveBeenCalled();
-  });
-
-  it("ne fait rien si la génération automatique est désactivée et qu'aucun client n'est en envoi automatique", async () => {
-    chargerParametres.mockResolvedValue(parametresExemple({ generation_auto: false, jour_generation: 5 }));
-    // Un client archivé en envoi automatique ne compte pas.
-    tables.clients = [client("c1", "Martin", DELAVEAU.id, true, false)];
-    const corps = await (await appel("?date=2026-10-05")).json();
-    expect(corps).toMatchObject({
-      execute: false,
-      raison: "génération automatique désactivée et aucun client en envoi automatique",
+      raison: "aucun client en envoi automatique",
       reglages: { clients_envoi_auto: 0 },
     });
-    expect(genererBrouillonsMensuels).not.toHaveBeenCalled();
+    tables.clients.push(client("c3", "Martin", "E3", true));
+    expect(await (await appel("?date=2026-10-04")).json()).toMatchObject({
+      execute: false,
+      raison: "envoi des avis prévu le 5 du mois",
+      reglages: { jour_generation: 5, clients_envoi_auto: 1 },
+    });
+    expect(envoyerAvisLot).not.toHaveBeenCalled();
+    expect(envoyerEmail).not.toHaveBeenCalled();
   });
 
-  it("génère pour toutes les académies le mois précédent si réglé ainsi, sans envoi ni récapitulatif", async () => {
-    chargerParametres.mockResolvedValue(
-      parametresExemple({ generation_auto: true, jour_generation: 5, mois_facture: "precedent" }),
-    );
+  it("envoie les seuls avis « à envoyer » du mois des clients actifs en envoi automatique ; aucune facture générée", async () => {
     tables.clients = [
-      client("c1", "Martin", DELAVEAU.id, false),
-      client("c2", "Durand", ESPOIR.id, false),
-      client("c3", "Petit", ESPOIR.id, false),
+      client("c1", "Dos Santos", "E1", true),
+      client("c2", "Durand", "E2", false),
+      client("c3", "Petit", "E3", true),
+      client("c4", "Archivé", "E4", true, false),
     ];
-    tables.factures = [facture("f1", "c1", { periode: "2026-09-01" }), facture("f2", "c2", { periode: "2026-09-01" })];
-    genererBrouillonsMensuels.mockResolvedValue([
-      resultat("c1", "f1"),
-      resultat("c2", "f2"),
-      resultat("c3", "f3", true),
-    ]);
+    tables.factures = [factureAnnuelle("f1", "c1"), factureAnnuelle("f2", "c2"), factureAnnuelle("f3", "c3"), factureAnnuelle("f4", "c4")];
+    tables.echeances_vue = [
+      echeance("e1", "c1", "E1-2026-10"),
+      echeance("e2", "c2", "E2-2026-10"), // client sans envoi automatique
+      echeance("e3", "c3", "E3-2026-10", { statut: "envoyee" }), // déjà envoyé : jamais renvoyé
+      echeance("e4", "c4", "E4-2026-10"), // client archivé
+      echeance("e1-sept", "c1", "E1-2026-09", { periode: "2026-09-01" }), // autre mois
+    ];
 
-    const reponse = await appel("?date=2026-10-05");
-    expect(reponse.status).toBe(200);
-    expect(genererBrouillonsMensuels).toHaveBeenCalledWith(admin, "2026-09-01", { apercu: false });
-    expect(envoyerFactures).not.toHaveBeenCalled();
-    expect(envoyerEmail).not.toHaveBeenCalled();
-    expect(await reponse.json()).toMatchObject({
+    const corps = await (await appel("?date=2026-10-05")).json();
+    expect(envoyerAvisLot).toHaveBeenCalledTimes(1);
+    expect(envoyerAvisLot.mock.calls[0][1]).toEqual(["e1"]);
+    expect(envoyerAvisLot.mock.calls[0][2]).toEqual({ exigerAEnvoyer: true });
+    expect(corps).toMatchObject({
       ok: true,
       execute: true,
-      date: "2026-10-05",
-      periode: "2026-09-01",
-      brouillons_crees: 2,
-      deja_existantes: 1,
-      reglages: { clients_envoi_auto: 0 },
-      a_envoyer: [],
-      envoyees: 0,
-      echecs_envoi: [],
-      recapitulatif: null,
-      par_academie: [
-        { id: DELAVEAU.id, nom: "Académie Delaveau", brouillons_crees: 1, deja_existantes: 0 },
-        { id: ESPOIR.id, nom: "Académie Espoir", brouillons_crees: 1, deja_existantes: 1 },
-      ],
-    });
-  });
-
-  it("génère même sans génération automatique dès qu'un client est en envoi automatique", async () => {
-    chargerParametres.mockResolvedValue(parametresExemple({ generation_auto: false, jour_generation: 5 }));
-    tables.clients = [client("c1", "Martin", DELAVEAU.id, true)];
-    const corps = await (await appel("?date=2026-10-04")).json();
-    expect(corps).toMatchObject({ execute: false, raison: "génération prévue le 5 du mois" });
-
-    tables.factures = [facture("f1", "c1")];
-    genererBrouillonsMensuels.mockResolvedValue([resultat("c1", "f1")]);
-    const bilan = await (await appel("?date=2026-10-05")).json();
-    expect(genererBrouillonsMensuels).toHaveBeenCalledWith(admin, "2026-10-01", { apercu: false });
-    expect(bilan).toMatchObject({ execute: true, reglages: { generation_auto: false, clients_envoi_auto: 1 }, envoyees: 1 });
-  });
-
-  it("émet et envoie les seuls brouillons mensuels des clients actifs en envoi automatique, anciens compris", async () => {
-    tables.clients = [
-      client("c1", "Martin", DELAVEAU.id, true),
-      client("c2", "Durand", ESPOIR.id, false),
-      client("c3", "Petit", ESPOIR.id, true),
-      client("c4", "Archivé", ESPOIR.id, true, false),
-    ];
-    tables.factures = [
-      facture("f1", "c1"),
-      facture("f2", "c2"),
-      facture("f-ancienne", "c3", { total_ttc_centimes: 30000 }),
-      // Pas concernées : autre mois, facture manuelle, déjà émise, client archivé.
-      facture("f-septembre", "c1", { periode: "2026-09-01" }),
-      facture("f-manuelle", "c1", { generation_auto: false }),
-      facture("f-emise", "c3", { statut: "emise", numero: "AD-2026-0001" }),
-      facture("f-archive", "c4"),
-    ];
-    genererBrouillonsMensuels.mockResolvedValue([
-      resultat("c1", "f1"),
-      resultat("c2", "f2"),
-      resultat("c3", "f-ancienne", true),
-    ]);
-
-    const corps = await (await appel("?date=2026-10-05")).json();
-    expect(genererBrouillonsMensuels).toHaveBeenCalledWith(admin, "2026-10-01", { apercu: false });
-    expect(envoyerFactures).toHaveBeenCalledTimes(1);
-    expect(new Set(envoyerFactures.mock.calls[0][1])).toEqual(new Set(["f1", "f-ancienne"]));
-    expect(envoyerFactures.mock.calls[0][2]).toEqual({ exigerBrouillon: true });
-    expect(corps).toMatchObject({
-      ok: true,
-      brouillons_crees: 2,
-      deja_existantes: 1,
+      periode: "2026-10-01",
+      saison: 2026,
       reglages: { clients_envoi_auto: 2 },
-      envoyees: 2,
+      a_envoyer: [{ echeance_id: "e1", client: "Dos Santos", numero_avis: "E1-2026-10", montant_centimes: 92400 }],
+      deja_envoyes: 1,
+      envoyes: 1,
       echecs_envoi: [],
+      sans_facture_annuelle: [],
       recapitulatif: { envoye: true },
     });
-    expect(corps.a_envoyer).toEqual([
-      expect.objectContaining({ facture_id: "f1", client: "Martin", montant_ttc_centimes: 45000 }),
-      expect.objectContaining({ facture_id: "f-ancienne", client: "Petit", montant_ttc_centimes: 30000 }),
-    ]);
-    expect(corps.a_envoyer.map((f: { numero: string }) => f.numero)).toEqual([
-      expect.stringMatching(/^AD-2026-/),
-      expect.stringMatching(/^AD-2026-/),
-    ]);
+    expect(corps).not.toHaveProperty("brouillons_crees");
   });
 
-  it("adresse un récapitulatif aux membres et à la copie, avec les envois et les échecs", async () => {
-    chargerParametres.mockResolvedValue(
-      parametresExemple({ generation_auto: true, jour_generation: 5, email_copie: "Equipe@Academie.test" }),
-    );
-    tables.clients = [client("c1", "Martin", DELAVEAU.id, true), client("c2", "Durand", ESPOIR.id, true)];
-    tables.factures = [facture("f1", "c1", { total_ttc_centimes: 45000 }), facture("f2", "c2")];
-    genererBrouillonsMensuels.mockResolvedValue([resultat("c1", "f1"), resultat("c2", "f2")]);
-    envoyerFactures.mockImplementation(async () => {
-      emettre("f1", "AD-2026-0012");
-      return [
-        { id: "f1", ok: true },
-        { id: "f2", ok: false, erreur: "Aucune adresse e-mail pour Durand" },
-      ];
-    });
+  it("signale les clients en envoi automatique sans facture annuelle émise, et le récapitulatif les liste", async () => {
+    chargerParametres.mockResolvedValue(parametresExemple({ jour_generation: 5, email_copie: "Equipe@Academie.test" }));
+    tables.clients = [
+      client("c1", "Dos Santos", "E1", true),
+      client("c2", "Durand", "E2", true),
+      client("c3", "Petit", "E3", true),
+      client("c4", "Leroy", "E4", true),
+    ];
+    tables.factures = [
+      factureAnnuelle("f1", "c1"),
+      factureAnnuelle("f2", "c2", "brouillon"),
+      factureAnnuelle("f3", "c3", "annulee"),
+      factureAnnuelle("f4", "c4", "emise", 2025), // autre saison
+    ];
+    tables.echeances_vue = [echeance("e1", "c1", "E1-2026-10")];
+    envoyerAvisLot.mockResolvedValue([{ id: "e1", ok: false, erreur: "Aucune adresse e-mail pour Asma Dos Santos" }]);
 
     const corps = await (await appel("?date=2026-10-05")).json();
     expect(corps).toMatchObject({
-      envoyees: 1,
-      echecs_envoi: [{ facture_id: "f2", client: "Durand", numero: null, erreur: "Aucune adresse e-mail pour Durand" }],
+      envoyes: 0,
+      echecs_envoi: [{ echeance_id: "e1", client: "Dos Santos", numero_avis: "E1-2026-10", erreur: "Aucune adresse e-mail pour Asma Dos Santos" }],
+      sans_facture_annuelle: [
+        { client_id: "c2", client: "Durand", reference: "E2", raison: "facture annuelle en brouillon : à émettre" },
+        { client_id: "c4", client: "Leroy", reference: "E4", raison: "aucune facture annuelle pour 2026-2027" },
+        { client_id: "c3", client: "Petit", reference: "E3", raison: "aucune facture annuelle pour 2026-2027" },
+      ],
       recapitulatif: { envoye: true, destinataires: ["equipe@academie.test", "associe@academie.test"] },
     });
-
-    expect(envoyerEmail).toHaveBeenCalledTimes(1);
     const message = envoyerEmail.mock.calls[0][0];
-    expect(message.a).toEqual(["equipe@academie.test", "associe@academie.test"]);
-    expect(message.objet).toBe("Factures d'octobre 2026 envoyées automatiquement");
-    expect(message.texte).toContain("1 facture envoyée — total 450,00");
-    expect(message.texte).toMatch(/- Martin — AD-2026-0012 — 450,00/);
+    expect(message.objet).toBe("Avis d'échéance d'octobre 2026 envoyés automatiquement");
+    expect(message.texte).toContain("0 avis envoyé — total 0,00");
     expect(message.texte).toContain("Échecs : 1");
-    expect(message.texte).toContain("- Durand : Aucune adresse e-mail pour Durand");
-    expect(message.texte).toContain("https://facturation.academie.test/factures?statut=brouillon");
-    expect(message.html).toContain("AD-2026-0012");
-    expect(message.html).toContain('href="https://facturation.academie.test/factures?statut=brouillon"');
+    expect(message.texte).toContain("- Dos Santos (E1-2026-10) : Aucune adresse e-mail pour Asma Dos Santos");
+    expect(message.texte).toContain("À traiter : 3 clients en envoi automatique sans facture annuelle émise");
+    expect(message.texte).toContain("- Durand (E2) : facture annuelle en brouillon : à émettre");
+    expect(message.texte).toContain("https://facturation.academie.test/facturation-annuelle?mois=2026-10");
+    expect(message.html).toContain('href="https://facturation.academie.test/facturation-annuelle?mois=2026-10"');
     expect(message.texte).not.toMatch(/\b(tu|ton|ta|tes|nos|notre|on)\b/i);
   });
 
-  it("échappe le HTML du récapitulatif", async () => {
-    tables.clients = [client("c1", "<b>Martin</b>", DELAVEAU.id, true)];
-    tables.factures = [facture("f1", "c1")];
-    await appel("?date=2026-10-05");
+  it("récapitulatif des avis envoyés (liste, total), HTML échappé", async () => {
+    tables.clients = [client("c1", "<b>Dos Santos</b>", "E1", true), client("c2", "Martin", "E2", true)];
+    tables.factures = [factureAnnuelle("f1", "c1"), factureAnnuelle("f2", "c2")];
+    tables.echeances_vue = [echeance("e1", "c1", "E1-2026-10"), echeance("e2", "c2", "E2-2026-10", { montant_centimes: 150000 })];
+    const corps = await (await appel("?date=2026-10-05")).json();
+    expect(corps).toMatchObject({ envoyes: 2, recapitulatif: { envoye: true } });
     const message = envoyerEmail.mock.calls[0][0];
-    expect(message.html).toContain("&lt;b&gt;Martin&lt;/b&gt;");
-    expect(message.html).not.toContain("<b>Martin</b>");
+    expect(message.texte).toMatch(/2 avis envoyés — total 2\s424,00/);
+    expect(message.texte).toMatch(/- Martin — E2-2026-10 — 1\s500,00/);
+    expect(message.html).toContain("&lt;b&gt;Dos Santos&lt;/b&gt;");
+    expect(message.html).not.toContain("<b>Dos Santos</b>");
   });
 
-  it("n'envoie pas de récapitulatif si aucun envoi n'a été tenté", async () => {
-    tables.clients = [client("c1", "Martin", DELAVEAU.id, true)];
-    tables.factures = [facture("f1", "c1")];
-    // Facture envoyée à la main entre-temps : ignorée par l'envoi automatique.
-    envoyerFactures.mockResolvedValue([{ id: "f1", ok: false, ignoree: true }]);
+  it("pas de récapitulatif sans envoi tenté ni client à traiter ; un avis envoyé entre-temps est ignoré", async () => {
+    tables.clients = [client("c1", "Dos Santos", "E1", true)];
+    tables.factures = [factureAnnuelle("f1", "c1")];
+    tables.echeances_vue = [echeance("e1", "c1", "E1-2026-10")];
+    envoyerAvisLot.mockResolvedValue([{ id: "e1", ok: false, ignoree: true }]);
     const corps = await (await appel("?date=2026-10-05")).json();
-    expect(corps).toMatchObject({ envoyees: 0, echecs_envoi: [], ignorees: 1, recapitulatif: null });
+    expect(corps).toMatchObject({ envoyes: 0, echecs_envoi: [], ignores: 1, recapitulatif: null });
     expect(envoyerEmail).not.toHaveBeenCalled();
 
-    // Aucun brouillon à envoyer : ni envoi ni récapitulatif.
-    tables.factures = [];
-    envoyerFactures.mockClear();
-    const vide = await (await appel("?date=2026-10-05")).json();
-    expect(envoyerFactures).not.toHaveBeenCalled();
-    expect(vide).toMatchObject({ envoyees: 0, recapitulatif: null });
-    expect(envoyerEmail).not.toHaveBeenCalled();
+    // Avis déjà réglé : rien à envoyer.
+    tables.echeances_vue = [echeance("e1", "c1", "E1-2026-10", { statut: "payee" })];
+    envoyerAvisLot.mockClear();
+    expect(await (await appel("?date=2026-10-05")).json()).toMatchObject({ a_envoyer: [], deja_envoyes: 1, recapitulatif: null });
+    expect(envoyerAvisLot).not.toHaveBeenCalled();
   });
 
   it("un échec du récapitulatif est signalé sans faire échouer la tâche", async () => {
     const erreurConsole = vi.spyOn(console, "error").mockImplementation(() => {});
-    tables.clients = [client("c1", "Martin", DELAVEAU.id, true)];
-    tables.factures = [facture("f1", "c1")];
+    tables.clients = [client("c1", "Dos Santos", "E1", true)];
+    tables.factures = [factureAnnuelle("f1", "c1")];
+    tables.echeances_vue = [echeance("e1", "c1", "E1-2026-10")];
     envoyerEmail.mockRejectedValue(new Error("Le serveur d'envoi a refusé tous les destinataires."));
 
     const reponse = await appel("?date=2026-10-05");
     expect(reponse.status).toBe(200);
     expect(await reponse.json()).toMatchObject({
       ok: true,
-      envoyees: 1,
+      envoyes: 1,
       recapitulatif: { envoye: false, erreur: "Le serveur d'envoi a refusé tous les destinataires." },
     });
-    expect(erreurConsole).toHaveBeenCalledWith("Cron facturation mensuelle : récapitulatif non envoyé :", expect.any(Error));
+    expect(erreurConsole).toHaveBeenCalledWith("Cron avis d'échéance : récapitulatif non envoyé :", expect.any(Error));
     erreurConsole.mockRestore();
   });
 
-  it("en aperçu, ne crée rien et n'envoie rien, mais indique ce qui serait envoyé", async () => {
-    chargerParametres.mockResolvedValue(parametresExemple({ generation_auto: true, jour_generation: 5, taux_tva: 20 }));
-    tables.clients = [client("c1", "Martin", DELAVEAU.id, true), client("c2", "Durand", ESPOIR.id, false), client("c3", "Petit", ESPOIR.id, true)];
-    tables.factures = [facture("f-ancienne", "c3", { total_ttc_centimes: 30000 })];
-    genererBrouillonsMensuels.mockResolvedValue([
-      resultat("c1", null),
-      resultat("c2", null),
-      resultat("c3", "f-ancienne", true),
-    ]);
-
+  it("en aperçu, n'envoie rien mais indique ce qui partirait", async () => {
+    tables.clients = [client("c1", "Dos Santos", "E1", true), client("c2", "Durand", "E2", true)];
+    tables.factures = [factureAnnuelle("f1", "c1")];
+    tables.echeances_vue = [echeance("e1", "c1", "E1-2026-10")];
     const corps = await (await appel("?date=2026-10-05&apercu=1")).json();
-    expect(genererBrouillonsMensuels).toHaveBeenCalledWith(admin, "2026-10-01", { apercu: true });
-    expect(envoyerFactures).not.toHaveBeenCalled();
+    expect(envoyerAvisLot).not.toHaveBeenCalled();
     expect(envoyerEmail).not.toHaveBeenCalled();
     expect(corps).toMatchObject({
       apercu: true,
-      brouillons_crees: 2,
-      deja_existantes: 1,
-      envoyees: 0,
-      a_envoyer: [
-        { facture_id: null, client: "Martin", montant_ttc_centimes: 54000 },
-        { facture_id: "f-ancienne", client: "Petit", montant_ttc_centimes: 30000 },
-      ],
+      envoyes: 0,
+      a_envoyer: [{ echeance_id: "e1", client: "Dos Santos", numero_avis: "E1-2026-10" }],
+      sans_facture_annuelle: [{ client: "Durand" }],
       recapitulatif: { envoye: false, destinataires: ["equipe@academie.test", "associe@academie.test"] },
     });
   });
 
-  it("juillet et août : ni génération ni envoi (facturation manuelle)", async () => {
-    tables.clients = [client("c1", "Martin", DELAVEAU.id, true)];
-    tables.factures = [facture("f1", "c1", { periode: "2026-07-01" })];
+  it("juillet et août : rien (pas d'échéance) ; le mois s'apprécie sur le réglage « mois précédent »", async () => {
+    tables.clients = [client("c1", "Dos Santos", "E1", true)];
     for (const date of ["2026-07-05", "2026-08-05"]) {
       for (const recherche of [`?date=${date}`, `?date=${date}&apercu=1`]) {
-        const reponse = await appel(recherche);
-        expect(reponse.status).toBe(200);
-        expect(await reponse.json()).toMatchObject({
+        expect(await (await appel(recherche)).json()).toMatchObject({
           ok: true,
           date,
           execute: false,
           periode: `${date.slice(0, 7)}-01`,
-          raison: "juillet/août : facturation manuelle",
-          reglages: { generation_auto: true, clients_envoi_auto: 1 },
+          raison: "juillet/août : pas d'avis d'échéance",
         });
       }
     }
-    expect(genererBrouillonsMensuels).not.toHaveBeenCalled();
-    expect(envoyerFactures).not.toHaveBeenCalled();
-    expect(envoyerEmail).not.toHaveBeenCalled();
+    chargerParametres.mockResolvedValue(parametresExemple({ jour_generation: 5, mois_facture: "precedent" }));
+    // Le 5 septembre : avis d'août → rien. Le 5 juillet : avis de juin (saison 2025).
+    expect(await (await appel("?date=2026-09-05")).json()).toMatchObject({ execute: false, periode: "2026-08-01" });
+    expect(await (await appel("?date=2026-07-05")).json()).toMatchObject({ execute: true, periode: "2026-06-01", saison: 2025 });
+    expect(envoyerEmail).toHaveBeenCalledTimes(1); // récapitulatif : client sans facture annuelle 2025
+    expect(envoyerAvisLot).not.toHaveBeenCalled();
   });
 
-  it("juillet/août s'apprécie sur le mois facturé (réglage « mois précédent »)", async () => {
-    chargerParametres.mockResolvedValue(
-      parametresExemple({ generation_auto: true, jour_generation: 5, mois_facture: "precedent" }),
-    );
-    // Le 5 septembre facture août : rien.
-    expect(await (await appel("?date=2026-09-05")).json()).toMatchObject({
-      execute: false,
-      periode: "2026-08-01",
-      raison: "juillet/août : facturation manuelle",
-    });
-    expect(genererBrouillonsMensuels).not.toHaveBeenCalled();
-    // Le 5 juillet facture juin : génération normale.
-    expect(await (await appel("?date=2026-07-05")).json()).toMatchObject({ execute: true, periode: "2026-06-01" });
-    expect(genererBrouillonsMensuels).toHaveBeenCalledWith(admin, "2026-06-01", { apercu: false });
-    // Le 5 octobre facture septembre : génération normale.
-    expect(await (await appel("?date=2026-10-05")).json()).toMatchObject({ execute: true, periode: "2026-09-01" });
-  });
-
-  it("répond 500 avec un message clair si la génération échoue", async () => {
-    genererBrouillonsMensuels.mockRejectedValue(new Error("Paramètres de facturation absents"));
+  it("répond 500 avec un message clair si la lecture des échéances échoue", async () => {
+    const erreurConsole = vi.spyOn(console, "error").mockImplementation(() => {});
+    tables.clients = [client("c1", "Dos Santos", "E1", true)];
+    pannes.echeances_vue = "relation inexistante";
     const reponse = await appel("?date=2026-10-05");
     expect(reponse.status).toBe(500);
-    expect(await reponse.json()).toMatchObject({
-      ok: false,
-      erreur: "Génération des brouillons impossible : Paramètres de facturation absents",
-    });
+    expect(await reponse.json()).toMatchObject({ ok: false, erreur: "Lecture des échéances impossible : relation inexistante" });
+    erreurConsole.mockRestore();
   });
 });

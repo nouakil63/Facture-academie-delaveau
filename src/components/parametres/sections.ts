@@ -8,7 +8,7 @@ export const SECTIONS_PARAMETRES = [
   { id: "coordonnees", titre: "Coordonnées" },
   { id: "paiement", titre: "Paiement" },
   { id: "tva", titre: "TVA et mentions" },
-  { id: "mensuelle", titre: "Facturation mensuelle" },
+  { id: "mensuelle", titre: "Année scolaire et avis" },
   { id: "emails", titre: "E-mails" },
   { id: "academies", titre: "Académies" },
   { id: "envoi-emails", titre: "Envoi des e-mails" },

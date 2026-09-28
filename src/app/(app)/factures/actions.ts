@@ -130,3 +130,33 @@ export async function envoyerSelection(
     return { ok: false, erreur: "Envoi groupé interrompu. Consulter l'historique de chaque facture avant de relancer." };
   }
 }
+
+/**
+ * Supprime les brouillons de la sélection. Les factures émises sont ignorées (elles ne se
+ * suppriment pas) ; la suppression est conditionnée au statut brouillon côté base.
+ */
+export async function supprimerBrouillonsSelection(ids: string[]): Promise<ResultatAction<{ supprimes: number }>> {
+  const { supabase } = await exigerUtilisateur();
+  const lecture = z.array(z.guid()).min(1).max(500).safeParse(ids);
+  if (!lecture.success) return { ok: false, erreur: "Sélection invalide : recharger la page." };
+
+  try {
+    const { data, error } = await supabase
+      .from("factures")
+      .delete()
+      .in("id", lecture.data)
+      .eq("statut", "brouillon")
+      .select("id");
+    if (error) return { ok: false, erreur: `Suppression impossible : ${error.message}` };
+    const supprimes = data?.length ?? 0;
+    revaliderFactures();
+    return {
+      ok: true,
+      message: supprimes === 0 ? "Aucun brouillon supprimé." : `${supprimes} brouillon${supprimes > 1 ? "s" : ""} supprimé${supprimes > 1 ? "s" : ""}.`,
+      donnees: { supprimes },
+    };
+  } catch (e) {
+    console.error("Suppression groupée impossible :", e);
+    return { ok: false, erreur: "Suppression interrompue : recharger la page pour voir ce qui a été supprimé." };
+  }
+}

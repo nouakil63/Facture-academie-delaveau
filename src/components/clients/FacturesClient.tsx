@@ -75,8 +75,8 @@ export function FacturesClient({
           </span>
           <p className="mt-3 font-medium text-ink">Ce client n&apos;a pas encore été facturé</p>
           <p className="mt-1 max-w-md text-sm text-muted">
-            Factures mensuelles créées à la facturation du mois, à partir des tarifs ci-dessus. Facture ponctuelle
-            également possible.
+            Facture annuelle préparée depuis la facturation de l&apos;année, à partir des tarifs ci-dessus. Facture
+            ponctuelle également possible (stage, juillet/août…).
           </p>
         </div>
       ) : (

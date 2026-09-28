@@ -268,7 +268,7 @@ export function FormulaireTarif({
           <input id="date_fin" name="date_fin" type="date" defaultValue={tarif?.date_fin ?? ""} className="champ" />
         </div>
         <p className="aide -mt-2 sm:col-span-2">
-          Dates facultatives : une ligne mensuelle est facturée chaque mois qui touche sa période de validité.
+          Dates facultatives : sur la facture annuelle, le prix mensuel est compté pour chaque mois (septembre à juin) qui touche la période de validité.
         </p>
       </div>
 
@@ -284,7 +284,7 @@ export function FormulaireTarif({
           <span>
             <span className="font-medium">Facturer chaque mois</span>
             <span className="block text-xs text-muted">
-              Décoché : ligne ponctuelle, hors facturation mensuelle.
+              Décoché : ligne ponctuelle, hors facture annuelle.
             </span>
           </span>
         </label>

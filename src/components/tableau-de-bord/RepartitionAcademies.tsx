@@ -36,12 +36,12 @@ export function RepartitionAcademies({ repartition }: { repartition: DonneesTabl
               <Mesure
                 libelle="À encaisser"
                 valeur={formatEuros(indicateurs.aEncaisser.centimes)}
-                detail={pluriel(indicateurs.aEncaisser.nombre, "facture")}
+                detail={pluriel(indicateurs.aEncaisser.nombre, "avis ou facture", "avis ou factures")}
               />
               <Mesure
                 libelle="En retard"
                 valeur={formatEuros(indicateurs.enRetard.centimes)}
-                detail={pluriel(indicateurs.enRetard.nombre, "facture")}
+                detail={pluriel(indicateurs.enRetard.nombre, "avis ou facture", "avis ou factures")}
                 alerte={indicateurs.enRetard.nombre > 0}
               />
               <Mesure

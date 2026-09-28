@@ -15,7 +15,7 @@ import {
 const LIENS: { href: string; libelle: string; Icone: ComponentType<{ className?: string }> }[] = [
   { href: "/", libelle: "Tableau de bord", Icone: IconeTableauDeBord },
   { href: "/factures", libelle: "Factures", Icone: IconeFacture },
-  { href: "/facturation-mensuelle", libelle: "Facturation mensuelle", Icone: IconeCalendrier },
+  { href: "/facturation-annuelle", libelle: "Facturation de l'année", Icone: IconeCalendrier },
   { href: "/clients", libelle: "Clients", Icone: IconeUtilisateurs },
   { href: "/prestations", libelle: "Prestations", Icone: IconePrestations },
   { href: "/parametres", libelle: "Paramètres", Icone: IconeParametres },

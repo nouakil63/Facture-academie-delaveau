@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
-import { envoyerSelection } from "@/app/(app)/factures/actions";
+import { envoyerSelection, supprimerBrouillonsSelection } from "@/app/(app)/factures/actions";
 import { AcademieBadge } from "@/components/AcademieBadge";
 import { ModaleConfirmation } from "@/components/Modale";
 import { StatutBadge } from "@/components/StatutBadge";
@@ -37,7 +37,19 @@ export type FactureListe = Pick<
   | "academie_id"
   | "academie_nom"
   | "academie_couleur"
+  | "type_facture"
+  | "saison"
+  | "client_reference"
+  | "echeances_actives"
+  | "echeances_payees"
 >;
+
+/** Facture annuelle : « Année 2026-2027 · 3/10 échéances payées ». */
+function detailAnnuelle(f: FactureListe): string | null {
+  if (f.type_facture !== "annuelle" || f.saison == null) return null;
+  const annee = `Année ${f.saison}-${f.saison + 1}`;
+  return f.echeances_actives > 0 ? `${annee} · ${f.echeances_payees}/${f.echeances_actives} échéances payées` : annee;
+}
 
 const MAX_LOT = 100;
 
@@ -59,6 +71,8 @@ export function ListeFactures({
   const router = useRouter();
   const [selection, setSelection] = useState<Set<string>>(new Set());
   const [confirmation, setConfirmation] = useState(false);
+  const [confirmationSuppression, setConfirmationSuppression] = useState(false);
+  const [messageSuppression, setMessageSuppression] = useState<string | null>(null);
   const [progression, setProgression] = useState<{ traitees: number; total: number } | null>(null);
   const [compteRendu, setCompteRendu] = useState<{ resultats: ResultatEnvoiFacture[]; synthese?: string } | null>(null);
 
@@ -121,6 +135,14 @@ export function ListeFactures({
 
   return (
     <div className="space-y-4">
+      {messageSuppression && (
+        <p className="succes flex items-center justify-between gap-3">
+          <span>{messageSuppression}</span>
+          <button type="button" className="btn-lien" onClick={() => setMessageSuppression(null)}>
+            Fermer
+          </button>
+        </p>
+      )}
       {compteRendu && (
         <ResultatsEnvoi
           resultats={compteRendu.resultats}
@@ -138,6 +160,15 @@ export function ListeFactures({
           <div className="flex flex-wrap gap-2">
             <button type="button" className="btn-secondaire btn-petit" onClick={() => setSelection(new Set())}>
               Tout désélectionner
+            </button>
+            <button
+              type="button"
+              className="btn-danger btn-petit"
+              onClick={() => setConfirmationSuppression(true)}
+              disabled={brouillons.length === 0}
+              title={brouillons.length === 0 ? "Aucun brouillon dans la sélection" : undefined}
+            >
+              Supprimer les brouillons{brouillons.length > 0 ? ` (${brouillons.length})` : ""}
             </button>
             <button
               type="button"
@@ -227,7 +258,10 @@ export function ListeFactures({
                       <Link href={`/factures/${f.id}`} className="block truncate font-medium text-ink hover:text-brand">
                         {nomClientFacture(f)}
                       </Link>
-                      {f.client_cavaliers && <div className="truncate text-xs text-muted">{f.client_cavaliers}</div>}
+                      <div className="truncate text-xs text-muted">
+                        <span className="font-mono">{f.client_reference}</span>
+                        {f.client_cavaliers ? ` · ${f.client_cavaliers}` : ""}
+                      </div>
                     </td>
                     {afficherAcademie && (
                       <td>
@@ -239,6 +273,12 @@ export function ListeFactures({
                         {f.objet ?? <span className="text-muted">—</span>}
                       </span>
                       {f.periode && <div className="text-xs text-muted">{formatPeriode(f.periode)}</div>}
+                      {detailAnnuelle(f) && (
+                        <div className="text-xs">
+                          <span className="badge mr-1 bg-brand-light text-brand-dark">Annuelle</span>
+                          <span className="text-muted">{detailAnnuelle(f)}</span>
+                        </div>
+                      )}
                     </td>
                     <td className="whitespace-nowrap tabular-nums">{formatDate(f.date_emission)}</td>
                     <td className={`whitespace-nowrap tabular-nums ${f.en_retard ? "font-medium text-red-700" : ""}`}>
@@ -303,8 +343,14 @@ export function ListeFactures({
                     <div className="min-w-0">
                       <div className={`font-medium ${annulee ? "text-muted" : "text-ink"}`}>{nomClientFacture(f)}</div>
                       <div className="truncate text-xs text-muted">
-                        {libelleNumero(f.numero)}
-                        {f.periode ? ` · ${formatPeriode(f.periode)}` : f.objet ? ` · ${f.objet}` : ""}
+                        {libelleNumero(f.numero)} · <span className="font-mono">{f.client_reference}</span>
+                        {detailAnnuelle(f)
+                          ? ` · ${detailAnnuelle(f)}`
+                          : f.periode
+                            ? ` · ${formatPeriode(f.periode)}`
+                            : f.objet
+                              ? ` · ${f.objet}`
+                              : ""}
                       </div>
                     </div>
                     <div className={`shrink-0 text-right text-sm font-medium tabular-nums ${annulee ? "text-muted line-through" : ""}`}>
@@ -332,6 +378,33 @@ export function ListeFactures({
           </li>
         </ul>
       </div>
+
+      <ModaleConfirmation
+        ouverte={confirmationSuppression}
+        onFermer={() => setConfirmationSuppression(false)}
+        titre={`Supprimer ${pluriel(brouillons.length, "brouillon")}`}
+        libelleConfirmer={`Supprimer (${brouillons.length})`}
+        danger
+        desactiver={brouillons.length === 0}
+        onConfirmer={() => supprimerBrouillonsSelection(brouillons.map((f) => f.id))}
+        onSucces={(r) => {
+          setMessageSuppression(r.message ?? "Brouillons supprimés.");
+          setSelection(new Set());
+          router.refresh();
+        }}
+      >
+        <p>
+          Suppression définitive de <strong>{pluriel(brouillons.length, "brouillon")}</strong> (
+          {formatEuros(brouillons.reduce((s, f) => s + f.total_ttc_centimes, 0))} TTC). Aucun numéro n&apos;est consommé.
+        </p>
+        {choisies.length > brouillons.length && (
+          <p className="text-sm text-muted">
+            {pluriel(choisies.length - brouillons.length, "facture émise", "factures émises")} dans la sélection : non
+            concernée{choisies.length - brouillons.length > 1 ? "s" : ""} (une facture émise s&apos;annule, elle ne se
+            supprime pas).
+          </p>
+        )}
+      </ModaleConfirmation>
 
       <ModaleConfirmation
         ouverte={confirmation}

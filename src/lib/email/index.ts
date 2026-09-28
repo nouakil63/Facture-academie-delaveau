@@ -1,7 +1,7 @@
 import "server-only";
 import { createTransport } from "nodemailer";
 import { formatDate, formatEuros, formatPeriode, nomClient } from "@/lib/format";
-import type { FactureComplete } from "@/lib/types";
+import type { AvisComplet, FactureComplete } from "@/lib/types";
 
 /*
  * Envoi d'e-mails par SMTP (boîte mail de l'académie), avec nodemailer.
@@ -221,20 +221,48 @@ export function messageErreurEmail(erreur: unknown): string {
  *   {periode}   mois facturé           {objet}    objet de la facture
  *   {structure} raison sociale de l'association (émetteur)
  *   {academie}  académie du client (Académie Delaveau / Académie Espoir)
+ *   {reference} référence élève (E1…)
  * Les accolades inconnues sont laissées telles quelles.
  */
 export function remplirModele(modele: string, donnees: FactureComplete): string {
   const { facture, client, emetteur, academie } = donnees;
-  const valeurs: Record<string, string> = {
+  return remplacerVariables(modele, {
     client: nomClient(client),
     numero: facture.numero ?? "brouillon",
     montant: formatEuros(facture.total_ttc_centimes),
     echeance: formatDate(facture.date_echeance),
-    periode: facture.periode ? formatPeriode(facture.periode) : "",
+    periode: facture.periode ? formatPeriode(facture.periode) : facture.saison != null ? `${facture.saison}-${facture.saison + 1}` : "",
     structure: emetteur.raison_sociale,
     academie: academie.nom,
     objet: facture.objet ?? "",
-  };
+    reference: client.reference ?? "",
+  });
+}
+
+/**
+ * Remplace les variables d'un modèle d'e-mail d'AVIS D'ÉCHÉANCE (paramètres email_avis_*) :
+ *   {client}    nom du client          {numero}   numéro de l'avis (E1-2026-09)
+ *   {montant}   montant de l'échéance  {echeance} date limite de paiement
+ *   {periode}   mois de l'échéance     {facture}  numéro de la facture annuelle
+ *   {structure} raison sociale         {academie} académie du client
+ *   {reference} référence élève (E1…)
+ */
+export function remplirModeleAvis(modele: string, donnees: AvisComplet): string {
+  const { echeance, facture, client, emetteur, academie } = donnees;
+  return remplacerVariables(modele, {
+    client: nomClient(client),
+    numero: echeance.numero_avis,
+    montant: formatEuros(echeance.montant_centimes),
+    echeance: formatDate(echeance.date_echeance),
+    periode: formatPeriode(echeance.periode),
+    facture: facture.numero ?? "",
+    structure: emetteur.raison_sociale,
+    academie: academie.nom,
+    reference: client.reference ?? "",
+  });
+}
+
+function remplacerVariables(modele: string, valeurs: Record<string, string>): string {
   return modele.replace(/\{([a-z]+)\}/g, (tout, nom: string) =>
     Object.prototype.hasOwnProperty.call(valeurs, nom) ? valeurs[nom] : tout,
   );

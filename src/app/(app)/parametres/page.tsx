@@ -148,8 +148,8 @@ export default async function PageParametres() {
         <div className="min-w-0">
           <h1 className="titre-page">Paramètres</h1>
           <p className="mt-1 max-w-2xl text-sm text-muted">
-            Informations imprimées sur les factures (Académie Delaveau comme Académie Espoir), facturation mensuelle,
-            académies, envoi des e-mails et accès. Une facture déjà émise conserve les informations du jour de son
+            Informations imprimées sur les factures et les avis (Académie Delaveau comme Académie Espoir), année
+            scolaire, académies, envoi des e-mails et accès. Une facture déjà émise conserve les informations du jour de son
             émission.
           </p>
         </div>
@@ -165,6 +165,14 @@ export default async function PageParametres() {
           <IconeLienExterne className="size-3.5 text-muted" />
           <span className="sr-only">(nouvel onglet)</span>
         </a>
+        <div className="flex gap-3 text-xs">
+          <a href="/api/parametres/apercu-pdf?modele=annuelle" target="_blank" rel="noopener noreferrer" className="btn-lien text-xs">
+            Facture annuelle type
+          </a>
+          <a href="/api/parametres/apercu-pdf?modele=avis" target="_blank" rel="noopener noreferrer" className="btn-lien text-xs">
+            Avis d&apos;échéance type
+          </a>
+        </div>
       </div>
 
       {/* État en un coup d'œil */}
@@ -176,17 +184,15 @@ export default async function PageParametres() {
           </span>
         </p>
         <p className="flex items-center gap-2">
-          <span className="text-muted">Facturation mensuelle</span>
+          <span className="text-muted">Avis d&apos;échéance</span>
           <span className="font-medium text-ink">
-            {parametres.generation_auto || nbClientsEnvoiAuto > 0
-              ? `automatique, le ${jourDuMois(parametres.jour_generation)}`
-              : "manuelle"}
+            {nbClientsEnvoiAuto > 0 ? `envoi automatique le ${jourDuMois(parametres.jour_generation)}` : "envoi manuel"}
           </span>
           {nbClientsEnvoiAuto > 0 && (
             <a
               href="#mensuelle"
               className="badge bg-brand-light text-brand-dark"
-              title="Factures émises et envoyées sans relecture, le jour de génération"
+              title="Avis d'échéance envoyés sans relecture, le jour d'envoi"
             >
               Envoi auto : {pluriel(nbClientsEnvoiAuto, "client")}
             </a>

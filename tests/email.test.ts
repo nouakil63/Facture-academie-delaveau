@@ -12,10 +12,11 @@ const {
   envoyerEmail,
   messageErreurEmail,
   remplirModele,
+  remplirModeleAvis,
   texteVersHtml,
   variablesEmailManquantes,
 } = await import("@/lib/email");
-const { donneesExemple, parametresExemple } = await import("@/lib/pdf/exemple");
+const { avisExemple, donneesAnnuellesExemple, donneesExemple, parametresExemple } = await import("@/lib/pdf/exemple");
 const { formatEuros } = await import("@/lib/format");
 
 function factureEmise() {
@@ -34,6 +35,37 @@ function factureEmise() {
     },
   });
 }
+
+describe("remplirModeleAvis et facture annuelle", () => {
+  const arrhes = { arrhes_reglees: true, arrhes_centimes: 396000, arrhes_saison: 2026 };
+  const options = {
+    academie: { nom: "Académie Espoir" },
+    client: { prenom: "Asma", nom: "Dos Santos", reference: "E1", ...arrhes },
+    lignes: [{ libelle: "Enseignement – 2026-2027", quantite: 1, prix_unitaire_centimes: 1320000 }],
+  };
+
+  it("modèle par défaut d'un avis : vouvoiement, numéro d'avis, montant de l'échéance, date limite", () => {
+    const avis = avisExemple(parametresExemple(), 2, options);
+    expect(remplirModeleAvis(avis.emetteur.email_avis_objet, avis)).toBe("Avis d'échéance E1-2026-10 – Académie Delaveau");
+    expect(remplirModeleAvis(avis.emetteur.email_avis_corps, avis)).toBe(
+      `Bonjour Asma Dos Santos,\n\nVeuillez trouver ci-joint l'avis d'échéance E1-2026-10 de ${formatEuros(92400)} à régler avant le ${
+        avis.echeance.date_echeance.split("-").reverse().join("/")
+      }.\n\nCordialement,\nAcadémie Delaveau`,
+    );
+  });
+
+  it("variables d'un avis : {facture} {periode} {reference} {academie} ; inconnues laissées telles quelles", () => {
+    const avis = avisExemple(parametresExemple(), 1, options);
+    expect(remplirModeleAvis("{facture} | {periode} | {reference} | {academie} | {objet}", avis)).toBe(
+      "AD-2026-0001 | septembre 2026 | E1 | Académie Espoir | {objet}",
+    );
+  });
+
+  it("facture annuelle : {periode} = année scolaire, {reference} = référence élève", () => {
+    const d = donneesAnnuellesExemple(parametresExemple(), options);
+    expect(remplirModele("{numero} {periode} {reference} {montant}", d)).toBe(`AD-2026-0001 2026-2027 E1 ${formatEuros(1320000)}`);
+  });
+});
 
 describe("remplirModele", () => {
   it("remplace toutes les variables", () => {

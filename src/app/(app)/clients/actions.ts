@@ -31,7 +31,12 @@ function traduireErreur(erreur: ErreurSupabase, siCleEtrangere?: string): string
   switch (erreur.code) {
     case "23503":
       return siCleEtrangere ?? "Impossible : cet élément est lié à d'autres données.";
+    case "23505":
+      if (texte.includes("clients_reference")) return "Référence élève déjà utilisée par un autre client : en choisir une autre.";
+      return "Cet élément existe déjà.";
     case "23514":
+      if (texte.includes("clients_reference_format"))
+        return "Référence élève invalide : lettres, chiffres, tiret ou tiret bas, 20 caractères au maximum (ex. E12).";
       if (texte.includes("clients_pro_raison_sociale"))
         return "La raison sociale est obligatoire pour un client professionnel.";
       if (texte.includes("clients_arrhes")) return "Arrhes : montant ou saison invalide.";
@@ -109,6 +114,14 @@ const dateFacultative = (libelle: string) =>
 const schemaClient = z
   .object({
     academie_id: z.uuid({ error: "Choisir l'académie du client : Académie Delaveau ou Académie Espoir." }),
+    // Référence élève : vide → attribuée par la base (création) ou inchangée (modification).
+    reference: z
+      .string()
+      .transform((v) => v.replace(/\s/g, "").toUpperCase())
+      .refine((v) => v === "" || /^[A-Z0-9][A-Z0-9_-]{0,19}$/.test(v), {
+        error: "Référence élève invalide : lettres, chiffres, tiret ou tiret bas, 20 caractères au maximum (ex. E12).",
+      })
+      .transform((v) => (v === "" ? null : v)),
     type: z.enum(["particulier", "professionnel"], { error: "Type de client invalide." }),
     civilite: texteFacultatif(30, "Civilité"),
     nom: z
@@ -218,9 +231,15 @@ const schemaClient = z
     return !client.arrhes_reglees && client.arrhes_centimes === null ? { ...client, arrhes_saison: null } : client;
   });
 
+/** Champs à enregistrer : une référence vide n'est pas envoyée (la base l'attribue ou la conserve). */
+function champsClient(donnees: z.output<typeof schemaClient>) {
+  const { reference, ...reste } = donnees;
+  return reference ? { ...reste, reference } : reste;
+}
+
 function lireFormulaireClient(formData: FormData) {
   const noms = [
-    "academie_id", "type", "civilite", "nom", "prenom", "raison_sociale", "email", "emails_cc",
+    "academie_id", "reference", "type", "civilite", "nom", "prenom", "raison_sociale", "email", "emails_cc",
     "telephone", "adresse_ligne1", "adresse_ligne2", "code_postal", "ville", "pays", "siret",
     "numero_tva", "cavaliers", "notes", "arrhes_saison",
   ];
@@ -244,7 +263,7 @@ export async function creerClient(
 
   let id: string;
   try {
-    const { data, error } = await supabase.from("clients").insert(lecture.data).select("id").single();
+    const { data, error } = await supabase.from("clients").insert(champsClient(lecture.data)).select("id").single();
     if (error) return { ok: false, erreur: traduireErreur(error, ACADEMIE_INTROUVABLE) };
     id = (data as { id: string }).id;
   } catch {
@@ -277,7 +296,7 @@ export async function modifierClient(_precedent: ResultatAction | null, formData
     if (avant.error) return { ok: false, erreur: traduireErreur(avant.error) };
     if (!avant.data) return { ok: false, erreur: "Client introuvable : il a peut-être été supprimé." };
 
-    const { data, error } = await supabase.from("clients").update(lecture.data).eq("id", id.data).select("id");
+    const { data, error } = await supabase.from("clients").update(champsClient(lecture.data)).eq("id", id.data).select("id");
     if (error) return { ok: false, erreur: traduireErreur(error, ACADEMIE_INTROUVABLE) };
     if (!data || data.length === 0) return { ok: false, erreur: "Client introuvable : il a peut-être été supprimé." };
 
@@ -305,7 +324,7 @@ export async function modifierClient(_precedent: ResultatAction | null, formData
   };
 }
 
-/** Archive (exclut de la facturation mensuelle) ou réactive un client. */
+/** Archive (exclut de la facturation de l'année) ou réactive un client. */
 export async function changerArchivageClient(clientId: string, archiver: boolean): Promise<ResultatAction> {
   const { supabase } = await exigerUtilisateur();
 
@@ -328,8 +347,8 @@ export async function changerArchivageClient(clientId: string, archiver: boolean
   return {
     ok: true,
     message: archiver
-      ? "Client archivé : plus de facture mensuelle."
-      : "Client réactivé : il revient dans la facturation mensuelle.",
+      ? "Client archivé : plus de facture annuelle ni d'envoi automatique."
+      : "Client réactivé : il revient dans la facturation de l'année.",
   };
 }
 
@@ -518,7 +537,7 @@ export async function supprimerTarif(tarifId: string): Promise<ResultatAction> {
   return { ok: true, message: "Ligne de tarif supprimée." };
 }
 
-/** Monte ou descend une ligne : l'ordre des tarifs est celui des lignes de la facture mensuelle. */
+/** Monte ou descend une ligne : l'ordre des tarifs est celui des lignes de la facture annuelle. */
 export async function deplacerTarif(tarifId: string, sens: "haut" | "bas"): Promise<ResultatAction> {
   const { supabase } = await exigerUtilisateur();
 

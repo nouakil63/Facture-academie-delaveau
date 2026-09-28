@@ -47,7 +47,7 @@ export function IconeFacture(p: Props) {
   );
 }
 
-/** Calendrier coché : facturation mensuelle. */
+/** Calendrier coché : facturation de l'année. */
 export function IconeCalendrier(p: Props) {
   return (
     <Svg {...p}>

@@ -18,7 +18,12 @@ import {
   normaliserRna,
   rnaValide,
 } from "@/components/parametres/controles";
-import { variablesInconnues, VARIABLES_EMAIL } from "@/components/parametres/modeles-email";
+import {
+  variablesInconnues,
+  VARIABLES_AVIS,
+  VARIABLES_EMAIL,
+  type VariableEmail,
+} from "@/components/parametres/modeles-email";
 import { COOKIE_ACADEMIE } from "@/lib/academie-selectionnee";
 import { exigerUtilisateur } from "@/lib/auth";
 import { emailConfigure, envoyerEmail, messageErreurEmail } from "@/lib/email";
@@ -64,7 +69,7 @@ function traduireErreur(erreur: ErreurSupabase, siCleEtrangere?: string): string
       if (texte.includes("couleur")) return "Couleur invalide : format #RRGGBB attendu.";
       if (texte.includes("delai_paiement")) return "Le délai de paiement doit être compris entre 0 et 90 jours.";
       if (texte.includes("taux_tva")) return "Le taux de TVA doit être compris entre 0 et 99,99 %.";
-      if (texte.includes("jour_generation")) return "Le jour de génération doit être compris entre 1 et 28.";
+      if (texte.includes("jour_generation")) return "Le jour d'envoi des avis doit être compris entre 1 et 28.";
       if (texte.includes("nom")) return "Le nom est obligatoire.";
       return "Une des valeurs saisies est refusée par la base : vérifier le formulaire.";
     case "23502":
@@ -155,15 +160,15 @@ const emailFacultatif = (libelle: string) =>
     .pipe(z.email({ error: `${libelle} : adresse e-mail invalide.` }).max(254).nullable());
 
 /** Modèle d'e-mail : obligatoire, sans variable inconnue. */
-const modeleEmail = (max: number, libelle: string) =>
+const modeleEmail = (max: number, libelle: string, variables: readonly VariableEmail[] = VARIABLES_EMAIL) =>
   texteObligatoire(max, libelle, `${libelle} : obligatoire.`).superRefine((v, ctx) => {
-    const inconnues = variablesInconnues(v);
+    const inconnues = variablesInconnues(v, variables);
     if (inconnues.length > 0) {
       ctx.addIssue({
         code: "custom",
         message: `${libelle} : variable${inconnues.length > 1 ? "s" : ""} inconnue${
           inconnues.length > 1 ? "s" : ""
-        } ${inconnues.map((n) => `{${n}}`).join(", ")}. Variables disponibles : ${VARIABLES_EMAIL.map((x) => `{${x.nom}}`).join(" ")}.`,
+        } ${inconnues.map((n) => `{${n}}`).join(", ")}. Variables disponibles : ${variables.map((x) => `{${x.nom}}`).join(" ")}.`,
       });
     }
   });
@@ -262,20 +267,21 @@ const schemaParametres = z
     mentions_legales: texteFacultatif(1500, "Mentions légales"),
     mentions_professionnels: texteFacultatif(1500, "Mentions pour clients professionnels"),
 
-    // Facturation mensuelle
+    // Année scolaire et avis (generation_auto n'est plus modifié : ancien modèle mensuel)
     objet_facture_mensuelle: texteObligatoire(
       150,
-      "Objet des factures mensuelles",
-      "L'objet des factures mensuelles est obligatoire (ex. « Formation et accompagnement »).",
+      "Objet des factures annuelles",
+      "L'objet des factures annuelles est obligatoire (ex. « Formation et accompagnement »).",
     ),
-    jour_generation: entierBorne(1, 28, "Jour de génération"),
-    mois_facture: z.enum(["courant", "precedent"], { error: "Choisir le mois facturé (en cours ou précédent)." }),
-    generation_auto: z.boolean(),
+    jour_generation: entierBorne(1, 28, "Jour d'envoi des avis"),
+    mois_facture: z.enum(["courant", "precedent"], { error: "Choisir le mois des avis envoyés (en cours ou précédent)." }),
 
     // E-mails
     email_objet: modeleEmail(200, "Objet de l'e-mail"),
     email_corps: modeleEmail(5000, "Corps de l'e-mail"),
     email_copie: emailFacultatif("Adresse en copie cachée"),
+    email_avis_objet: modeleEmail(200, "Objet de l'e-mail d'un avis", VARIABLES_AVIS),
+    email_avis_corps: modeleEmail(5000, "Message de l'e-mail d'un avis", VARIABLES_AVIS),
   })
   .refine((e) => e.taux_tva > 0 || Boolean(e.mention_tva), {
     path: ["mention_tva"],
@@ -296,14 +302,11 @@ const CHAMPS_TEXTE = [
   "titulaire_compte", "iban", "bic", "conditions_paiement", "delai_paiement_jours",
   "taux_tva", "mention_tva", "mentions_legales", "mentions_professionnels",
   "objet_facture_mensuelle", "jour_generation", "mois_facture",
-  "email_objet", "email_corps", "email_copie",
+  "email_objet", "email_corps", "email_copie", "email_avis_objet", "email_avis_corps",
 ] as const;
 
 function lireFormulaireParametres(formData: FormData) {
-  return {
-    ...Object.fromEntries(CHAMPS_TEXTE.map((n) => [n, champ(formData, n)])),
-    generation_auto: formData.get("generation_auto") === "on",
-  };
+  return Object.fromEntries(CHAMPS_TEXTE.map((n) => [n, champ(formData, n)]));
 }
 
 // -----------------------------------------------------------------------------

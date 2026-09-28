@@ -173,7 +173,7 @@ export function FormulairePrestation({
           nom="recurrente"
           defaut={prestation?.recurrente ?? true}
           titre="Facturée chaque mois"
-          detail="Ajoutée aux tarifs d'un client, elle revient chaque mois sur sa facture mensuelle."
+          detail="Ajoutée aux tarifs d'un client, elle compte pour chaque mois de sa facture annuelle (prix × 10)."
         />
         <Case
           nom="actif"

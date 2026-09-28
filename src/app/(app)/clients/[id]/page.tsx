@@ -3,21 +3,26 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AcademieBadge } from "@/components/AcademieBadge";
 import { ActionsClient } from "@/components/clients/ActionsClient";
+import { AnneeClient, type FactureAnnuelleClient } from "@/components/clients/AnneeClient";
+import { ReferenceBadge } from "@/components/annee/StatutEcheanceBadge";
+import { COLONNES_ECHEANCE, type EcheanceLigne } from "@/components/annee/TableauEcheances";
 import { FacturesClient, type FactureDuClient } from "@/components/clients/FacturesClient";
 import { FormulaireClient } from "@/components/clients/FormulaireClient";
 import { IconeAlerte, IconeInfo, IconeRetour } from "@/components/Icones";
 import { TarifsClient } from "@/components/clients/TarifsClient";
 import { exigerUtilisateur } from "@/lib/auth";
+import { emailConfigure } from "@/lib/email";
 import { chargerAcademies, chargerParametres } from "@/lib/facturation/service";
-import { destinatairesFacture, formatEuros, formatPeriode, jourDuMois, nomClient, premierDuMois } from "@/lib/format";
+import { aujourdhuiParis, destinatairesFacture, formatEuros, jourDuMois, nomClient, premierDuMois } from "@/lib/format";
 import {
+  annuelEstime,
+  echeancierAnnuel,
   libelleSaison,
-  mensuelDetaille,
   saisonEnCours,
   type PrestationDuTarif,
   type TarifAvecPrestation,
 } from "@/lib/tarifs";
-import type { Academie, Client } from "@/lib/types";
+import type { Academie, Client, EcheanceVue } from "@/lib/types";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const CHAMPS_PRESTATION = "id, libelle, description, prix_unitaire_centimes, unite, recurrente, actif";
@@ -41,7 +46,9 @@ export default async function PageClient(props: PageProps<"/clients/[id]">) {
   if (!resClient.data) notFound();
   const client = resClient.data as Client;
 
-  const [resAcademies, resParametres, resTarifs, resPrestations, resFactures] = await Promise.all([
+  const aujourdhui = aujourdhuiParis();
+  const saison = saisonEnCours(aujourdhui);
+  const [resAcademies, resParametres, resTarifs, resPrestations, resFactures, resEcheances] = await Promise.all([
     chargerAcademies(supabase).then(
       (data) => ({ data, error: null }),
       (e: unknown) => ({ data: null, error: { message: e instanceof Error ? e.message : String(e) } }),
@@ -66,32 +73,69 @@ export default async function PageClient(props: PageProps<"/clients/[id]">) {
     supabase
       .from("factures_vue")
       .select(
-        "id, numero, statut, objet, periode, date_emission, date_echeance, total_ttc_centimes, en_retard, created_at, academie_id, academie_nom, academie_couleur",
+        "id, numero, statut, objet, periode, date_emission, date_echeance, total_ttc_centimes, en_retard, created_at, academie_id, academie_nom, academie_couleur, type_facture, saison, generation_auto, echeances_actives, echeances_payees, echeances_reste_centimes",
       )
       .eq("client_id", id)
       .order("created_at", { ascending: false }),
+    // Échéances de la saison (factures annuelles du client).
+    supabase.from("echeances_vue").select(COLONNES_ECHEANCE).eq("client_id", id).eq("saison", saison).order("rang"),
   ]);
   const erreur =
-    resAcademies.error ?? resParametres.error ?? resTarifs.error ?? resPrestations.error ?? resFactures.error;
+    resAcademies.error ??
+    resParametres.error ??
+    resTarifs.error ??
+    resPrestations.error ??
+    resFactures.error ??
+    resEcheances.error;
   if (erreur || !resParametres.data) return <ErreurChargement message={erreur?.message ?? "paramètres absents"} />;
 
   const academies = resAcademies.data as Academie[];
   const jourGeneration = resParametres.data.jour_generation;
   const tarifs = (resTarifs.data as TarifAvecPrestation[]).map((t) => ({ ...t, quantite: Number(t.quantite) }));
   const prestations = resPrestations.data as PrestationDuTarif[];
-  const factures = resFactures.data as FactureDuClient[];
+  const factures = resFactures.data as (FactureDuClient &
+    Pick<FactureAnnuelleClient, "echeances_actives" | "echeances_payees" | "echeances_reste_centimes"> & {
+      type_facture: "annuelle" | "ponctuelle";
+      saison: number | null;
+      generation_auto: boolean;
+    })[];
 
   const academie = academies.find((a) => a.id === client.academie_id);
   const nom = nomClient(client);
-  const periode = premierDuMois();
-  // Mensualité nette : arrhes déduites comme le fera la génération mensuelle.
-  const detail = mensuelDetaille(tarifs, client, periode);
-  const mensuel = detail.net;
+  const periode = premierDuMois(aujourdhui);
+  const annuel = annuelEstime(tarifs, saison);
+  const echeancier = echeancierAnnuel(annuel, client, saison);
   const avecArrhes = client.arrhes_reglees && (client.arrhes_centimes ?? 0) > 0;
-  const aEncaisser = factures
-    .filter((f) => f.statut === "emise" || f.statut === "envoyee")
-    .reduce((s, f) => s + f.total_ttc_centimes, 0);
-  const nbEnRetard = factures.filter((f) => f.en_retard).length;
+
+  // Année en cours : facture annuelle non annulée de la saison, ses échéances.
+  const factureAnnuelle = factures.find((f) => f.type_facture === "annuelle" && f.saison === saison && f.statut !== "annulee") ?? null;
+  const destinataires = destinatairesFacture(client);
+  const echeances: EcheanceLigne[] = factureAnnuelle
+    ? (resEcheances.data as unknown as EcheanceVue[])
+        .filter((e) => e.facture_id === factureAnnuelle.id)
+        .map((e) => ({ ...e, destinataires }))
+    : [];
+  const nbAnciensBrouillons = factures.filter(
+    (f) =>
+      f.statut === "brouillon" &&
+      f.generation_auto &&
+      f.type_facture === "ponctuelle" &&
+      f.periode !== null &&
+      f.periode >= `${saison}-09-01` &&
+      f.periode <= `${saison + 1}-06-01`,
+  ).length;
+
+  // Reste à encaisser : factures ponctuelles émises/envoyées + échéances non réglées.
+  const ponctuellesOuvertes = factures.filter(
+    (f) => f.type_facture !== "annuelle" && (f.statut === "emise" || f.statut === "envoyee"),
+  );
+  const echeancesOuvertes = (resEcheances.data as unknown as EcheanceVue[]).filter(
+    (e) => e.statut === "a_venir" || e.statut === "envoyee",
+  );
+  const aEncaisser =
+    ponctuellesOuvertes.reduce((s, f) => s + f.total_ttc_centimes, 0) +
+    echeancesOuvertes.reduce((s, e) => s + e.montant_centimes, 0);
+  const nbEnRetard = ponctuellesOuvertes.filter((f) => f.en_retard).length + echeancesOuvertes.filter((e) => e.en_retard).length;
   // Académies proposées : les actives, plus l'actuelle du client si elle a été désactivée.
   const academiesProposees = academies.filter((a) => a.actif || a.id === client.academie_id);
 
@@ -104,6 +148,7 @@ export default async function PageClient(props: PageProps<"/clients/[id]">) {
             Clients
           </Link>
           <div className="mt-2 flex flex-wrap items-center gap-2">
+            <ReferenceBadge reference={client.reference} />
             <h1 className="titre-page break-words">{nom}</h1>
             {academie && <AcademieBadge nom={academie.nom} couleur={academie.couleur} />}
             {client.type === "professionnel" && <span className="badge bg-slate-100 text-slate-700">Professionnel</span>}
@@ -111,7 +156,7 @@ export default async function PageClient(props: PageProps<"/clients/[id]">) {
             {client.envoi_auto && (
               <span
                 className="badge bg-brand-light text-brand-dark"
-                title={`Émise et envoyée automatiquement le ${jourDuMois(jourGeneration)} de chaque mois, sans relecture`}
+                title={`Avis d'échéance envoyé automatiquement le ${jourDuMois(jourGeneration)} de chaque mois, sans relecture`}
               >
                 Envoi auto
               </span>
@@ -119,7 +164,7 @@ export default async function PageClient(props: PageProps<"/clients/[id]">) {
             {avecArrhes && (
               <span
                 className="badge bg-emerald-100 text-emerald-800"
-                title={`Arrhes réglées (saison ${client.arrhes_saison != null ? libelleSaison(client.arrhes_saison) : "non renseignée"}) : déduites des mensualités de septembre à juin`}
+                title={`Arrhes réglées (saison ${client.arrhes_saison != null ? libelleSaison(client.arrhes_saison) : "non renseignée"}) : déduites de la facture annuelle`}
               >
                 Arrhes
               </span>
@@ -148,15 +193,16 @@ export default async function PageClient(props: PageProps<"/clients/[id]">) {
 
       {!client.actif && (
         <p className="avertissement">
-          Client archivé : plus de facture mensuelle. Le réactiver pour reprendre la facturation.
+          Client archivé : plus de facture annuelle ni d&apos;avis automatique. Le réactiver pour reprendre la facturation.
         </p>
       )}
       {client.envoi_auto && client.actif && (
         <p className="flex items-center gap-2 rounded-lg border border-line bg-surface px-3 py-2 text-sm text-muted">
           <IconeInfo className="size-4 shrink-0 text-brand" />
           <span>
-            Envoi automatique : facture mensuelle émise et envoyée le{" "}
-            <strong className="text-ink">{jourDuMois(jourGeneration)}</strong> de chaque mois, sans relecture.{" "}
+            Envoi automatique : avis d&apos;échéance du mois envoyé le{" "}
+            <strong className="text-ink">{jourDuMois(jourGeneration)}</strong> de chaque mois (septembre à juin), sans
+            relecture.{" "}
             <a href="#fiche" className="btn-lien text-sm">
               Modifier
             </a>
@@ -176,17 +222,26 @@ export default async function PageClient(props: PageProps<"/clients/[id]">) {
       )}
 
       <dl className="grid gap-3 sm:grid-cols-3">
-        <Indicateur libelle={`Mensuel estimé (${formatPeriode(periode)})`} valeur={client.actif ? formatEuros(mensuel) : "—"}>
-          {!client.actif
-            ? "Client archivé : non facturé"
-            : detail.appliquee > 0
-              ? `Hors taxes, arrhes déduites (−${formatEuros(detail.appliquee)})`
-              : "Hors taxes, lignes mensuelles actives"}
+        <Indicateur
+          libelle={`Facture annuelle ${libelleSaison(saison)}`}
+          valeur={factureAnnuelle ? formatEuros(factureAnnuelle.total_ttc_centimes) : client.actif ? formatEuros(annuel) : "—"}
+        >
+          {factureAnnuelle
+            ? factureAnnuelle.echeances_actives > 0
+              ? `${factureAnnuelle.echeances_payees}/${factureAnnuelle.echeances_actives} échéances payées`
+              : factureAnnuelle.statut === "brouillon"
+                ? "Brouillon à émettre"
+                : "TTC"
+            : !client.actif
+              ? "Client archivé : non facturé"
+              : echeancier.arrhes > 0 && echeancier.montants.length > 0
+                ? `Estimée HT ; arrhes −${formatEuros(echeancier.arrhes)} : 10 × ${formatEuros(echeancier.montants[0])}`
+                : "Estimée d'après les tarifs, hors taxes"}
         </Indicateur>
         <Indicateur libelle="Reste à encaisser" valeur={formatEuros(aEncaisser)} alerte={nbEnRetard > 0}>
           {nbEnRetard > 0
             ? `${nbEnRetard} facture${nbEnRetard > 1 ? "s" : ""} en retard`
-            : "Factures émises ou envoyées, non payées"}
+            : "Échéances non réglées et factures ponctuelles en attente"}
         </Indicateur>
         <Indicateur libelle="Factures" valeur={String(factures.length)}>
           {factures.length === 0
@@ -201,11 +256,25 @@ export default async function PageClient(props: PageProps<"/clients/[id]">) {
         tarifs={tarifs}
         prestations={prestations}
         periode={periode}
+        saison={saison}
         arrhes={{
           arrhes_reglees: client.arrhes_reglees,
           arrhes_centimes: client.arrhes_centimes,
           arrhes_saison: client.arrhes_saison,
         }}
+      />
+
+      <AnneeClient
+        clientActif={client.actif}
+        clientId={client.id}
+        academieId={client.academie_id}
+        saison={saison}
+        facture={factureAnnuelle}
+        echeances={echeances}
+        annuelEstime={annuel}
+        nbAnciensBrouillons={nbAnciensBrouillons}
+        emailConfigure={emailConfigure()}
+        aujourdhui={aujourdhui}
       />
 
       <FacturesClient

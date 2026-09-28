@@ -6,8 +6,9 @@ import { RechercheClients } from "@/components/clients/RechercheClients";
 import { academieSelectionnee, resoudreAcademie } from "@/lib/academie-selectionnee";
 import { exigerUtilisateur } from "@/lib/auth";
 import { chargerAcademies } from "@/lib/facturation/service";
-import { avecArticle, destinatairesFacture, formatEuros, formatPeriode, nomClient, premierDuMois } from "@/lib/format";
-import { CHAMPS_TARIF_POUR_CALCUL, libelleSaison, mensuelNet, type TarifPourCalcul } from "@/lib/tarifs";
+import { ReferenceBadge } from "@/components/annee/StatutEcheanceBadge";
+import { avecArticle, destinatairesFacture, formatEuros, nomClient } from "@/lib/format";
+import { annuelEstime, CHAMPS_TARIF_POUR_CALCUL, libelleSaison, saisonEnCours, type TarifPourCalcul } from "@/lib/tarifs";
 import type { Academie, Client } from "@/lib/types";
 
 export const metadata: Metadata = { title: "Clients" };
@@ -23,7 +24,7 @@ type ClientListe = Client & { tarifs: TarifPourCalcul[] };
 function filtreRecherche(saisie: string): string {
   const motif = saisie.replace(/[\\%_]/g, (c) => `\\${c}`);
   const valeur = `"%${motif.replace(/[\\"]/g, (c) => `\\${c}`)}%"`;
-  return ["nom", "prenom", "raison_sociale", "email", "cavaliers"].map((col) => `${col}.ilike.${valeur}`).join(",");
+  return ["reference", "nom", "prenom", "raison_sociale", "email", "cavaliers"].map((col) => `${col}.ilike.${valeur}`).join(",");
 }
 
 export default async function PageClients(props: PageProps<"/clients">) {
@@ -31,7 +32,7 @@ export default async function PageClients(props: PageProps<"/clients">) {
   const parametres = await props.searchParams;
   const q = (typeof parametres.q === "string" ? parametres.q : "").trim().slice(0, 100);
   const archives = parametres.archives === "1";
-  const periode = premierDuMois();
+  const saison = saisonEnCours();
 
   let academies: Academie[];
   let selection: string | null;
@@ -57,8 +58,8 @@ export default async function PageClients(props: PageProps<"/clients">) {
       ...c,
       nomAffiche: nomClient(c),
       destinataires: destinatairesFacture(c),
-      // Net : arrhes déduites comme le fera la génération mensuelle.
-      mensuel: c.actif ? mensuelNet(c.tarifs ?? [], c, periode) : null,
+      // Facture annuelle estimée (HT, arrhes non déduites : elles réduisent l'échéancier).
+      mensuel: c.actif ? annuelEstime(c.tarifs ?? [], saison) : null,
       arrhes: c.arrhes_reglees && (c.arrhes_centimes ?? 0) > 0,
     }))
     .sort((a, b) => a.nomAffiche.localeCompare(b.nomAffiche, "fr", { sensitivity: "base" }));
@@ -67,7 +68,7 @@ export default async function PageClients(props: PageProps<"/clients">) {
   const nbActifs = clients.filter((c) => c.actif).length;
   const nbSansEmail = clients.filter((c) => c.actif && c.destinataires.length === 0).length;
   const nbArchives = clients.length - nbActifs;
-  const mois = formatPeriode(periode);
+  const annee = libelleSaison(saison);
   const pluriel = (n: number) => (n > 1 ? "s" : "");
   const resume =
     [
@@ -111,7 +112,7 @@ export default async function PageClients(props: PageProps<"/clients">) {
             <>
               <p className="mt-4 font-medium text-ink">Aucun client ne correspond à « {q} »</p>
               <p className="mt-1 text-sm text-muted">
-                Vérifier l&apos;orthographe ou chercher par cavalier, e-mail ou raison sociale.
+                Vérifier l&apos;orthographe ou chercher par référence, cavalier, e-mail ou raison sociale.
                 {academieFiltree ? ` Recherche limitée à ${avecArticle(academieFiltree.nom)}.` : ""}
               </p>
               <Link href={archives ? "/clients?archives=1" : "/clients"} className="btn-secondaire mt-5">
@@ -125,7 +126,7 @@ export default async function PageClients(props: PageProps<"/clients">) {
               </p>
               <p className="mt-1 max-w-md text-sm text-muted">
                 Créer la fiche de chaque payeur (parent, entreprise, sponsor), puis lui ajouter ses tarifs : la facture
-                mensuelle se prépare automatiquement.
+                annuelle se prépare à partir d&apos;eux.
               </p>
               <Link href="/clients/nouveau" className="btn-primaire mt-5">
                 <IconePlus />
@@ -146,8 +147,8 @@ export default async function PageClients(props: PageProps<"/clients">) {
                   <th>Académie</th>
                   <th>E-mail</th>
                   <th className="text-right">
-                    Mensuel estimé
-                    <span className="block text-[10px] font-normal normal-case tracking-normal">{mois}, HT, arrhes déduites</span>
+                    Annuel estimé
+                    <span className="block text-[10px] font-normal normal-case tracking-normal">{annee}, HT</span>
                   </th>
                   {archives && <th>Statut</th>}
                 </tr>
@@ -158,6 +159,9 @@ export default async function PageClients(props: PageProps<"/clients">) {
                   return (
                     <tr key={c.id} className={c.actif ? "" : "text-muted"}>
                       <td>
+                        <span className="mr-2 align-middle">
+                          <ReferenceBadge reference={c.reference} />
+                        </span>
                         <Link href={`/clients/${c.id}`} className="font-medium text-brand hover:underline">
                           {c.nomAffiche}
                         </Link>
@@ -214,7 +218,7 @@ export default async function PageClients(props: PageProps<"/clients">) {
               <tfoot>
                 <tr className="border-t border-line bg-page/60">
                   <td colSpan={4} className="px-4 py-3 text-sm text-muted">
-                    Total mensuel estimé des clients actifs affichés
+                    Total annuel estimé des clients actifs affichés ({annee}, HT)
                   </td>
                   <td className="px-4 py-3 text-right font-semibold whitespace-nowrap text-brand tabular-nums">
                     {formatEuros(totalMensuel)}
@@ -235,6 +239,9 @@ export default async function PageClients(props: PageProps<"/clients">) {
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <div className={`font-medium ${c.actif ? "text-brand" : "text-muted"}`}>
+                          <span className="mr-1.5 align-middle">
+                            <ReferenceBadge reference={c.reference} />
+                          </span>
                           {c.nomAffiche}
                           {c.envoi_auto && <BadgeAuto />}
                           {c.arrhes && <BadgeArrhes saison={c.arrhes_saison} />}
@@ -243,7 +250,7 @@ export default async function PageClients(props: PageProps<"/clients">) {
                       </div>
                       <div className="shrink-0 text-right text-sm font-medium tabular-nums">
                         {c.mensuel == null ? <span className="text-muted">—</span> : formatEuros(c.mensuel)}
-                        <div className="text-xs font-normal text-muted">/ mois</div>
+                        <div className="text-xs font-normal text-muted">/ an</div>
                       </div>
                     </div>
                     <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
@@ -256,7 +263,7 @@ export default async function PageClients(props: PageProps<"/clients">) {
               );
             })}
             <li className="flex items-center justify-between bg-page/60 px-4 py-3 text-sm">
-              <span className="text-muted">Total mensuel estimé ({mois})</span>
+              <span className="text-muted">Total annuel estimé ({annee})</span>
               <span className="font-semibold text-brand tabular-nums">{formatEuros(totalMensuel)}</span>
             </li>
           </ul>
@@ -278,24 +285,24 @@ function ErreurChargement({ message }: { message: string }) {
   );
 }
 
-/** Client en envoi automatique : sa facture mensuelle part sans relecture. */
+/** Client en envoi automatique : ses avis d'échéance partent sans relecture. */
 function BadgeAuto() {
   return (
     <span
       className="badge ml-2 bg-brand-light align-middle text-brand-dark"
-      title="Envoi automatique : facture mensuelle émise et envoyée sans relecture"
+      title="Envoi automatique : avis d'échéance envoyés chaque mois sans relecture"
     >
       Auto
     </span>
   );
 }
 
-/** Arrhes réglées : déduites des mensualités de septembre à juin. */
+/** Arrhes réglées : déduites de la facture annuelle (échéancier). */
 function BadgeArrhes({ saison }: { saison: number | null }) {
   return (
     <span
       className="badge ml-2 bg-emerald-100 align-middle text-emerald-800"
-      title={`Arrhes réglées${saison != null ? ` (saison ${libelleSaison(saison)})` : ""} : déduites des mensualités de septembre à juin`}
+      title={`Arrhes réglées${saison != null ? ` (saison ${libelleSaison(saison)})` : ""} : déduites de la facture annuelle`}
     >
       Arrhes
     </span>

@@ -10,6 +10,7 @@ import {
   emettreSansEnvoyer,
   envoyerParEmail,
   marquerPayee,
+  recalculerBrouillon,
   supprimerBrouillon,
 } from "@/app/(app)/factures/[id]/actions";
 import { Modale, ModaleConfirmation, useSignalerEnCours } from "@/components/Modale";
@@ -25,6 +26,7 @@ import {
   IconeEnvoi,
   IconeEuro,
   IconeFacture,
+  IconeRepeter,
   IconeValide,
 } from "@/components/Icones";
 
@@ -37,6 +39,7 @@ type ModaleOuverte =
   | "annuler"
   | "annuler-paiement"
   | "dupliquer"
+  | "recalculer"
   | null;
 
 const BTN_DANGER_DISCRET = "btn-secondaire text-red-700 hover:bg-red-50 hover:text-red-800";
@@ -59,6 +62,9 @@ export function ActionsFacture({
   nomClient,
   clientId,
   prefixe,
+  annuelle = false,
+  echeancesActives = 0,
+  recalculable = false,
 }: {
   factureId: string;
   statut: StatutFacture;
@@ -69,11 +75,17 @@ export function ActionsFacture({
   emailConfigure: boolean;
   envoyeeLe: string | null;
   aujourdhui: string;
-  /** Brouillon préparé par la facturation mensuelle. */
+  /** Brouillon préparé automatiquement (facturation de l'année, ou ancien brouillon mensuel). */
   generationAuto: boolean;
   nomClient: string;
   clientId: string;
   prefixe: string;
+  /** Facture annuelle (échéances). */
+  annuelle?: boolean;
+  /** Échéances non annulées : leur paiement se fait échéance par échéance. */
+  echeancesActives?: number;
+  /** Brouillon généré depuis les tarifs (annuel, ou ancien mensuel) : lignes recalculables. */
+  recalculable?: boolean;
 }) {
   const router = useRouter();
   const [modale, setModale] = useState<ModaleOuverte>(null);
@@ -91,6 +103,8 @@ export function ActionsFacture({
   const sansDestinataire = destinataires.length === 0;
   const envoiImpossible = sansDestinataire || !emailConfigure;
   const libelle = numero ?? "ce brouillon";
+  // Facture annuelle à échéances : payée automatiquement quand toutes les échéances le sont.
+  const paiementParEcheances = annuelle && echeancesActives > 0;
   const montant = formatEuros(totalTtc);
 
   // Raison affichée sous les boutons quand l'envoi est indisponible.
@@ -153,6 +167,12 @@ export function ActionsFacture({
               <IconeFacture />
               Émettre sans envoyer
             </button>
+            {recalculable && (
+              <button type="button" className="btn-secondaire" onClick={() => setModale("recalculer")}>
+                <IconeRepeter />
+                Recalculer depuis les tarifs
+              </button>
+            )}
             <button type="button" className={BTN_DANGER_DISCRET} onClick={() => setModale("supprimer")}>
               <IconeCorbeille />
               Supprimer le brouillon
@@ -171,14 +191,16 @@ export function ActionsFacture({
               <IconeEnvoi />
               {statut === "emise" ? "Envoyer par e-mail" : "Renvoyer par e-mail"}
             </button>
-            <button
-              type="button"
-              className={statut === "envoyee" ? "btn-primaire" : "btn-secondaire"}
-              onClick={() => setModale("payer")}
-            >
-              <IconeEuro />
-              Marquer comme payée
-            </button>
+            {!paiementParEcheances && (
+              <button
+                type="button"
+                className={statut === "envoyee" ? "btn-primaire" : "btn-secondaire"}
+                onClick={() => setModale("payer")}
+              >
+                <IconeEuro />
+                Marquer comme payée
+              </button>
+            )}
             <button type="button" className={BTN_DANGER_DISCRET} onClick={() => setModale("annuler")}>
               <IconeAnnuler />
               Annuler la facture
@@ -192,10 +214,12 @@ export function ActionsFacture({
               <IconeEnvoi />
               Renvoyer (duplicata)
             </button>
-            <button type="button" className="btn-secondaire" onClick={() => setModale("annuler-paiement")}>
-              <IconeAnnuler />
-              Annuler le paiement
-            </button>
+            {!paiementParEcheances && (
+              <button type="button" className="btn-secondaire" onClick={() => setModale("annuler-paiement")}>
+                <IconeAnnuler />
+                Annuler le paiement
+              </button>
+            )}
           </>
         )}
 
@@ -216,8 +240,18 @@ export function ActionsFacture({
           <span>{raisonEnvoi}</span>
         </p>
       )}
+      {paiementParEcheances && statut !== "annulee" && (
+        <p className="aide">
+          Facture annuelle : paiement enregistré échéance par échéance (échéancier ci-dessous) ; payée automatiquement
+          quand toutes les échéances le sont.
+        </p>
+      )}
       {statut === "payee" && (
-        <p className="aide">Pour annuler une facture payée, annuler d&apos;abord le paiement.</p>
+        <p className="aide">
+          {paiementParEcheances
+            ? "Pour l'annuler, annuler d'abord le paiement d'une échéance."
+            : "Pour annuler une facture payée, annuler d'abord le paiement."}
+        </p>
       )}
 
       {/* Émettre et envoyer (brouillon) */}
@@ -232,8 +266,9 @@ export function ActionsFacture({
       >
         <p>
           La facture de <strong>{nomClient}</strong> d&apos;un montant de <strong>{montant} TTC</strong> recevra son numéro
-          définitif ({prefixe}-AAAA-NNNN) et ne sera plus modifiable. Elle partira ensuite par e-mail avec le PDF en
-          pièce jointe.
+          définitif ({prefixe}-AAAA-NNNN) et ne sera plus modifiable
+          {annuelle ? " ; ses 10 échéances (septembre à juin, arrhes déduites) seront créées" : ""}. Elle partira ensuite
+          par e-mail avec le PDF en pièce jointe.
         </p>
         {listeDestinataires}
       </ModaleConfirmation>
@@ -250,10 +285,29 @@ export function ActionsFacture({
         <p>
           La facture de <strong>{nomClient}</strong> ({montant} TTC) recevra son <strong>numéro définitif</strong> et ne
           pourra <strong>plus être modifiée ni supprimée</strong> (seulement annulée).
+          {annuelle && " Ses 10 échéances (septembre à juin, arrhes déduites) seront créées."}
         </p>
         <p className="text-muted">
           Aucun e-mail envoyé : la télécharger pour la remettre en main propre, ou l&apos;envoyer plus tard.
         </p>
+      </ModaleConfirmation>
+
+      {/* Recalculer depuis les tarifs */}
+      <ModaleConfirmation
+        ouverte={modale === "recalculer"}
+        onFermer={fermer}
+        titre="Recalculer depuis les tarifs"
+        libelleConfirmer="Recalculer les lignes"
+        onConfirmer={() => recalculerBrouillon(factureId)}
+        onSucces={reussite}
+      >
+        <p>
+          Les {nbLignes} ligne{nbLignes > 1 ? "s" : ""} du brouillon de <strong>{nomClient}</strong> seront remplacées
+          par celles calculées à partir des tarifs et réductions actuels de sa fiche
+          {annuelle ? " (prix mensuel × 10, ou × nombre de mois de validité)" : " (arrhes déduites comme à la génération)"}
+          .
+        </p>
+        <p className="avertissement">Lignes ajoutées ou modifiées à la main : perdues. Objet et notes : conservés.</p>
       </ModaleConfirmation>
 
       {/* Supprimer le brouillon */}
@@ -270,10 +324,10 @@ export function ActionsFacture({
           Le brouillon de <strong>{nomClient}</strong> ({montant}) et ses {nbLignes} ligne{nbLignes > 1 ? "s" : ""} seront
           supprimés. Pas de retour en arrière possible.
         </p>
-        {generationAuto && (
+        {generationAuto && annuelle && (
           <p className="avertissement">
-            Ce brouillon mensuel reviendra à la prochaine génération du mois tant que le client a un tarif récurrent
-            actif. Pour ne pas le facturer ce mois-ci, mettre une date de fin au tarif ou archiver le client.
+            Ce brouillon annuel reviendra à la prochaine préparation des factures de l&apos;année tant que le client a un
+            tarif récurrent actif. Pour ne pas le facturer, mettre une date de fin au tarif ou archiver le client.
           </p>
         )}
       </ModaleConfirmation>
@@ -335,6 +389,7 @@ export function ActionsFacture({
       <Modale ouverte={modale === "annuler"} onFermer={fermer} titre="Annuler la facture" verrouillee={enregistrement}>
         <FormulaireAnnulation
           factureId={factureId}
+          annuelle={annuelle}
           libelle={libelle}
           montant={montant}
           onEnCours={setEnregistrement}
@@ -359,6 +414,12 @@ export function ActionsFacture({
           Un nouveau brouillon sera créé pour <strong>{nomClient}</strong> avec les mêmes lignes, le même objet et la même
           période, modifiable avant émission. La facture <strong>{libelle}</strong>, elle, ne change pas.
         </p>
+        {annuelle && (
+          <p className="avertissement">
+            Copie créée comme facture ponctuelle, sans échéances. Pour une nouvelle facture annuelle (après annulation),
+            passer par « Facturation de l&apos;année ».
+          </p>
+        )}
       </ModaleConfirmation>
     </section>
   );
@@ -464,6 +525,7 @@ function FormulairePaiement({
 
 function FormulaireAnnulation({
   factureId,
+  annuelle,
   libelle,
   montant,
   onAnnuler,
@@ -471,6 +533,7 @@ function FormulaireAnnulation({
   onEnCours,
 }: {
   factureId: string;
+  annuelle: boolean;
   libelle: string;
   montant: string;
   onAnnuler: () => void;
@@ -498,6 +561,7 @@ function FormulaireAnnulation({
         <p>
           La facture <strong>{libelle}</strong> ({montant} TTC) passera au statut « Annulée ». Pas de retour en
           arrière : c&apos;est <strong>définitif</strong>.
+          {annuelle && " Ses échéances non payées seront annulées ; les paiements déjà reçus restent enregistrés."}
         </p>
         <p className="text-muted">
           Une facture émise ne peut pas être supprimée : les règles de facturation imposent de la garder dans la

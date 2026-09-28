@@ -16,15 +16,20 @@ export default async function PageNouveauClient() {
   let academies: Academie[] = [];
   let selection: string | null = null;
   let jourGeneration = 1;
+  let referenceSuggeree: string | null = null;
   let erreur: string | null = null;
   try {
     let parametres: Parametres;
-    [academies, selection, parametres] = await Promise.all([
+    let reference: { data: unknown; error: { message: string } | null };
+    [academies, selection, parametres, reference] = await Promise.all([
       chargerAcademies(supabase, true),
       academieSelectionnee(),
       chargerParametres(supabase),
+      supabase.rpc("prochaine_reference_client"),
     ]);
     jourGeneration = parametres.jour_generation;
+    // Indicative (placeholder) : la base attribue la référence à l'enregistrement.
+    referenceSuggeree = !reference.error && typeof reference.data === "string" ? reference.data : null;
   } catch (e) {
     erreur = e instanceof Error ? e.message : String(e);
   }
@@ -63,6 +68,7 @@ export default async function PageNouveauClient() {
             academieParDefaut={academieParDefaut}
             jourGeneration={jourGeneration}
             saisonParDefaut={saisonEnCours()}
+            referenceSuggeree={referenceSuggeree}
           />
         </div>
       )}

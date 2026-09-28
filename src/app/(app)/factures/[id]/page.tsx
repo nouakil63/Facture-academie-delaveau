@@ -17,6 +17,8 @@ import {
   IconeValide,
 } from "@/components/Icones";
 import { InfosBrouillon, NotesInternes } from "@/components/factures/InfosBrouillon";
+import { ReferenceBadge } from "@/components/annee/StatutEcheanceBadge";
+import { TableauEcheances } from "@/components/annee/TableauEcheances";
 import { LignesLectureSeule, type Totaux } from "@/components/factures/LignesFacture";
 import { libelleNumero, nomClientFacture } from "@/components/factures/outils";
 import { exigerUtilisateur } from "@/lib/auth";
@@ -31,6 +33,8 @@ import {
   formatPeriode,
   nomClient,
 } from "@/lib/format";
+import { echeancierFacture } from "@/lib/pdf/FacturePdf";
+import { libelleSaison } from "@/lib/tarifs";
 import type { Academie, Client, EnvoiEmail, FactureComplete, FactureVue, Parametres } from "@/lib/types";
 
 /** L'envoi d'une facture (PDF + SMTP) peut prendre quelques secondes. */
@@ -69,6 +73,8 @@ export default async function PageFacture(props: PageProps<"/factures/[id]">) {
   if (!complete) return <FactureIntrouvable />;
   const { facture, lignes, client, emetteur, academie } = complete;
   const brouillon = facture.statut === "brouillon";
+  const annuelle = facture.type_facture === "annuelle" && facture.saison != null;
+  const echeances = complete.echeances ?? [];
 
   const [resVue, resEnvois, resPrestations] = await Promise.all([
     supabase.from("factures_vue").select("en_retard").eq("id", id).maybeSingle(),
@@ -87,6 +93,9 @@ export default async function PageFacture(props: PageProps<"/factures/[id]">) {
 
   const enRetard = Boolean((resVue.data as Pick<FactureVue, "en_retard"> | null)?.en_retard);
   const envois = resEnvois.data as EnvoiEmail[];
+  const numerosAvis = new Map(echeances.map((e) => [e.id, e.numero_avis]));
+  // Facture annuelle : arrhes et reste à payer (échéances réelles, ou prévision pour un brouillon).
+  const echeancier = echeancierFacture(facture, client, emetteur, echeances);
   const catalogue = resPrestations.data as PrestationFormulaire[];
 
   const nom = nomClient(client);
@@ -116,8 +125,16 @@ export default async function PageFacture(props: PageProps<"/factures/[id]">) {
               <h1 className={`titre-page ${brouillon ? "text-muted italic" : ""}`}>{libelleNumero(facture.numero)}</h1>
               <StatutBadge statut={facture.statut} enRetard={enRetard} />
               <AcademieBadge nom={academie.nom} couleur={academie.couleur} />
+              {annuelle && (
+                <span className="badge bg-brand-light text-brand-dark">
+                  Facture annuelle {libelleSaison(facture.saison as number)}
+                </span>
+              )}
             </div>
             <p className="mt-1 text-sm text-muted">
+              <span className="mr-1.5 align-middle">
+                <ReferenceBadge reference={client.reference} />
+              </span>
               <Link href={`/clients/${facture.client_id}`} className="font-medium text-ink hover:text-brand">
                 {nom}
               </Link>
@@ -151,15 +168,24 @@ export default async function PageFacture(props: PageProps<"/factures/[id]">) {
       {brouillon && (
         <p className="rounded-lg border border-brand/20 bg-brand-light px-3 py-2 text-sm text-brand-dark">
           <strong>Brouillon</strong> : pas encore de numéro. Relire les lignes et les informations, puis émettre la facture.
-          {facture.generation_auto && " Préparé par la facturation mensuelle."}
+          {annuelle
+            ? ` Facture annuelle préparée par la facturation de l'année : à l'émission, ${
+                echeancier && echeancier.lignes.length > 0
+                  ? `10 échéances de septembre à juin (arrhes déduites : ${formatEuros(echeancier.arrhes)})`
+                  : "aucune échéance (montant couvert par les arrhes)"
+              }.`
+            : facture.generation_auto
+              ? " Brouillon mensuel de l'ancien modèle : le supprimer si la facture annuelle couvre ce mois."
+              : ""}
         </p>
       )}
       {enRetard && (
         <p className="erreur flex items-start gap-2">
           <IconeHorloge className="mt-0.5 size-4" />
           <span>
-            Échéance dépassée depuis le {formatDateLongue(facture.date_echeance)} : relancer le client, puis
-            enregistrer le paiement dès réception.
+            {annuelle
+              ? "Au moins une échéance dépassée : relancer la famille (avis d'échéance), puis enregistrer le paiement dès réception."
+              : `Échéance dépassée depuis le ${formatDateLongue(facture.date_echeance)} : relancer le client, puis enregistrer le paiement dès réception.`}
           </span>
         </p>
       )}
@@ -211,7 +237,44 @@ export default async function PageFacture(props: PageProps<"/factures/[id]">) {
             nomClient={nom}
             clientId={facture.client_id}
             prefixe={emetteur.prefixe_facture}
+            annuelle={annuelle}
+            echeancesActives={echeances.filter((e) => e.statut !== "annulee").length}
+            recalculable={annuelle || (facture.generation_auto && facture.periode !== null)}
           />
+
+          {annuelle && !brouillon && (
+            <section className="carte overflow-hidden" aria-labelledby="titre-echeancier">
+              <div className="flex flex-wrap items-baseline justify-between gap-3 border-b border-line px-5 py-4">
+                <h2 id="titre-echeancier" className="titre-section">
+                  Échéancier
+                </h2>
+                {echeancier && (
+                  <span className="text-xs text-muted">
+                    {echeancier.arrhes > 0 ? `Arrhes versées : ${formatEuros(echeancier.arrhes)} · ` : ""}Reste à payer :{" "}
+                    {formatEuros(echeancier.reste)}
+                  </span>
+                )}
+              </div>
+              {echeances.length === 0 ? (
+                <p className="px-5 py-4 text-sm text-muted">Aucune échéance : montant couvert par les arrhes.</p>
+              ) : (
+                <TableauEcheances
+                  echeances={echeances.map((e) => ({
+                    ...e,
+                    en_retard: (e.statut === "a_venir" || e.statut === "envoyee") && e.date_echeance < aujourdhui,
+                    facture_statut: facture.statut,
+                    client_reference: client.reference,
+                    academie_nom: academie.nom,
+                    academie_couleur: academie.couleur,
+                    destinataires,
+                  }))}
+                  variante="client"
+                  emailConfigure={emailConfigure()}
+                  aujourdhui={aujourdhui}
+                />
+              )}
+            </section>
+          )}
 
           <section className="carte overflow-hidden" aria-labelledby="titre-lignes">
             <div className="flex items-baseline justify-between gap-3 border-b border-line px-5 py-4">
@@ -244,14 +307,19 @@ export default async function PageFacture(props: PageProps<"/factures/[id]">) {
                 objet={facture.objet}
                 periode={facture.periode}
                 notes={facture.notes}
+                annuelle={annuelle}
               />
             ) : (
               <dl className="grid gap-x-6 gap-y-3 text-sm sm:grid-cols-2">
                 <Info libelle="Objet">{facture.objet ?? "—"}</Info>
-                <Info libelle="Mois facturé">{formatPeriode(facture.periode)}</Info>
+                {annuelle ? (
+                  <Info libelle="Année scolaire">{libelleSaison(facture.saison as number)}</Info>
+                ) : (
+                  <Info libelle="Mois facturé">{formatPeriode(facture.periode)}</Info>
+                )}
                 <Info libelle="Émise le">{formatDateLongue(facture.date_emission)}</Info>
-                <Info libelle="Échéance">
-                  <span className={enRetard ? "font-medium text-red-700" : ""}>
+                <Info libelle={annuelle ? "Dernière échéance" : "Échéance"}>
+                  <span className={enRetard && !annuelle ? "font-medium text-red-700" : ""}>
                     {formatDateLongue(facture.date_echeance)}
                   </span>
                 </Info>
@@ -332,7 +400,8 @@ export default async function PageFacture(props: PageProps<"/factures/[id]">) {
             </h2>
             <ol className="space-y-2.5 border-l border-line pl-4 text-sm">
               <Etape date={formatDateHeure(facture.created_at)}>
-                Brouillon créé{facture.generation_auto ? " (facturation mensuelle)" : ""}
+                Brouillon créé
+                {annuelle ? " (facturation de l'année)" : facture.generation_auto ? " (facturation mensuelle)" : ""}
               </Etape>
               {facture.date_emission && (
                 <Etape date={formatDate(facture.date_emission)}>
@@ -373,6 +442,12 @@ export default async function PageFacture(props: PageProps<"/factures/[id]">) {
                     <div className="flex items-center justify-between gap-2">
                       <span className={`font-medium ${e.succes ? "text-emerald-800" : "text-red-800"}`}>
                         {e.succes ? "Envoyé" : "Échec"}
+                        {e.echeance_id && (
+                          <span className="font-normal text-muted">
+                            {" "}
+                            · avis {numerosAvis.get(e.echeance_id) ?? "d'échéance"}
+                          </span>
+                        )}
                       </span>
                       <span className="text-muted tabular-nums">{formatDateHeure(e.created_at)}</span>
                     </div>

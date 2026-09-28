@@ -1,4 +1,4 @@
-import type { Client, StatutFacture } from "./types";
+import type { Client, StatutEcheance, StatutFacture, TypeFacture } from "./types";
 
 const euros = new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR" });
 
@@ -156,6 +156,18 @@ export const LIBELLES_STATUT: Record<StatutFacture, string> = {
   envoyee: "Envoyée",
   payee: "Payée",
   annulee: "Annulée",
+};
+
+export const LIBELLES_STATUT_ECHEANCE: Record<StatutEcheance, string> = {
+  a_venir: "À envoyer",
+  envoyee: "Avis envoyé",
+  payee: "Payée",
+  annulee: "Annulée",
+};
+
+export const LIBELLES_TYPE_FACTURE: Record<TypeFacture, string> = {
+  annuelle: "Annuelle",
+  ponctuelle: "Ponctuelle",
 };
 
 export const MODES_PAIEMENT = ["Virement", "Chèque", "Prélèvement", "Espèces", "Carte bancaire", "Autre"] as const;

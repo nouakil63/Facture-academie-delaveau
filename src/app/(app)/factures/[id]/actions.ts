@@ -298,6 +298,29 @@ export async function supprimerBrouillon(factureId: string): Promise<ResultatAct
   return { ok: true, message: "Brouillon supprimé.", donnees: { redirection: "/factures" } };
 }
 
+/**
+ * « Recalculer depuis les tarifs » : remplace les lignes d'un brouillon généré (facture annuelle,
+ * ou ancien brouillon mensuel) par celles calculées à partir des tarifs et réductions actuels du
+ * client (fonction SQL recalculer_brouillon). Brouillon uniquement.
+ */
+export async function recalculerBrouillon(factureId: string): Promise<ResultatAction> {
+  const { supabase } = await exigerUtilisateur();
+  const id = schemaId.safeParse(factureId);
+  if (!id.success) return { ok: false, erreur: messagesValidation(id.error) };
+
+  let nb: number;
+  try {
+    const { data, error } = await supabase.rpc("recalculer_brouillon", { p_facture_id: id.data });
+    if (error) return { ok: false, erreur: traduireErreur(error) };
+    nb = Number(data);
+  } catch (e) {
+    console.error(e);
+    return ERREUR_INATTENDUE;
+  }
+  revaliderFactures();
+  return { ok: true, message: `Lignes recalculées depuis les tarifs actuels (${nb} ligne${nb > 1 ? "s" : ""}).` };
+}
+
 /** Émet un brouillon sans l'envoyer : numéro définitif, contenu figé. */
 export async function emettreSansEnvoyer(factureId: string): Promise<ResultatAction> {
   const { supabase } = await exigerUtilisateur();

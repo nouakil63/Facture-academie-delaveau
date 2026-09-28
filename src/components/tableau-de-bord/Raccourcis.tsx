@@ -9,9 +9,9 @@ export function Raccourcis() {
         <IconePlus className="h-4 w-4" />
         Nouvelle facture
       </Link>
-      <Link href="/facturation-mensuelle" className="btn-secondaire">
+      <Link href="/facturation-annuelle" className="btn-secondaire">
         <IconeCalendrier className="h-4 w-4" />
-        Facturation du mois
+        Facturation de l&apos;année
       </Link>
       <Link href="/clients/nouveau" className="btn-secondaire">
         <IconeNouveauClient className="h-4 w-4" />
