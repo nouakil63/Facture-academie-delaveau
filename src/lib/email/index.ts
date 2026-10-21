@@ -2,6 +2,9 @@ import "server-only";
 import { createTransport } from "nodemailer";
 import { formatDate, formatEuros, formatPeriode, nomClient } from "@/lib/format";
 import type { FactureComplete } from "@/lib/types";
+import { LOGO_DELAVEAU_PNG } from "@/lib/pdf/logo";
+
+const LOGO_EMAIL_CID = "logo-academie-delaveau";
 
 /*
  * Envoi d'e-mails par SMTP (boîte mail de l'académie), avec nodemailer.
@@ -106,6 +109,7 @@ export interface MessageEmail {
   html?: string;
   cci?: string[];
   pieceJointe?: { nom: string; contenu: Buffer };
+  piecesJointes?: { nom: string; contenu: Buffer }[];
 }
 
 /** Adresses nettoyées : espaces retirés, vides et doublons supprimés (comparaison insensible à la casse). */
@@ -147,6 +151,7 @@ export async function envoyerEmail(msg: MessageEmail): Promise<{ messageId: stri
   if (a.length === 0) throw new Error("Aucun destinataire pour cet e-mail.");
   const dejaDestinataires = new Set(a.map((x) => x.toLowerCase()));
   const cci = nettoyerAdresses(msg.cci ?? []).filter((x) => !dejaDestinataires.has(x.toLowerCase()));
+  const piecesJointes = [...(msg.pieceJointe ? [msg.pieceJointe] : []), ...(msg.piecesJointes ?? [])];
 
   const info = await obtenirTransport(config).sendMail({
     from: config.from,
@@ -156,15 +161,22 @@ export async function envoyerEmail(msg: MessageEmail): Promise<{ messageId: stri
     subject: msg.objet,
     text: msg.texte,
     html: msg.html,
-    attachments: msg.pieceJointe
-      ? [
-          {
-            filename: msg.pieceJointe.nom,
-            content: msg.pieceJointe.contenu,
-            contentType: msg.pieceJointe.nom.toLowerCase().endsWith(".pdf") ? "application/pdf" : undefined,
-          },
-        ]
-      : undefined,
+    attachments: [
+      ...piecesJointes.map((piece) => ({
+        filename: piece.nom,
+        content: piece.contenu,
+        contentType: piece.nom.toLowerCase().endsWith(".pdf") ? "application/pdf" : undefined,
+      })),
+      ...(msg.html?.includes(`cid:${LOGO_EMAIL_CID}`)
+        ? [{
+            filename: "logo-academie-delaveau.png",
+            content: Buffer.from(LOGO_DELAVEAU_PNG.split(",")[1], "base64"),
+            contentType: "image/png",
+            contentDisposition: "inline" as const,
+            cid: LOGO_EMAIL_CID,
+          }]
+        : []),
+    ],
   });
 
   if (Array.isArray(info.accepted) && info.accepted.length === 0) {
@@ -304,6 +316,7 @@ export function construireHtmlEmail({
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f5f7fa;">
 <tr><td align="center" style="padding:24px 12px;">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:600px;background-color:#ffffff;border:1px solid #e3e7ed;border-radius:8px;">
+<tr><td style="padding:22px 28px;background-color:#ffffff;border-radius:8px 8px 0 0;"><img src="cid:${LOGO_EMAIL_CID}" width="220" alt="Logo de l’académie" style="display:block;width:220px;max-width:100%;height:auto;border:0;"></td></tr>
 <tr><td style="background-color:${bandeau};padding:18px 28px;border-radius:8px 8px 0 0;border-bottom:3px solid ${filet};font-family:${police};font-size:18px;font-weight:bold;letter-spacing:0.5px;color:#ffffff;">${echapperHtml(titre)}${
     afficherMention
       ? `<div style="margin-top:2px;font-size:13px;font-weight:normal;letter-spacing:0.3px;color:#ffffff;opacity:0.85;">${echapperHtml(mention)}</div>`

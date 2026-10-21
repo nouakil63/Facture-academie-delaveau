@@ -268,6 +268,112 @@ export async function envoyerFacture(
   return { ok: true, destinataires: acceptees, refusees };
 }
 
+export interface DemandeRelance {
+  factureIds: string[];
+  objet: string;
+  corps: string;
+  /** Contrôle du destinataire validé ; ne remplace jamais les adresses des fiches clients. */
+  destinataireAttendu: string;
+  apercu: boolean;
+}
+
+type ResultatRelance = Extract<ResultatEnvoi, { ok: false }> | {
+  ok: true;
+  destinataires: string[];
+  refusees: string[];
+  factures: string[];
+  piecesJointes: string[];
+  apercu: boolean;
+  html?: string;
+};
+
+/** Une relance personnalisée et ses PDF, sans modifier les modèles ni les contacts. */
+export async function envoyerRelance(supabase: SupabaseClient, demande: DemandeRelance): Promise<ResultatRelance> {
+  let donnees: FactureComplete[];
+  let parametres: Parametres;
+  let destinataires: string[];
+  let piecesJointes: { nom: string; contenu: Buffer }[];
+  let html: string;
+  try {
+    const ids = [...new Set(demande.factureIds)];
+    if (ids.length === 0 || ids.length > 10 || ids.length !== demande.factureIds.length)
+      throw new Error("Sélectionner entre une et dix factures distinctes.");
+    if (!emailConfigure()) throw new Error("Envoi d'e-mails non configuré : voir les Paramètres.");
+    const chargees = await Promise.all(ids.map((id) => chargerFactureComplete(supabase, id)));
+    if (chargees.some((d) => !d)) throw new Error("Une facture est introuvable ou inaccessible.");
+    donnees = chargees as FactureComplete[];
+    if (donnees.some((d) => !["emise", "envoyee"].includes(d.facture.statut)))
+      throw new Error("Seules les factures émises ou envoyées et non marquées payées peuvent être relancées.");
+    destinataires = destinatairesFacture(donnees[0].client);
+    if (!destinataires.length || destinataires[0].toLowerCase() !== demande.destinataireAttendu.trim().toLowerCase())
+      throw new Error("Le destinataire a changé : vérifier la fiche client avant l'envoi.");
+    const memeAdresse = (adresses: string[]) => adresses.length === destinataires.length &&
+      adresses[0]?.toLowerCase() === destinataires[0].toLowerCase() &&
+      adresses.every((a) => destinataires.some((d) => d.toLowerCase() === a.toLowerCase()));
+    if (donnees.some((d) => !memeAdresse(destinatairesFacture(d.client))))
+      throw new Error("Toutes les factures regroupées doivent avoir les mêmes destinataires.");
+    parametres = await chargerParametres(supabase);
+    piecesJointes = await Promise.all(donnees.map(async (d) => ({
+      nom: nomFichierFacture(d.facture), contenu: await genererPdfFacture(d),
+    })));
+    html = construireHtmlEmail({
+      texte: demande.corps, titre: parametres.raison_sociale, sousTitre: donnees[0].academie.nom,
+      couleur: parametres.couleur_primaire, couleurSecondaire: parametres.couleur_secondaire,
+      pied: piedEmail(parametres, piecesJointes.map((p) => p.nom).join(", ")),
+    });
+    // Un paiement enregistré pendant le rendu des PDF doit arrêter la relance.
+    const verification = await supabase.from("factures").select("id,statut").in("id", ids);
+    if (verification.error || verification.data?.length !== ids.length ||
+        verification.data.some((f) => !["emise", "envoyee"].includes(f.statut)))
+      throw new Error("Le statut d'une facture a changé : vérifier les règlements avant de relancer.");
+  } catch (e) {
+    return { ok: false, erreur: messageDe(e) };
+  }
+  const resultat = {
+    ok: true as const, destinataires, refusees: [] as string[], apercu: demande.apercu,
+    factures: donnees.map((d) => d.facture.numero ?? d.facture.id),
+    piecesJointes: piecesJointes.map((p) => p.nom),
+  };
+  if (demande.apercu) return { ...resultat, html };
+
+  let messageId: string;
+  let refusees: string[];
+  try {
+    ({ messageId, refusees } = await envoyerEmail({
+      a: destinataires, objet: demande.objet, texte: demande.corps, html, piecesJointes,
+      cci: adressesCopie(parametres.email_copie),
+    }));
+  } catch (e) {
+    const erreur = messageErreurEmail(e);
+    for (const d of donnees) await journaliser(supabase, {
+      facture_id: d.facture.id, destinataires, objet: demande.objet, succes: false, erreur, message_id: null,
+    });
+    return { ok: false, erreur };
+  }
+  const principaleAcceptee = !refusees.some((a) => a.toLowerCase() === destinataires[0].toLowerCase());
+  const erreur = refusees.length ? `Adresse(s) refusée(s) : ${refusees.join(", ")}` : null;
+  const maintenant = new Date().toISOString();
+  for (const d of donnees) {
+    // Après acceptation SMTP, une erreur de suivi ne doit pas provoquer un second envoi.
+    try {
+      await journaliser(supabase, {
+        facture_id: d.facture.id, destinataires, objet: demande.objet,
+        succes: principaleAcceptee, erreur, message_id: messageId || null,
+      });
+      if (principaleAcceptee) {
+        const miseAJour = await supabase.from("factures")
+          .update({ statut: "envoyee", envoyee_le: maintenant })
+          .eq("id", d.facture.id).in("statut", ["emise", "envoyee"]);
+        if (miseAJour.error) console.error("Relance envoyée, suivi non mis à jour :", miseAJour.error.message);
+      }
+    } catch (e) {
+      console.error("Relance envoyée, suivi impossible :", messageDe(e));
+    }
+  }
+  if (!principaleAcceptee) return { ok: false, erreur: erreur ?? "Adresse principale refusée." };
+  return { ...resultat, destinataires: destinataires.filter((a) => !refusees.includes(a)), refusees };
+}
+
 export interface ResultatEnvoiLot {
   id: string;
   ok: boolean;

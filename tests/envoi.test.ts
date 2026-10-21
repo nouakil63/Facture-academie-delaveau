@@ -19,7 +19,7 @@ vi.mock("@/lib/pdf", () => ({
   nomFichierFacture: (f: Facture) => (f.numero ? `Facture-${f.numero}.pdf` : "Brouillon.pdf"),
 }));
 
-const { envoyerFacture, envoyerFactures } = await import("@/lib/facturation/envoi");
+const { envoyerFacture, envoyerFactures, envoyerRelance } = await import("@/lib/facturation/envoi");
 const { donneesExemple, parametresExemple } = await import("@/lib/pdf/exemple");
 
 // -----------------------------------------------------------------------------
@@ -429,6 +429,75 @@ describe("envoyerFacture", () => {
       ok: false,
       erreur: expect.stringMatching(/Facture introuvable/),
     });
+  });
+});
+
+describe("envoyerRelance", () => {
+  function groupe() {
+    const b = base({ statut: "emise", facture: EMISE }, { email_objet: "Modèle habituel" });
+    for (const n of [2, 3]) b.faux.tables.factures.push({
+      ...structuredClone(b.faux.tables.factures[0]), id: `facture-${n}`, numero: `AD-2026-004${n}`,
+    });
+    const demande = {
+      factureIds: b.faux.tables.factures.map((f) => f.id as string),
+      objet: "Suivi des factures", corps: "Bonjour, voici les trois factures.",
+      destinataireAttendu: "marie@exemple.fr", apercu: false,
+    };
+    return { ...b, demande };
+  }
+
+  it("envoie un seul mail avec les trois PDF, journalise les trois factures et garde les modèles et contacts", async () => {
+    const { faux, supabase, demande } = groupe();
+    const contacts = structuredClone(faux.tables.clients);
+    const modeles = structuredClone(faux.tables.parametres);
+    const resultat = await envoyerRelance(supabase, demande);
+    expect(resultat.ok).toBe(true);
+    expect(envoyerEmail).toHaveBeenCalledTimes(1);
+    expect(envoyerEmail.mock.calls[0][0]).toMatchObject({ objet: demande.objet, texte: demande.corps });
+    expect(envoyerEmail.mock.calls[0][0].piecesJointes).toHaveLength(3);
+    expect(envoyerEmail.mock.calls[0][0].html).toContain('src="cid:logo-academie-delaveau"');
+    expect(faux.envois).toHaveLength(3);
+    expect(new Set(faux.envois.map((e) => e.message_id))).toEqual(new Set(["<message@test>"]));
+    expect(faux.tables.factures.every((f) => f.statut === "envoyee")).toBe(true);
+    expect(faux.tables.clients).toEqual(contacts);
+    expect(faux.tables.parametres).toEqual(modeles);
+  });
+
+  it("l'aperçu génère les PDF et le HTML sans envoi, journal ni changement de statut", async () => {
+    const { faux, supabase, demande } = groupe();
+    const resultat = await envoyerRelance(supabase, { ...demande, apercu: true });
+    expect(resultat).toMatchObject({ ok: true, apercu: true, piecesJointes: expect.any(Array) });
+    expect(genererPdfFacture).toHaveBeenCalledTimes(3);
+    expect(envoyerEmail).not.toHaveBeenCalled();
+    expect(faux.envois).toHaveLength(0);
+    expect(faux.misesAJour).toHaveLength(0);
+  });
+
+  it("refuse une facture payée et un destinataire différent de celui validé", async () => {
+    const { faux, supabase, demande } = groupe();
+    faux.tables.factures[1].statut = "payee";
+    expect(await envoyerRelance(supabase, demande)).toMatchObject({ ok: false });
+    faux.tables.factures[1].statut = "emise";
+    expect(await envoyerRelance(supabase, { ...demande, destinataireAttendu: "autre@exemple.fr" })).toMatchObject({ ok: false });
+    expect(envoyerEmail).not.toHaveBeenCalled();
+  });
+
+  it("refuse de joindre la facture d'un autre destinataire", async () => {
+    const { faux, supabase, demande } = groupe();
+    faux.tables.clients.push({ ...structuredClone(faux.tables.clients[0]), id: "autre-client", email: "autre@exemple.fr" });
+    faux.tables.factures[1].client_id = "autre-client";
+    expect(await envoyerRelance(supabase, demande)).toMatchObject({ ok: false, erreur: expect.stringContaining("mêmes destinataires") });
+    expect(envoyerEmail).not.toHaveBeenCalled();
+  });
+
+  it("arrête la relance si un paiement est enregistré pendant le rendu des PDF", async () => {
+    const { faux, supabase, demande } = groupe();
+    genererPdfFacture.mockImplementationOnce(async () => {
+      faux.tables.factures[0].statut = "payee";
+      return Buffer.from("%PDF-test");
+    });
+    expect(await envoyerRelance(supabase, demande)).toMatchObject({ ok: false, erreur: expect.stringContaining("statut") });
+    expect(envoyerEmail).not.toHaveBeenCalled();
   });
 });
 

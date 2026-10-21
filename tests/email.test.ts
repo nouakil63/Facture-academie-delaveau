@@ -204,6 +204,22 @@ describe("configuration et envoi SMTP", () => {
     });
   });
 
+  it("joint les trois PDF et embarque le logo référencé dans le HTML, sans téléchargement distant", async () => {
+    sendMail.mockResolvedValue({ messageId: "<relance>", accepted: ["famille@exemple.fr"], rejected: [] });
+    const html = construireHtmlEmail({ texte: "Bonjour", titre: "Académie Delaveau" });
+    await envoyerEmail({
+      a: ["famille@exemple.fr"], objet: "Relance", texte: "Bonjour", html,
+      piecesJointes: [1, 2, 3].map((n) => ({ nom: `Facture-${n}.pdf`, contenu: Buffer.from(`%PDF-${n}`) })),
+    });
+    const message = sendMail.mock.calls[0][0];
+    expect(message.attachments.filter((p: { contentType: string }) => p.contentType === "application/pdf")).toHaveLength(3);
+    const logo = message.attachments.find((p: { cid?: string }) => p.cid);
+    expect(logo).toMatchObject({ contentType: "image/png", contentDisposition: "inline" });
+    expect(logo.content.subarray(0, 8)).toEqual(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
+    expect(logo.content.length).toBeGreaterThan(1000);
+    expect(html).toContain(`src="cid:${logo.cid}"`);
+  });
+
   it("signale les destinataires refusés, et échoue si seule la copie cachée est acceptée", async () => {
     sendMail.mockResolvedValue({
       messageId: "<x>",
