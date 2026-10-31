@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { BoutonExport } from "@/components/BoutonExport";
 import { AcademieBadge } from "@/components/AcademieBadge";
 import { IconeAlerte, IconePlus, IconeUtilisateurs } from "@/components/Icones";
 import { RechercheClients } from "@/components/clients/RechercheClients";
@@ -84,10 +85,13 @@ export default async function PageClients(props: PageProps<"/clients">) {
           <h1 className="titre-page">Clients</h1>
           <p className="mt-1 text-sm text-muted">{resume}</p>
         </div>
-        <Link href="/clients/nouveau" className="btn-primaire">
-          <IconePlus />
-          Nouveau client
-        </Link>
+        <div className="flex flex-wrap gap-2">
+          <BoutonExport type="clients" />
+          <Link href="/clients/nouveau" className="btn-primaire">
+            <IconePlus />
+            Nouveau client
+          </Link>
+        </div>
       </div>
 
       <div className="carte carte-corps">

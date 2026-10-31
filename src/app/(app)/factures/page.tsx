@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { BoutonExport } from "@/components/BoutonExport";
 import { AcademieBadge } from "@/components/AcademieBadge";
 import { FiltresFactures } from "@/components/factures/FiltresFactures";
 import { IconeCalendrier, IconeFacture, IconePlus } from "@/components/Icones";
@@ -117,6 +118,7 @@ export default async function PageFactures(props: PageProps<"/factures">) {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <BoutonExport type="factures" />
           <Link href="/facturation-mensuelle" className="btn-secondaire">
             <IconeCalendrier />
             Facturation mensuelle
