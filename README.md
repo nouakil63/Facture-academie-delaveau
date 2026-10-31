@@ -264,6 +264,37 @@ mot de passe refusé, serveur introuvable…
 
 ---
 
+## Reprise complète dans Pennylane
+
+Dans **Paramètres → Export Pennylane**, cliquer sur **Télécharger le dossier Pennylane**.
+Ce téléchargement est réservé aux membres autorisés. Il couvre toutes les académies,
+tous les clients (y compris inactifs) et toutes les dates, quel que soit le filtre affiché.
+
+Le ZIP contient les CSV des clients particuliers et entreprises, le catalogue des
+prestations, les PDF des factures et le suivi des règlements. Les brouillons et les
+factures annulées sont archivés séparément. Les tarifs personnalisés, arrhes, anciennes
+échéances, extras en attente et historiques d'envoi sont conservés dans les archives,
+avec un export JSON des données métier. Les PDF sont régénérés depuis les informations
+figées à l'émission lorsqu'elles existent.
+
+Ouvrir d'abord `LIRE-MOI.txt` et `controles-avant-import.csv`. Importer les clients et
+les produits dans Pennylane, puis les PDF du dossier `factures-a-importer`. Vérifier
+les statuts d'encaissement avec `suivi-factures-et-reglements.csv` et les totaux avec
+`bilan.json`. Les fichiers d'archives ne sont pas des trames d'import direct d'abonnements.
+Les identifiants source des clients ne doivent pas être confondus avec ceux de Pennylane.
+
+Éviter les saisies pendant l'export ; les lectures paginées ne forment pas une transaction
+unique. La génération des PDF peut durer plusieurs minutes (limite de la route : 300 s).
+Si une table est inaccessible ou un PDF ne peut pas être généré, l'export échoue au lieu
+de livrer un dossier annoncé comme complet. Toutes les migrations du dépôt sont requises.
+L'export ne constitue pas un FEC. Coordonner la reprise avec le cabinet si des écritures
+de la même période sont déjà dans Pennylane, et arrêter les automatismes de l'ancien
+logiciel à la date de bascule choisie.
+
+Les formats retenus suivent les guides Pennylane pour l'[import des clients](https://help.pennylane.com/fr/articles/18764-importer-et-exporter-des-clients),
+l'[import des produits](https://help.pennylane.com/fr/articles/18763-importer-et-exporter-des-produits)
+et l'[import des factures existantes](https://help.pennylane.com/fr/articles/185113-importer-une-facture-depuis-l-ordinateur-ou-le-mobile).
+
 ## Développement local
 
 Prérequis : **Node.js 20.9 ou plus récent**.
