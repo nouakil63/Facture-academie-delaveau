@@ -199,6 +199,18 @@ mot de passe refusé, serveur introuvable…
 
 ## Utilisation mensuelle
 
+### Exports complets
+
+- **Clients → Exporter tous les clients (Excel)** : télécharge un fichier `.xlsx` avec les
+  coordonnées, cavaliers, académie, statut, réglages d'envoi et arrhes de tous les clients,
+  archivés compris. Les codes postaux, téléphones et identifiants restent du texte.
+- **Factures → Exporter toutes les factures (ZIP)** : regroupe chaque PDF dans une archive,
+  classée par statut, avec les brouillons et les factures annulées. Garder la page ouverte
+  pendant la progression ; en cas d'erreur, aucun ZIP incomplet n'est téléchargé.
+- Les deux exports couvrent **les deux académies, sans appliquer les filtres de l'écran**,
+  et parcourent toute la base au-delà des limites d'affichage. Ils nécessitent une session
+  et conservent les droits d'accès habituels. Ils ne modifient ni n'envoient aucune facture.
+
 1. **Générer les factures du mois.**
    - *Automatiquement* : le jour choisi, les brouillons sont créés tout seuls. Ceux des
      clients en envoi automatique sont aussitôt émis et envoyés (y compris un brouillon du
