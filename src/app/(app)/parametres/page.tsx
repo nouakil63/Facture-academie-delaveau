@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { FormulaireEmailTest } from "@/components/parametres/FormulaireEmailTest";
 import { FormulaireParametres } from "@/components/parametres/FormulaireParametres";
+import { ExportPennylane } from "@/components/parametres/ExportPennylane";
 import { GestionAcademies, type AcademieGestion } from "@/components/parametres/GestionAcademies";
 import { NavigationParametres, NavigationParametresMobile } from "@/components/parametres/NavigationParametres";
 import { titreSection } from "@/components/parametres/sections";
@@ -240,6 +241,8 @@ export default async function PageParametres() {
           />
 
           <GestionAcademies academies={academiesGestion} />
+
+          <ExportPennylane />
 
           {/* Envoi des e-mails */}
           <section id="envoi-emails" aria-labelledby="envoi-emails-titre" className="carte">

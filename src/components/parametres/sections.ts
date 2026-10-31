@@ -11,6 +11,7 @@ export const SECTIONS_PARAMETRES = [
   { id: "mensuelle", titre: "Facturation mensuelle" },
   { id: "emails", titre: "E-mails" },
   { id: "academies", titre: "Académies" },
+  { id: "pennylane", titre: "Export Pennylane" },
   { id: "envoi-emails", titre: "Envoi des e-mails" },
   { id: "utilisateurs", titre: "Utilisateurs autorisés" },
 ] as const;
